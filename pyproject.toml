@@ -19,6 +19,7 @@ dynamic = ["version"]
 dependencies = [
     "aind-codeocean-api",
     "aind-data-access-api",
+    "python-dotenv"
 ]
 
 [project.optional-dependencies]
