@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -ex
+
+# USAGE: Run main with args
+
+python -u main.py "$@"
