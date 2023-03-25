@@ -256,7 +256,7 @@ class TestJobRunner(unittest.TestCase):
 
         self.assertEqual(expected_responses, mapped_responses)
 
-        # Check only aws buckets are currently tracked catalogued
+        # Check only aws buckets are currently tracked
         co_responses[0]["sourceBucket"]["origin"] = "gcp"
         expected_responses[0] = None
         mapped_responses = [
