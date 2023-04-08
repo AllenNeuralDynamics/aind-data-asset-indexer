@@ -86,6 +86,29 @@ class TestJobRunner(unittest.TestCase):
         "type": "result",
     }
 
+    example_co_response4 = {
+        "created": 1680687384,
+        "description": "",
+        "files": 45251,
+        "id": "0b00b0b0-00b0-00b0-bb00-0b0000bb0b0b",
+        "last_used": 0,
+        "name": (
+            "SmartSPIM_648845_2023-03-30_10-51-33_stitched_2023-04-04_18-33-05"
+        ),
+        "size": 503600076800,
+        "sourceBucket": {
+            "bucket": "some_s3_bucket",
+            "origin": "aws",
+            "prefix": (
+                "SmartSPIM_648845_2023-03-30_10-51-33_stitched_2023-04-04_18-"
+                "33-05"
+            ),
+        },
+        "state": "ready",
+        "tags": ["smartspim", "processed"],
+        "type": "dataset",
+    }
+
     example_s3_response1 = {
         "ResponseMetadata": {
             "RequestId": "XXXXXX",
@@ -214,6 +237,7 @@ class TestJobRunner(unittest.TestCase):
             self.example_co_response1,
             self.example_co_response2,
             self.example_co_response3,
+            self.example_co_response4,
         ]
 
         mapped_responses = [
@@ -238,6 +262,19 @@ class TestJobRunner(unittest.TestCase):
                 _location=(
                     "s3://data_asset_bucket/"
                     "c00000c0-00cc-00c0-ccc0-000000c000c0"
+                ),
+            ),
+            DataAssetRecord(
+                _id="0b00b0b0-00b0-00b0-bb00-0b0000bb0b0b",
+                _name=(
+                    "SmartSPIM_648845_2023-03-30_10-51-33_stitched_2023-04-"
+                    "04_18-33-05"
+                ),
+                _created=datetime(2023, 4, 5, 9, 36, 24, tzinfo=pytz.UTC),
+                _location=(
+                    "s3://some_s3_bucket/"
+                    "SmartSPIM_648845_2023-03-30_10-51-33_stitched_2023-04-"
+                    "04_18-33-05"
                 ),
             ),
         ]

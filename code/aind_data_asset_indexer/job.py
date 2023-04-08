@@ -135,7 +135,11 @@ class JobRunner:
 
         if tags is not None and "processed" in tags and data_type == "result":
             record = self._map_processed_result_to_record(co_response)
-        elif tags is not None and "raw" in tags and data_type == "dataset":
+        elif (
+            tags is not None
+            and ("raw" in tags or "processed" in tags)
+            and data_type == "dataset"
+        ):
             record = self._map_raw_asset_to_record(co_response)
         else:
             record = None
