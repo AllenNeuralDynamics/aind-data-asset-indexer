@@ -9,5 +9,5 @@ COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
     aind-codeocean-api==0.2.1 \
-    aind-data-access-api==0.2.0 \
+    aind-data-access-api[full]==0.2.1 \
     python-dotenv==1.0.0
