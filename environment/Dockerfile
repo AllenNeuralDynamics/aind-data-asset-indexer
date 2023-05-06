@@ -1,4 +1,4 @@
-# hash:sha256:84624b27efe1d2e99a9deb9ae0cd41e4c523967f6be7fc79c7a17cb2d3b51785
+# hash:sha256:23c99d137f9bb59ed88a098a148183941db77f41acdf7d6081d664b84b495abd
 FROM registry.codeocean.allenneuraldynamics.org/codeocean/jupyterlab:3.4.4-miniconda4.12.0-python3.9-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,5 +9,5 @@ COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
     aind-codeocean-api==0.2.1 \
-    aind-data-access-api==0.2.0 \
+    aind-data-access-api[full]==0.2.1 \
     python-dotenv==1.0.0
