@@ -6,6 +6,10 @@ from pathlib import Path
 
 from aind_data_access_api.document_store import DocumentStoreCredentials
 from aind_data_asset_indexer.job import JobRunner
+from botocore.credentials import (
+    InstanceMetadataFetcher,
+    InstanceMetadataProvider,
+)
 from dotenv import load_dotenv
 
 if __name__ == "__main__":
@@ -13,6 +17,18 @@ if __name__ == "__main__":
     dotenv_path = Path(os.path.dirname(os.path.realpath(__file__))) / ".env"
     load_env_file = load_dotenv(dotenv_path=dotenv_path)
     logging.info("Starting job: ")
+
+    # Load aws credentials. If not set by secrets, use instance assumed role
+    if os.getenv("AWS_ACCESS_KEY_ID") is None:
+        provider = InstanceMetadataProvider(
+            iam_role_fetcher=InstanceMetadataFetcher(
+                timeout=10, num_attempts=2
+            )
+        )
+        creds = provider.load().get_frozen_credentials()
+        os.environ["AWS_ACCESS_KEY_ID"] = creds.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = creds.secret_key
+
     doc_store_credentials = DocumentStoreCredentials(
         aws_secrets_name=os.getenv("DOC_STORE_SECRETS_NAME")
     )
