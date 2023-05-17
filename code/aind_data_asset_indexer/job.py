@@ -219,6 +219,7 @@ class JobRunner:
         """Method to run the doc store populate job."""
 
         # Get data asset information from code ocean
+        print(f"params: {self.doc_store_client.credentials}, {self.codeocean_client.domain}, {self.data_asset_bucket}")
         code_ocean_response = self.codeocean_client.search_all_data_assets()
         base_records = [
             self._map_co_response_to_record(response)
