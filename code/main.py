@@ -19,19 +19,20 @@ if __name__ == "__main__":
     # Load endpoints and secrets from dotenv file
     dotenv_path = Path(os.path.dirname(os.path.realpath(__file__))) / ".env"
     load_env_file = load_dotenv(dotenv_path=dotenv_path)
-    logging.info("Starting job: ")
+    sys.stderr.write("Starting job")
+    # logging.info("Starting job: ")
 
     # Load aws credentials. If not set by secrets, use instance assumed role
     if os.getenv("AWS_ACCESS_KEY_ID") is None:
-        logging.info("Checking IAM role: ")
+        sys.stderr.write("Checking IAM role: ")
         provider = InstanceMetadataProvider(
             iam_role_fetcher=InstanceMetadataFetcher(
                 timeout=10, num_attempts=2
             )
         )
-        logging.info(f"Provider: {provider}")
+        sys.stderr.write(f"Provider: {provider}")
         creds = provider.load().get_frozen_credentials()
-        logging.info(f"Creds Access Key: {creds.access_key}")
+        sys.stderr.write(f"Creds Access Key: {creds.access_key}")
         os.environ["AWS_ACCESS_KEY_ID"] = creds.access_key
         os.environ["AWS_SECRET_ACCESS_KEY"] = creds.secret_key
 
@@ -50,4 +51,4 @@ if __name__ == "__main__":
 
     # Run the job
     job.run_job()
-    logging.info("Finished job.")
+    sys.stderr.write("Finished job.")
