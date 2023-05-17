@@ -3,7 +3,6 @@
 import logging
 import os
 from pathlib import Path
-import sys
 
 from aind_data_access_api.document_store import DocumentStoreCredentials
 from aind_data_asset_indexer.job import JobRunner
@@ -24,7 +23,7 @@ if __name__ == "__main__":
         os.environ["AWS_SECRET_ACCESS_KEY"] = (
             os.getenv("AWS_SECRET_ACCESS_KEY_SVC")
         )
-        os.environ["AWS_DEFAULT_REGION_SVC"] = os.getenv("AWS_DEFAULT_REGION_SVC")
+        os.environ["AWS_DEFAULT_REGION"] = os.getenv("AWS_DEFAULT_REGION_SVC")
 
     doc_store_credentials = DocumentStoreCredentials(
         aws_secrets_name=os.getenv("DOC_STORE_SECRETS_NAME")
