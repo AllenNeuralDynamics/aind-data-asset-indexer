@@ -236,18 +236,24 @@ class JobRunner:
             for r in self.doc_store_client.collection.find({}, {"_id": 1})
         ]
         record_ids_to_remove = set(doc_store_ids) - set(base_record_ids)
+        counter = 0
         for rec_id in record_ids_to_remove:
-            print(f"Will run: self.doc_store_client.collection.delete_one(['_id': {rec_id}])")
+            if counter < 10:
+                print(f"Will run: self.doc_store_client.collection.delete_one(['_id': {rec_id}])")
+                counter += 1
             # self.doc_store_client.collection.delete_one({"_id": rec_id})
 
         # Attach top-level json files to base_records
         s3_client = boto3.client("s3")
+        counter = 0
         for record in base_records:
             # self._update_base_record_with_s3_info(s3_client, record)
-            print(f"Will run: self._update_base_record_with_s3_info({s3_client}, {record})")
+            if counter < 10:
+                print(f"Will run: self._update_base_record_with_s3_info({s3_client}, {record})")
+                counter += 1
         s3_client.close()
         # self.doc_store_client.upsert_list_of_records(base_records)
-        print(f"Will run: self.doc_store_client.upsert_list_of_records({base_records})")
+        print(f"Will run: self.doc_store_client.upsert_list_of_records({base_records[0:10]})")
 
         self.doc_store_client.close()
 
