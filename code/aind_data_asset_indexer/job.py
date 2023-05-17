@@ -130,8 +130,8 @@ class JobRunner:
 
         """
 
-        tags = co_response["tags"]
-        data_type = co_response["type"]
+        tags = co_response.get("tags")
+        data_type = co_response.get("type")
 
         if tags is not None and "processed" in tags and data_type == "result":
             record = self._map_processed_result_to_record(co_response)
