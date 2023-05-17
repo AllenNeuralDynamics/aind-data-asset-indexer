@@ -221,6 +221,8 @@ class JobRunner:
         # Get data asset information from code ocean
         print(f"params: {self.doc_store_client.credentials}, {self.codeocean_client.domain}, {self.data_asset_bucket}")
         code_ocean_response = self.codeocean_client.search_all_data_assets()
+        print(f"RESPONSE: {code_ocean_response.status_code}")
+        print(f"RESPONSE: {code_ocean_response.status_code}")
         base_records = [
             self._map_co_response_to_record(response)
             for response in list(code_ocean_response.json()["results"])
