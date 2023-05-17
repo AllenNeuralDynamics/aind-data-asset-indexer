@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+import sys
 
 from aind_data_access_api.document_store import DocumentStoreCredentials
 from aind_data_asset_indexer.job import JobRunner
@@ -12,6 +13,8 @@ from botocore.credentials import (
 )
 from dotenv import load_dotenv
 
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
 if __name__ == "__main__":
     # Load endpoints and secrets from dotenv file
     dotenv_path = Path(os.path.dirname(os.path.realpath(__file__))) / ".env"
@@ -20,12 +23,15 @@ if __name__ == "__main__":
 
     # Load aws credentials. If not set by secrets, use instance assumed role
     if os.getenv("AWS_ACCESS_KEY_ID") is None:
+        logging.info("Checking IAM role: ")
         provider = InstanceMetadataProvider(
             iam_role_fetcher=InstanceMetadataFetcher(
                 timeout=10, num_attempts=2
             )
         )
+        logging.info(f"Provider: {provider}")
         creds = provider.load().get_frozen_credentials()
+        logging.info(f"Creds Access Key: {creds.access_key}")
         os.environ["AWS_ACCESS_KEY_ID"] = creds.access_key
         os.environ["AWS_SECRET_ACCESS_KEY"] = creds.secret_key
 
