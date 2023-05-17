@@ -13,7 +13,7 @@ from botocore.credentials import (
 )
 from dotenv import load_dotenv
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 if __name__ == "__main__":
     # Load endpoints and secrets from dotenv file
