@@ -209,6 +209,7 @@ class JobRunner:
 
     def run_job(self) -> None:
         """Method to run the doc store populate job."""
+        print("Starting job")
 
         # Get data asset information from code ocean
         code_ocean_response = self.codeocean_client.search_all_data_assets()
@@ -217,6 +218,8 @@ class JobRunner:
             for response in list(code_ocean_response.json()["results"])
             if self._map_co_response_to_record(response) is not None
         ]
+
+        print(f"Number of codeocean records found: {len(base_records)}")
 
         # TODO: Remove records in doc store that are no longer in code ocean
         #  Requires adding delete operation to api gateway
