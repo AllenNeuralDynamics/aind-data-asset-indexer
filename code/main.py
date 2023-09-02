@@ -4,7 +4,9 @@ import logging
 import os
 from pathlib import Path
 
-from aind_data_access_api.document_store import DocumentStoreCredentials
+from aind_codeocean_api.codeocean import CodeOceanClient
+from aind_codeocean_api.credentials import CodeOceanCredentials
+from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_asset_indexer.job import JobRunner
 from dotenv import load_dotenv
 
@@ -12,17 +14,21 @@ if __name__ == "__main__":
     # Load endpoints and secrets from dotenv file
     dotenv_path = Path(os.path.dirname(os.path.realpath(__file__))) / ".env"
     load_env_file = load_dotenv(dotenv_path=dotenv_path)
-    logging.info("Starting job: ")
-    doc_store_credentials = DocumentStoreCredentials(
-        aws_secrets_name=os.getenv("DOC_STORE_SECRETS_NAME")
+    co_client = CodeOceanClient.from_credentials(
+        CodeOceanCredentials(
+            aws_secrets_name=os.getenv("CODEOCEAN_SECRETS_NAME")
+        )
+    )
+    doc_db_client = MetadataDbClient(
+        host=os.getenv("DOC_DB_HOST"),
+        database=os.getenv("DOC_DB_DATABASE"),
+        collection=os.getenv("DOC_DB_COLLECTION"),
     )
 
     # Create a JobRunner class
     job = JobRunner(
-        doc_store_credentials=doc_store_credentials,
-        collection_name=os.getenv("COLLECTION_NAME"),
-        codeocean_token=os.getenv("CODEOCEAN_TOKEN"),
-        codeocean_domain=os.getenv("CODEOCEAN_DOMAIN"),
+        doc_db_client=doc_db_client,
+        codeocean_client=co_client,
         data_asset_bucket=os.getenv("DATA_ASSET_BUCKET"),
     )
 

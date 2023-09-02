@@ -4,6 +4,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytz
+from aind_codeocean_api.codeocean import CodeOceanClient
+from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.document_store import DocumentStoreCredentials
 from aind_data_access_api.models import DataAssetRecord
 from aind_data_asset_indexer.job import JobRunner
@@ -11,6 +13,14 @@ from aind_data_asset_indexer.job import JobRunner
 
 class TestJobRunner(unittest.TestCase):
     """Test methods in JobRunner class"""
+
+    doc_db_client = MetadataDbClient(
+        host="localhost", database="some_db", collection="some_coll"
+    )
+
+    co_client = CodeOceanClient(
+        domain="codeocean_domain", token="codeocean_token"
+    )
 
     sample_creds = DocumentStoreCredentials(
         username="some_user",
@@ -21,10 +31,8 @@ class TestJobRunner(unittest.TestCase):
     )
 
     sample_job = JobRunner(
-        doc_store_credentials=sample_creds,
-        collection_name="some_coll",
-        codeocean_token="codeocean_token",
-        codeocean_domain="codeocean_domain",
+        codeocean_client=co_client,
+        doc_db_client=doc_db_client,
         data_asset_bucket="data_asset_bucket",
     )
 
@@ -218,17 +226,9 @@ class TestJobRunner(unittest.TestCase):
 
         self.assertEqual("codeocean_domain", job.codeocean_client.domain)
         self.assertEqual("codeocean_token", job.codeocean_client.token)
-        self.assertEqual("some_coll", job.doc_store_client.collection_name)
-        self.assertEqual("localhost", job.doc_store_client.credentials.host)
-        self.assertEqual(12345, job.doc_store_client.credentials.port)
-        self.assertEqual(
-            "some_user", job.doc_store_client.credentials.username
-        )
-        self.assertEqual(
-            "some_password",
-            job.doc_store_client.credentials.password.get_secret_value(),
-        )
-        self.assertEqual("some_db", job.doc_store_client.credentials.database)
+        self.assertEqual("some_coll", job.doc_db_client.collection)
+        self.assertEqual("localhost", job.doc_db_client.host)
+        self.assertEqual("some_db", job.doc_db_client.database)
 
     def test_map_co_response_to_record(self):
         """Tests that code ocean responses are mapped correctly"""
@@ -348,14 +348,15 @@ class TestJobRunner(unittest.TestCase):
     @patch(
         "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
     )
-    @patch("aind_data_access_api.document_store.Client.collection")
-    @patch("aind_data_access_api.document_store.Client.upsert_list_of_records")
+    @patch(
+        "aind_data_access_api.document_db.MetadataDbClient"
+        ".upsert_list_of_records"
+    )
     @patch("boto3.client")
     def test_run_job(
         self,
         mock_s3_client: MagicMock,
         mock_doc_store_upsert: MagicMock,
-        mock_doc_store_collection: MagicMock,
         mock_codeocean_client: MagicMock,
     ):
         """Tests that the job is run correctly"""
@@ -368,13 +369,7 @@ class TestJobRunner(unittest.TestCase):
             "results": [self.example_co_response3]
         }
 
-        mock_doc_store_collection.find.return_value = [{"_id": "aaaaa-11111"}]
-
         job.run_job()
-
-        mock_doc_store_collection.delete_one.assert_called_with(
-            {"_id": "aaaaa-11111"}
-        )
 
         expected_data_asset_record = DataAssetRecord(
             _id="c00000c0-00cc-00c0-ccc0-000000c000c0",

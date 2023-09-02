@@ -17,8 +17,8 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    "aind-codeocean-api==0.2.1",
-    "aind-data-access-api[full]==0.2.1",
+    "aind-codeocean-api==0.2.4",
+    "aind-data-access-api[full]==0.4.0",
     "python-dotenv==1.0.0"
 ]
 

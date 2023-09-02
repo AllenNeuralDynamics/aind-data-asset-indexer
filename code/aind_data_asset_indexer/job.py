@@ -9,8 +9,7 @@ from urllib.parse import urlparse
 import boto3
 import pytz
 from aind_codeocean_api.codeocean import CodeOceanClient
-from aind_data_access_api.document_store import Client as DsClient
-from aind_data_access_api.document_store import DocumentStoreCredentials
+from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.models import DataAssetRecord
 from botocore.exceptions import ClientError
 
@@ -20,20 +19,13 @@ class JobRunner:
 
     def __init__(
         self,
-        doc_store_credentials: DocumentStoreCredentials,
-        collection_name,
-        codeocean_token,
-        codeocean_domain,
-        data_asset_bucket,
+        doc_db_client: MetadataDbClient,
+        codeocean_client: CodeOceanClient,
+        data_asset_bucket: str,
     ):
         """Class Constructor"""
-        self.codeocean_client = CodeOceanClient(
-            domain=codeocean_domain, token=codeocean_token
-        )
-        self.doc_store_client = DsClient(
-            credentials=doc_store_credentials,
-            collection_name=collection_name,
-        )
+        self.codeocean_client = codeocean_client
+        self.doc_db_client = doc_db_client
         self.data_asset_bucket = data_asset_bucket
 
     @staticmethod
@@ -226,23 +218,14 @@ class JobRunner:
             if self._map_co_response_to_record(response) is not None
         ]
 
-        # Remove records in doc store that are no longer in code ocean
-        base_record_ids = [r.id for r in base_records]
-        doc_store_ids = [
-            r["_id"]
-            for r in self.doc_store_client.collection.find({}, {"_id": 1})
-        ]
-        record_ids_to_remove = set(doc_store_ids) - set(base_record_ids)
-        for rec_id in record_ids_to_remove:
-            self.doc_store_client.collection.delete_one({"_id": rec_id})
+        # TODO: Remove records in doc store that are no longer in code ocean
+        #  Requires adding delete operation to api gateway
 
         # Attach top-level json files to base_records
         s3_client = boto3.client("s3")
         for record in base_records:
             self._update_base_record_with_s3_info(s3_client, record)
         s3_client.close()
-        self.doc_store_client.upsert_list_of_records(base_records)
-
-        self.doc_store_client.close()
+        self.doc_db_client.upsert_list_of_records(base_records)
 
         return None
