@@ -229,6 +229,9 @@ class JobRunner:
         for record in base_records:
             self._update_base_record_with_s3_info(s3_client, record)
         s3_client.close()
-        self.doc_db_client.upsert_list_of_records(base_records)
+        docdb_response = self.doc_db_client.upsert_list_of_records(
+            base_records
+        )
+        print(docdb_response)
 
         return None
