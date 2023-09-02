@@ -232,6 +232,7 @@ class JobRunner:
         docdb_response = self.doc_db_client.upsert_list_of_records(
             base_records
         )
-        print(docdb_response)
+        print(docdb_response.status_code)
+        print(docdb_response.json())
 
         return None
