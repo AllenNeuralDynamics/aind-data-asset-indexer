@@ -6,3 +6,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG GIT_ASKPASS
 ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
+
+COPY postInstall /
+RUN /postInstall
