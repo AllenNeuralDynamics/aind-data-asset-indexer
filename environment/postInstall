@@ -2,5 +2,5 @@
 set -e
 
 pip install --no-cache-dir aind-codeocean-api==0.2.4
-pip install --no-cache-dir aind-data-access-api[full]==0.4.1
+pip install --no-cache-dir aind-data-access-api[secrets,docdb]==0.5.0
 pip install --no-cache-dir python-dotenv==1.0.0
