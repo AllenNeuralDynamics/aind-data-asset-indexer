@@ -137,8 +137,30 @@ class JobRunner:
             record = None
         return record
 
-    @staticmethod
+    def _sanitize_keys(self, old_dict: dict) -> dict:
+        """
+        DocumentDB doesn't support '$' or '.' in field names. This method
+        replaces those characters with '_'
+        Parameters
+        ----------
+        old_dict : dict
+
+        Returns
+        -------
+        dict
+
+        """
+        new_dict = {}
+        for key in old_dict.keys():
+            new_key = key.replace("$", "_").replace(".", "_")
+            if isinstance(old_dict[key], dict):
+                new_dict[new_key] = self._sanitize_keys(old_dict[key])
+            else:
+                new_dict[new_key] = old_dict[key]
+        return new_dict
+
     def _update_record_with_s3_json_files(
+        self,
         s3_client: boto3.session.Session.client,
         s3_response: Dict,
         base_record: DataAssetRecord,
@@ -172,7 +194,8 @@ class JobRunner:
                 result = s3_client.get_object(Bucket=bucket, Key=json_file_key)
                 contents = result["Body"].read().decode("utf-8")
                 json_contents = json.loads(contents)
-                setattr(base_record, json_file_name, json_contents)
+                sanitized_contents = self._sanitize_keys(json_contents)
+                setattr(base_record, json_file_name, sanitized_contents)
             except (ClientError, JSONDecodeError):
                 pass
 
