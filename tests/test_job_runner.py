@@ -336,7 +336,7 @@ class TestJobRunner(unittest.TestCase):
             ),
             params={"foo": "bar"},
             visualization_output={
-                "exp1_Record Node 101#Neuropix-PXI-100.ProbeA_recording1": {
+                "exp1_Record Node 101#Neuropix-PXI-100_ProbeA_recording1": {
                     "timeseries": "https://link-to-timeseries-plots/",
                     "sorting_summary": "https:link-to-sorting-summary",
                 }
