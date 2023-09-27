@@ -255,10 +255,11 @@ class JobRunner:
         for record in base_records:
             self._update_base_record_with_s3_info(s3_client, record)
         s3_client.close()
+        print("Finished downloading from s3.")
         docdb_response = self.doc_db_client.upsert_list_of_records(
             base_records
         )
         for response in docdb_response:
-            print(response.status_code, response.json())
+            print(response)
 
         return None
