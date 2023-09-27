@@ -194,9 +194,11 @@ class JobRunner:
                 result = s3_client.get_object(Bucket=bucket, Key=json_file_key)
                 contents = result["Body"].read().decode("utf-8")
                 json_contents = json.loads(contents)
-                if json_contents is not None:
+                if json_contents is not None and isinstance(json_contents, dict):
                     sanitized_contents = self._sanitize_keys(json_contents)
                     setattr(base_record, json_file_name, sanitized_contents)
+                elif json_contents is not None and isinstance(json_contents, list):
+                    setattr(base_record, json_file_name, json_contents)
             except (ClientError, JSONDecodeError):
                 pass
 
