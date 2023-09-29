@@ -17,9 +17,7 @@ DATA_ASSET_BUCKET = "codeocean-s3datasetsbucket-1u41qdg42ur9"
 
 if __name__ == "__main__":
     co_client = CodeOceanClient.from_credentials(
-        CodeOceanCredentials(
-            aws_secrets_name=CODEOCEAN_SECRETS_NAME
-        )
+        CodeOceanCredentials(aws_secrets_name=CODEOCEAN_SECRETS_NAME)
     )
     doc_db_client = MetadataDbClient(
         host=DOC_DB_HOST,
