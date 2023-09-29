@@ -1,6 +1,7 @@
 """Main entry point that will be run when Reproducible run is requested."""
 
 import logging
+import os
 
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_codeocean_api.credentials import CodeOceanCredentials
@@ -14,6 +15,8 @@ DOC_DB_DATABASE = "metadata"
 DOC_DB_COLLECTION = "data_assets"
 CODEOCEAN_SECRETS_NAME = "/aind/prod/codeocean/credentials/readonly"
 DATA_ASSET_BUCKET = "codeocean-s3datasetsbucket-1u41qdg42ur9"
+
+os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
 
 if __name__ == "__main__":
     co_client = CodeOceanClient.from_credentials(
