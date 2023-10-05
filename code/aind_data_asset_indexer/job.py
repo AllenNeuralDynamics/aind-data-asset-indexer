@@ -194,8 +194,15 @@ class JobRunner:
                 result = s3_client.get_object(Bucket=bucket, Key=json_file_key)
                 contents = result["Body"].read().decode("utf-8")
                 json_contents = json.loads(contents)
-                sanitized_contents = self._sanitize_keys(json_contents)
-                setattr(base_record, json_file_name, sanitized_contents)
+                if json_contents is not None and isinstance(
+                    json_contents, dict
+                ):
+                    sanitized_contents = self._sanitize_keys(json_contents)
+                    setattr(base_record, json_file_name, sanitized_contents)
+                elif json_contents is not None and isinstance(
+                    json_contents, list
+                ):
+                    setattr(base_record, json_file_name, json_contents)
             except (ClientError, JSONDecodeError):
                 pass
 
@@ -252,10 +259,16 @@ class JobRunner:
         for record in base_records:
             self._update_base_record_with_s3_info(s3_client, record)
         s3_client.close()
+        print("Finished downloading from s3.")
         docdb_response = self.doc_db_client.upsert_list_of_records(
             base_records
         )
-        print(docdb_response.status_code)
-        print(docdb_response.json())
+        print(f"Number of responses: {len(docdb_response)}")
+        bad_responses = [
+            r for r in docdb_response if getattr(r, "status_code", None) != 200
+        ]
+        print(f"Number of bad responses: {len(bad_responses)}")
+        for response in bad_responses:
+            print(response)
 
         return None
