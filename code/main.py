@@ -35,6 +35,10 @@ if __name__ == "__main__":
         data_asset_bucket=DATA_ASSET_BUCKET,
     )
 
+    # Create a dummy output file (expected by Materialized Views Pipeline)
+    with open("../results/empty_output", "w") as f:
+        pass
+
     # Run the job
     job.run_job()
     logging.info("Finished job.")
