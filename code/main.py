@@ -36,6 +36,6 @@ if __name__ == "__main__":
     job.run_job()
     logging.info("Finished job.")
 
-        # Create a dummy output file (expected by Mat Views Pipeline)
+    # Create a dummy output file (expected by Mat Views Pipeline)
     with open("../results/empty_output", "w") as f:
         pass
