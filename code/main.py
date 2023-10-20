@@ -38,3 +38,7 @@ if __name__ == "__main__":
     # Run the job
     job.run_job()
     logging.info("Finished job.")
+
+    # Create a dummy output file (expected by Materialized Views Pipeline)
+    with open("../results/empty_output", "w") as f:
+        pass
