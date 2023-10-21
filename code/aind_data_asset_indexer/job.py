@@ -12,6 +12,7 @@ from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.models import DataAssetRecord
 from botocore.exceptions import ClientError
+from aind_data_schema.data_description import DataLevel
 
 
 class JobRunner:
@@ -125,11 +126,13 @@ class JobRunner:
         tags = co_response.get("tags")
         data_type = co_response.get("type")
 
-        if tags is not None and "processed" in tags and data_type == "result":
+        # For legacy purposes, we can check for both proccessed and derived in the tags
+        # We can phase out processed.
+        if tags is not None and ("processed" in tags or DataLevel.DERIVED.value in tags) and data_type == "result":
             record = self._map_processed_result_to_record(co_response)
         elif (
             tags is not None
-            and ("raw" in tags or "processed" in tags)
+            and ("raw" in tags or DataLevel.RAW.value in tags or "processed" in tags or DataLevel.DERIVED.value in tags)
             and data_type == "dataset"
         ):
             record = self._map_raw_asset_to_record(co_response)

@@ -19,6 +19,7 @@ dynamic = ["version"]
 dependencies = [
     "aind-codeocean-api==0.2.4",
     "aind-data-access-api[secrets,docdb]==0.6.1",
+    "aind-data-schema==0.15.12",
     "pytz==2023.3"
 ]
 

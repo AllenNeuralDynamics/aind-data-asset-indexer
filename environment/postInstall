@@ -4,3 +4,4 @@ set -e
 pip install --no-cache-dir aind-codeocean-api==0.2.4
 pip install --no-cache-dir aind-data-access-api[secrets,docdb]==0.6.1
 pip install --no-cache-dir pytz==2023.3
+pip install --no-cache-dir aind-data-schema==0.15.12
