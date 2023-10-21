@@ -90,7 +90,7 @@ class TestJobRunner(unittest.TestCase):
         },
         "size": 60271676779,
         "state": "ready",
-        "tags": ["modality3", "processed", "000002"],
+        "tags": ["modality3", "derived", "000002"],
         "type": "result",
     }
 
