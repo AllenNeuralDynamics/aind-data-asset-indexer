@@ -1,5 +1,0 @@
-metadata_version: 1
-name: aind-data-asset-indexer
-description: Service Capsule to write data asset metadata to document store
-authors:
-- name: AIND

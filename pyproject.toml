@@ -17,9 +17,8 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    "aind-codeocean-api==0.2.1",
-    "aind-data-access-api[full]==0.2.1",
-    "python-dotenv==1.0.0"
+    "aind-data-access-api[full]==0.6.2",
+    "aind-data-schema"
 ]
 
 [project.optional-dependencies]
@@ -34,7 +33,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["code"]
+where = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aind_data_asset_indexer.__version__"}
@@ -61,7 +60,7 @@ exclude = '''
 
 [tool.coverage.run]
 omit = ["*__init__*"]
-source = ["code", "tests"]
+source = ["src", "tests"]
 
 [tool.coverage.report]
 exclude_lines = [
