@@ -6,12 +6,15 @@ from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pandas as pd
 from aind_data_access_api.rds_tables import RDSCredentials
+from aind_data_access_api.rds_tables import Client as RDSClient
 
 from aind_data_asset_indexer.s3_crawler import AnalyticsJobRunner
 
 
 class MockDirEntry(MagicMock):
+    """Mock class for scandir"""
     def __init__(self, name, is_dir):
+        """Initialize MockDirEntry instance"""
         super().__init__(spec=os.DirEntry)
         self.name = name
         self.configure_mock(is_dir=MagicMock(return_value=is_dir))
@@ -45,13 +48,16 @@ class TestAnalyticsJobRunner(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.s3_crawler.RDSCredentials")
     def setUp(self, mock_rds_credentials):
+        """Constructs AnalyticsJobRunner with mock creds"""
         self.mock_credentials = Mock(spec=RDSCredentials)
         mock_rds_credentials.return_value = self.sample_rds_credentials
         self.runner = AnalyticsJobRunner()
+        self.runner.redshift_client = Mock(spec=RDSClient)
+        self.runner.table_name = 'some_table_name'
 
     @patch("subprocess.run")
     def test_get_list_of_folders(self, mock_subprocess_run):
-        """Tests that"""
+        """Tests bash command to get folders runs as expected."""
         bucket_name = "test_bucket"
         output_filepath = "test_output.txt"
 
@@ -68,7 +74,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_download_metadata_files(self, mock_subprocess_run):
-        """"""
+        """Tests bash command to download metadata runs as expected."""
         bucket_name = "test_bucket"
         output_directory = "test/directory/"
 
@@ -90,7 +96,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         "builtins.open", new_callable=mock_open, read_data=sample_folders_txt
     )
     def test_create_dataframe_from_list_of_folders(self, mock_file_open):
-        """"""
+        """Tests dataframe is created from folders.txt as expected."""
         filepath = "test_folders.txt"
         df = self.runner._create_dataframe_from_list_of_folders(filepath)
         expected_df = pd.DataFrame(
@@ -107,7 +113,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
 
     @patch("os.scandir")
     def test_create_dataframe_from_metadata_files(self, mock_scandir):
-        """"""
+        """Tests dataframe is created from metadata as expected."""
         output_directory = "test_output_directory"
 
         # Mock the behavior of os.scandir
@@ -136,7 +142,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         mock_scandir.assert_called_once_with(output_directory)
 
     def test_join_dataframes(self):
-        """"""
+        """Tests dataframes are merged as expected."""
         expected_data = {
             "s3_prefix": [
                 "modality_567890_2000-01-01_04-00-00",
@@ -185,7 +191,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         mock_download_metadata,
         mock_get_list_of_folders,
     ):
-        """"""
+        """Tests method to crawl through list of s3 buckets"""
         folders_filepath = "test_folders.txt"
         metadata_directory = "test_metadata_dir"
 
@@ -257,3 +263,22 @@ class TestAnalyticsJobRunner(unittest.TestCase):
 
         # Assert that the result DataFrame is equal to the expected DataFrame
         pd.testing.assert_frame_equal(result_df, expected_df)
+
+    @patch('aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner._crawl_s3_buckets')
+    def test_run_job(self, mock_crawl_s3_buckets):
+        """Tests that write to redshift is called as expected."""
+        mock_analytics_df = Mock()
+        mock_crawl_s3_buckets.return_value = mock_analytics_df
+
+        folders_filepath = 'some_folders_filepath'
+        metadata_directory = 'some_metadata_directory'
+        self.runner.run_job(folders_filepath, metadata_directory)
+
+        mock_crawl_s3_buckets.assert_called_once_with(folders_filepath, metadata_directory)
+        self.runner.redshift_client.overwrite_table_with_df.assert_called_once_with(
+            df=mock_analytics_df, table_name='some_table_name'
+        )
+
+
+if __name__ == '__main__':
+    unittest.main()
