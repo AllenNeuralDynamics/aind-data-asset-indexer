@@ -17,8 +17,18 @@ METADATA_DIR = os.getenv("METADATA_DIRECTORY")
 class AnalyticsJobRunner:
     """Class to handle creating metadata analytics table in redshift"""
 
-    def __init__(self, redshift_secrets_name, buckets, table_name):
-        """Class Constructor"""
+    def __init__(self, redshift_secrets_name: str, buckets: str, table_name: str):
+        """
+        Class Constructor, creates Redshift Client to write to table.
+        Parameters
+        ----------
+        redshift_secrets_name : str
+            Secrets name for Amazon Redshift.
+        buckets : str
+            List of buckets to run analytics on. In string format ("['{bucket1_name}', '{bucket2_name}']")
+        table_name : str
+            Name of table in Redshift
+        """
         self.table_name = table_name
         rds_credentials = RDSCredentials(
             aws_secrets_name=redshift_secrets_name
@@ -31,7 +41,7 @@ class AnalyticsJobRunner:
     @staticmethod
     def _get_list_of_folders(bucket_name: str, output_filepath: str) -> None:
         """
-        Downloads list of assets in bucket to output filepath
+        Downloads list of assets in bucket to output filepath.
         Parameters
         ----------
         bucket_name: str
@@ -50,8 +60,16 @@ class AnalyticsJobRunner:
         subprocess.run(download_command_str_bucket_to_local_filepath)
 
     @staticmethod
-    def _download_metadata_files(bucket_name, output_directory) -> None:
-        """Downloads metadata.nd.jsons to output directory"""
+    def _download_metadata_files(bucket_name: str, output_directory: str) -> None:
+        """
+        Downloads metadata.nd.jsons in a bucket to output directory.
+        Parameters
+        ----------
+        bucket_name: str
+           Name of bucket in s3
+        output_directory: str
+           Filepath for output directory
+        """
         sync_metadata_command_str_bucket_to_local = [
             "aws",
             "s3",
@@ -67,7 +85,13 @@ class AnalyticsJobRunner:
 
     @staticmethod
     def _create_dataframe_from_list_of_folders(filepath: str) -> pd.DataFrame:
-        """Create a table of list of files"""
+        """
+        Create a table of list of records from a file.
+        Parameters
+        ----------
+        filepath : str
+             Path to a file containing list of data asset records.
+        """
         with open(filepath, "r") as file:
             folders_list = file.readlines()
         df = pd.DataFrame(folders_list, columns=["s3_prefix"])
@@ -84,7 +108,13 @@ class AnalyticsJobRunner:
     def _create_dataframe_from_metadata_files(
         output_directory,
     ) -> pd.DataFrame:
-        """Create a table of folders with metadata file"""
+        """
+        Create a table of folders with metadata file.
+        Parameters
+        ----------
+        output_directory : str
+             Path to directory containing copies of data asset records.
+        """
         subfolders = [
             f.name for f in os.scandir(output_directory) if f.is_dir()
         ]
@@ -94,7 +124,15 @@ class AnalyticsJobRunner:
     def _join_dataframes(
         df1: pd.DataFrame, df2: pd.DataFrame, bucket_name: str
     ) -> pd.DataFrame:
-        """Creates Dataframe to track whether metadata file exists"""
+        """
+        Creates Dataframe to track whether metadata file exists.
+        Parameters
+        ----------
+        df1 : pd.Dataframe
+            Table of all data asset records in bucket
+        df2 : pd.Dataframe
+            Table of data asset records with metadata file
+        """
         merged_df = pd.merge(
             df1, df2, on="s3_prefix", how="left", indicator=True
         )
@@ -108,6 +146,12 @@ class AnalyticsJobRunner:
     ) -> pd.DataFrame:
         """
         Crawls through a s3 buckets to make analytics dataframe
+        Parameters
+        ----------
+        folders_filepath : str
+             Filepath to file for list of records
+        metadata_directory : str
+             Path to directory for copies of metadata records
         """
         analytics_df = pd.DataFrame(
             columns=["s3_prefix", "metadata_bool", "bucket_name"]
