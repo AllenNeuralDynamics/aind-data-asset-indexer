@@ -41,10 +41,9 @@ class TestAnalyticsJobRunner(unittest.TestCase):
     @patch.dict(
         "os.environ",
         {
-            "REDSHIFT": "some_redshift_value",
             "REDSHIFT_SECRETS_NAME": "some_secrets_value",
             "BUCKETS": '["bucket1", "bucket2"]',
-            "TABLE_NAME": "some_table_value",
+            "TABLE_NAME": "some_table_name",
         },
     )
     @patch("aind_data_asset_indexer.s3_crawler.RDSCredentials")
@@ -52,9 +51,12 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         """Constructs AnalyticsJobRunner with mock creds"""
         self.mock_credentials = Mock(spec=RDSCredentials)
         mock_rds_credentials.return_value = self.sample_rds_credentials
-        self.runner = AnalyticsJobRunner()
+        self.runner = AnalyticsJobRunner(
+            redshift_secrets_name=os.getenv("REDSHIFT_SECRETS_NAME"),
+            buckets=os.getenv("BUCKETS"),
+            table_name=os.getenv("TABLE_NAME")
+        )
         self.runner.redshift_client = Mock(spec=RDSClient)
-        self.runner.table_name = "some_table_name"
 
     @patch("subprocess.run")
     def test_get_list_of_folders(self, mock_subprocess_run):

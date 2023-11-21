@@ -7,19 +7,23 @@ import pandas as pd
 from aind_data_access_api.rds_tables import Client as RDSClient
 from aind_data_access_api.rds_tables import RDSCredentials
 
+REDSHIFT_SECRETS_NAME = os.getenv("REDSHIFT_SECRETS_NAME")
+BUCKETS = os.getenv("BUCKETS")
+TABLE_NAME = os.getenv("TABLE_NAME")
+FOLDERS_FILEPATH = os.getenv("FOLDERS_FILEPATH")
+METADATA_DIR = os.getenv("METADATA_DIRECTORY")
+
 
 class AnalyticsJobRunner:
     """Class to handle creating metadata analytics table in redshift"""
 
-    def __init__(self):
+    def __init__(self, redshift_secrets_name, buckets, table_name):
         """Class Constructor"""
-        REDSHIFT_SECRETS_NAME = os.getenv("REDSHIFT_SECRETS_NAME")
-        BUCKETS = os.getenv("BUCKETS")
-        self.table_name = os.getenv("TABLE_NAME")
+        self.table_name = table_name
         rds_credentials = RDSCredentials(
-            aws_secrets_name=REDSHIFT_SECRETS_NAME
+            aws_secrets_name=redshift_secrets_name
         )
-        bucket_str = BUCKETS.split(",")
+        bucket_str = buckets.split(",")
 
         self.redshift_client = RDSClient(credentials=rds_credentials)
         self.buckets_list = [item.strip() for item in bucket_str]
@@ -137,3 +141,11 @@ class AnalyticsJobRunner:
         self.redshift_client.overwrite_table_with_df(
             df=analytics_df, table_name=self.table_name
         )
+
+
+if __name__ == "__main__":
+    job_runner = AnalyticsJobRunner(
+        redshift_secrets_name=REDSHIFT_SECRETS_NAME, buckets=BUCKETS, table_name=TABLE_NAME
+    )
+    job_runner.run_job(folders_filepath=FOLDERS_FILEPATH, metadata_directory=METADATA_DIR)
+
