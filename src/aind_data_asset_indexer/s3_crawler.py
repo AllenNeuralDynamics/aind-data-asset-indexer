@@ -17,7 +17,9 @@ METADATA_DIR = os.getenv("METADATA_DIRECTORY")
 class AnalyticsJobRunner:
     """Class to handle creating metadata analytics table in redshift"""
 
-    def __init__(self, redshift_secrets_name: str, buckets: str, table_name: str):
+    def __init__(
+        self, redshift_secrets_name: str, buckets: str, table_name: str
+    ):
         """
         Class Constructor, creates Redshift Client to write to table.
         Parameters
@@ -25,7 +27,8 @@ class AnalyticsJobRunner:
         redshift_secrets_name : str
             Secrets name for Amazon Redshift.
         buckets : str
-            List of buckets to run analytics on. In string format ("['{bucket1_name}', '{bucket2_name}']")
+            List of buckets to run analytics on.
+            In string format ("['{bucket1_name}', '{bucket2_name}']")
         table_name : str
             Name of table in Redshift
         """
@@ -60,7 +63,9 @@ class AnalyticsJobRunner:
         subprocess.run(download_command_str_bucket_to_local_filepath)
 
     @staticmethod
-    def _download_metadata_files(bucket_name: str, output_directory: str) -> None:
+    def _download_metadata_files(
+        bucket_name: str, output_directory: str
+    ) -> None:
         """
         Downloads metadata.nd.jsons in a bucket to output directory.
         Parameters
