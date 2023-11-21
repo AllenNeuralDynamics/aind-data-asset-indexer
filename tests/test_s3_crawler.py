@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pandas as pd
-from aind_data_access_api.rds_tables import RDSCredentials
 from aind_data_access_api.rds_tables import Client as RDSClient
+from aind_data_access_api.rds_tables import RDSCredentials
 
 from aind_data_asset_indexer.s3_crawler import AnalyticsJobRunner
 
@@ -54,7 +54,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         self.runner = AnalyticsJobRunner(
             redshift_secrets_name=os.getenv("REDSHIFT_SECRETS_NAME"),
             buckets=os.getenv("BUCKETS"),
-            table_name=os.getenv("TABLE_NAME")
+            table_name=os.getenv("TABLE_NAME"),
         )
         self.runner.redshift_client = Mock(spec=RDSClient)
 

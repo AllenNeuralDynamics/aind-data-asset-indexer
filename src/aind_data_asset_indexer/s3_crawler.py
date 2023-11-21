@@ -145,7 +145,10 @@ class AnalyticsJobRunner:
 
 if __name__ == "__main__":
     job_runner = AnalyticsJobRunner(
-        redshift_secrets_name=REDSHIFT_SECRETS_NAME, buckets=BUCKETS, table_name=TABLE_NAME
+        redshift_secrets_name=REDSHIFT_SECRETS_NAME,
+        buckets=BUCKETS,
+        table_name=TABLE_NAME,
     )
-    job_runner.run_job(folders_filepath=FOLDERS_FILEPATH, metadata_directory=METADATA_DIR)
-
+    job_runner.run_job(
+        folders_filepath=FOLDERS_FILEPATH, metadata_directory=METADATA_DIR
+    )
