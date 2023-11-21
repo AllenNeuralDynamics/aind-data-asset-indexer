@@ -13,6 +13,7 @@ from aind_data_asset_indexer.s3_crawler import AnalyticsJobRunner
 
 class MockDirEntry(MagicMock):
     """Mock class for scandir"""
+
     def __init__(self, name, is_dir):
         """Initialize MockDirEntry instance"""
         super().__init__(spec=os.DirEntry)
@@ -53,7 +54,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         mock_rds_credentials.return_value = self.sample_rds_credentials
         self.runner = AnalyticsJobRunner()
         self.runner.redshift_client = Mock(spec=RDSClient)
-        self.runner.table_name = 'some_table_name'
+        self.runner.table_name = "some_table_name"
 
     @patch("subprocess.run")
     def test_get_list_of_folders(self, mock_subprocess_run):
@@ -264,21 +265,28 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         # Assert that the result DataFrame is equal to the expected DataFrame
         pd.testing.assert_frame_equal(result_df, expected_df)
 
-    @patch('aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner._crawl_s3_buckets')
+    @patch(
+        "aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner.'"
+        "_crawl_s3_buckets"
+    )
     def test_run_job(self, mock_crawl_s3_buckets):
-        """Tests that write to redshift is called as expected."""
+        """Tests write to redshift is called as expected."""
+        runner = self.runner
+
         mock_analytics_df = Mock()
         mock_crawl_s3_buckets.return_value = mock_analytics_df
 
-        folders_filepath = 'some_folders_filepath'
-        metadata_directory = 'some_metadata_directory'
+        folders_filepath = "some_folders_filepath"
+        metadata_directory = "some_metadata_directory"
         self.runner.run_job(folders_filepath, metadata_directory)
 
-        mock_crawl_s3_buckets.assert_called_once_with(folders_filepath, metadata_directory)
-        self.runner.redshift_client.overwrite_table_with_df.assert_called_once_with(
-            df=mock_analytics_df, table_name='some_table_name'
+        mock_crawl_s3_buckets.assert_called_once_with(
+            folders_filepath, metadata_directory
+        )
+        runner.redshift_client.overwrite_table_with_df.assert_called_once_with(
+            df=mock_analytics_df, table_name="some_table_name"
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
