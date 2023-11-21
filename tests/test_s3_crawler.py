@@ -266,7 +266,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         pd.testing.assert_frame_equal(result_df, expected_df)
 
     @patch(
-        "aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner.'"
+        "aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner."
         "_crawl_s3_buckets"
     )
     def test_run_job(self, mock_crawl_s3_buckets):
