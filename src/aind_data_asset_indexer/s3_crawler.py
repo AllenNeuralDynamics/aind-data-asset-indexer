@@ -12,7 +12,6 @@ class AnalyticsJobRunner:
 
     def __init__(self):
         """Class Constructor"""
-        REDSHIFT_ENDPOINT = os.getenv("REDSHIFT")
         REDSHIFT_SECRETS_NAME = os.getenv("REDSHIFT_SECRETS_NAME")
         BUCKETS = os.getenv("BUCKETS")
         self.table_name = os.getenv("TABLE_NAME")
@@ -21,7 +20,6 @@ class AnalyticsJobRunner:
 
         self.redshift_client = RDSClient(credentials=rds_credentials)
         self.buckets_list = [item.strip() for item in bucket_str]
-
 
     @staticmethod
     def _get_list_of_folders(bucket_name: str, output_filepath: str) -> None:
@@ -71,7 +69,7 @@ class AnalyticsJobRunner:
             folders_list = file.readlines()
         df = pd.DataFrame(folders_list, columns=['s3_prefix'])
         # Strip whitespace and remove 'PRE' from the prefix column
-        df['s3_prefix'] = df['s3_prefix'].str.strip().str.replace('PRE ', '')
+        df['s3_prefix'] = df['s3_prefix'].str.strip().str.replace('PRE ', '').str.replace('/', '')
         return df
 
     @staticmethod
