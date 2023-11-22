@@ -9,7 +9,6 @@ This script will parse through a list of s3 buckets and document whether data as
 
 
 ## Usage
-
 - Define the environment variables in the `.env.template` 
   - REDSHIFT_SECRETS_NAME: defining secrets name for Amazon Redshift
   - BUCKETS: list of buckets. format: "['{bucket_name1}', '{bucket_name2}']"
