@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind-data-asset-indexer"
 description = "Service Capsule to write data asset metadata to document store"
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 authors = [
     {name = "AIND"}
 ]
@@ -17,9 +17,8 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    "aind-codeocean-api==0.2.4",
-    "aind-data-access-api[secrets,docdb]==0.5.2",
-    "python-dotenv==1.0.0"
+    "aind-data-access-api[full]==0.6.2",
+    "aind-data-schema==0.17.3"
 ]
 
 [project.optional-dependencies]
@@ -34,14 +33,14 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["code"]
+where = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aind_data_asset_indexer.__version__"}
 
 [tool.black]
 line-length = 79
-target_version = ['py36']
+target_version = ['py38']
 exclude = '''
 (
   /(
@@ -61,7 +60,7 @@ exclude = '''
 
 [tool.coverage.run]
 omit = ["*__init__*"]
-source = ["code", "tests"]
+source = ["src", "tests"]
 
 [tool.coverage.report]
 exclude_lines = [
