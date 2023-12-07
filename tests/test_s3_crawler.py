@@ -1,5 +1,6 @@
 """Tests methods AnalyticsJobRunner class"""
 
+import builtins
 import os
 import unittest
 from unittest.mock import MagicMock, Mock, mock_open, patch
@@ -8,7 +9,10 @@ import pandas as pd
 from aind_data_access_api.rds_tables import Client as RDSClient
 from aind_data_access_api.rds_tables import RDSCredentials
 
-from aind_data_asset_indexer.s3_crawler import AnalyticsJobRunner
+from aind_data_asset_indexer.s3_crawler import (
+    AnalyticsJobRunner,
+    MetadataAnalyticsTableRow,
+)
 
 
 class MockDirEntry(MagicMock):
@@ -59,21 +63,25 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         self.runner.redshift_client = Mock(spec=RDSClient)
 
     @patch("subprocess.run")
-    def test_get_list_of_folders(self, mock_subprocess_run):
+    @patch("os.makedirs")
+    @patch(f"{builtins.__name__}.open", new_callable=mock_open)
+    def test_get_list_of_folders(
+        self, mock_open, mock_makedirs, mock_subprocess_run
+    ):
         """Tests bash command to get folders runs as expected."""
         bucket_name = "test_bucket"
         output_filepath = "test_output.txt"
 
         self.runner._get_list_of_folders(bucket_name, output_filepath)
-        expected_command = [
-            "aws",
-            "s3",
-            "ls",
-            "test_bucket",
-            ">>",
-            "test_output.txt",
-        ]
-        mock_subprocess_run.assert_called_once_with(expected_command)
+        expected_command = ["aws", "s3", "ls", bucket_name]
+
+        mock_makedirs.assert_called_once_with(
+            os.path.dirname(output_filepath), exist_ok=True
+        )
+        mock_open.assert_called_once_with(output_filepath, "w")
+        mock_subprocess_run.assert_called_once_with(
+            expected_command, stdout=mock_open.return_value
+        )
 
     @patch("subprocess.run")
     def test_download_metadata_files(self, mock_subprocess_run):
@@ -286,7 +294,9 @@ class TestAnalyticsJobRunner(unittest.TestCase):
             folders_filepath, metadata_directory
         )
         runner.redshift_client.overwrite_table_with_df.assert_called_once_with(
-            df=mock_analytics_df, table_name="some_table_name"
+            df=mock_analytics_df,
+            table_name="some_table_name",
+            dtype=MetadataAnalyticsTableRow.data_types,
         )
 
 
