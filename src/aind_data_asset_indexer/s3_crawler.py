@@ -2,16 +2,37 @@
 
 import os
 import subprocess
+from dataclasses import dataclass
 
 import pandas as pd
 from aind_data_access_api.rds_tables import Client as RDSClient
 from aind_data_access_api.rds_tables import RDSCredentials
+from sqlalchemy import types
+from dotenv import load_dotenv
+
+load_dotenv()
 
 REDSHIFT_SECRETS_NAME = os.getenv("REDSHIFT_SECRETS_NAME")
 BUCKETS = os.getenv("BUCKETS")
 TABLE_NAME = os.getenv("TABLE_NAME")
 FOLDERS_FILEPATH = os.getenv("FOLDERS_FILEPATH")
 METADATA_DIR = os.getenv("METADATA_DIRECTORY")
+AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION")
+
+
+@dataclass
+class MetadataAnalyticsTableRow:
+    """Columns for the metadata analytics table"""
+
+    s3_prefix: str
+    metadata_bool: bool
+    bucket_name: str
+
+    data_types = {
+        "s3_prefix": types.String(length=256),
+        "metadata_bool": types.Boolean,
+        "bucket_str": types.String(length=256),
+    }
 
 
 class AnalyticsJobRunner:
@@ -57,10 +78,12 @@ class AnalyticsJobRunner:
             "s3",
             "ls",
             f"{bucket_name}",
-            str(">>"),
-            f"{output_filepath}",
         ]
-        subprocess.run(download_command_str_bucket_to_local_filepath)
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+        with open(output_filepath, "w") as outfile:
+            subprocess.run(
+                download_command_str_bucket_to_local_filepath, stdout=outfile
+            )
 
     @staticmethod
     def _download_metadata_files(
@@ -188,7 +211,9 @@ class AnalyticsJobRunner:
             folders_filepath, metadata_directory
         )
         self.redshift_client.overwrite_table_with_df(
-            df=analytics_df, table_name=self.table_name
+            df=analytics_df,
+            table_name=self.table_name,
+            dtype=MetadataAnalyticsTableRow.data_types,
         )
 
 
