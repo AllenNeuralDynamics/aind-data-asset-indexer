@@ -18,8 +18,7 @@ dynamic = ["version"]
 
 dependencies = [
     "aind-data-access-api[full]==0.6.2",
-    "aind-data-schema==0.17.3",
-    "python-dotenv"
+    "aind-data-schema==0.17.3"
 ]
 
 [project.optional-dependencies]
