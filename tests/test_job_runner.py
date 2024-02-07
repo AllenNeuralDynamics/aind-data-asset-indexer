@@ -352,10 +352,20 @@ class TestJobRunner(unittest.TestCase):
         "aind_data_access_api.document_db.MetadataDbClient"
         ".upsert_list_of_records"
     )
+    @patch(
+        "aind_data_access_api.document_db.MetadataDbClient"
+        ".delete_many_records"
+    )
+    @patch(
+        "aind_data_access_api.document_db.MetadataDbClient"
+        ".retrieve_data_asset_records"
+    )
     @patch("boto3.client")
     def test_run_job(
         self,
         mock_s3_client: MagicMock,
+        mock_doc_store_retrieve_records: MagicMock,
+        mock_doc_store_delete: MagicMock,
         mock_doc_store_upsert: MagicMock,
         mock_codeocean_client: MagicMock,
     ):
