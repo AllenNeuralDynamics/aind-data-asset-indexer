@@ -394,6 +394,14 @@ class TestJobRunner(unittest.TestCase):
             [expected_data_asset_record]
         )
 
+        mock_doc_store_retrieve_records.assert_called_once_with(
+            filter_query={},
+            projection={'_id': 1, '_name': 1, '_created': 1, '_location': 1},
+            paginate=False
+        )
+
+        mock_doc_store_delete.assert_called_once_with([])
+
 
 if __name__ == "__main__":
     unittest.main()
