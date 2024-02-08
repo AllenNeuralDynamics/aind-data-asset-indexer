@@ -11,7 +11,7 @@ import pytz
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.models import DataAssetRecord
-from aind_data_schema.data_description import DataLevel
+from aind_data_schema.core.data_description import DataLevel
 from botocore.exceptions import ClientError
 
 
@@ -263,8 +263,29 @@ class JobRunner:
 
         print(f"Number of codeocean records found: {len(base_records)}")
 
-        # TODO: Remove records in doc store that are no longer in code ocean
-        #  Requires adding delete operation to api gateway
+        base_record_ids = [r.id for r in base_records]
+        doc_db_records = self.doc_db_client.retrieve_data_asset_records(
+            filter_query={},
+            projection={"_id": 1, "_name": 1, "_created": 1, "_location": 1},
+            paginate=False,
+        )
+        doc_store_ids = [r.id for r in doc_db_records]
+        record_ids_to_remove = set(doc_store_ids) - set(base_record_ids)
+
+        print(
+            f"Number of records in doc db not found in code ocean:"
+            f" {len(record_ids_to_remove)}"
+        )
+        print(f"Removing {len(record_ids_to_remove)} entries from docdb")
+        del_rec_response = self.doc_db_client.delete_many_records(
+            list(record_ids_to_remove)
+        )
+        # TODO: add stream handler to use logging in capsule instead of print
+        print(
+            f"Finished removing records. Delete Response:"
+            f" {del_rec_response.status_code},"
+            f" {del_rec_response.json()}"
+        )
 
         # Attach top-level json files to base_records
         s3_client = boto3.client("s3")
@@ -272,6 +293,7 @@ class JobRunner:
             self._update_base_record_with_s3_info(s3_client, record)
         s3_client.close()
         print("Finished downloading from s3.")
+        print("Updating docdb")
         docdb_response = self.doc_db_client.upsert_list_of_records(
             base_records
         )
