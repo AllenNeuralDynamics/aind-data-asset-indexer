@@ -11,7 +11,9 @@ from aind_data_asset_indexer.update_docdb import (
 
 
 class TestMongoConfigs(unittest.TestCase):
+    """Test class for MongoConfigs."""
     def test_mongo_configs_creation(self):
+        """Tests MongoConfigs definition"""
         mongo_config = MongoConfigs(
             host="localhost",
             port=27017,
@@ -29,6 +31,7 @@ class TestMongoConfigs(unittest.TestCase):
 
 
 class TestDocDBUpdater(unittest.TestCase):
+    """Test class for DocDBUpdater"""
     expected_configs = MongoConfigs(
         host="localhost",
         port=27017,
@@ -40,7 +43,7 @@ class TestDocDBUpdater(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.update_docdb.boto3.client")
     def test_get_mongo_credentials(self, mock_boto3_client):
-        # Mocking the secrets manager response
+        """Tests mongo credentials are retrieved as expected."""
         mock_secrets_client = MagicMock()
         mock_secrets_client.get_secret_value.return_value = {
             "SecretString": '{"username": "user", "password": "password",'
@@ -59,6 +62,7 @@ class TestDocDBUpdater(unittest.TestCase):
     @patch("aind_data_asset_indexer.update_docdb.os.listdir")
     @patch("builtins.open", new_callable=MagicMock)
     def test_read_metadata_files(self, mock_open, list_dir):
+        """Tests that metadata files are read as expected."""
         list_dir.return_value = ["file1.nd.json", "file2.nd.json"]
         mock_open.side_effect = [
             MagicMock(
