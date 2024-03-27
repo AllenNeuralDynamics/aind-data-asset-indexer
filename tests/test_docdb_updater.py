@@ -1,8 +1,7 @@
 """Test module for docdb updater"""
-import unittest
-from unittest.mock import MagicMock, patch, mock_open
 import json
-import os
+import unittest
+from unittest.mock import MagicMock, patch
 
 from aind_data_asset_indexer.update_docdb import (
     DocDBUpdater,
@@ -45,7 +44,7 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_secrets_client = MagicMock()
         mock_secrets_client.get_secret_value.return_value = {
             "SecretString": '{"username": "user", "password": "password",'
-                            ' "host": "localhost", "port": 27017}'
+            ' "host": "localhost", "port": 27017}'
         }
         mock_boto3_client.return_value = mock_secrets_client
 
@@ -58,20 +57,36 @@ class TestDocDBUpdater(unittest.TestCase):
         self.assertEqual(mongo_configs.collection_name, "test_collection")
 
     @patch("aind_data_asset_indexer.update_docdb.os.listdir")
-    def test_read_metadata_files(self, list_dir):
+    @patch("builtins.open", new_callable=MagicMock)
+    def test_read_metadata_files(self, mock_open, list_dir):
         list_dir.return_value = ["file1.nd.json", "file2.nd.json"]
-        with patch("builtins.open", side_effect=[MagicMock()] * 2) as mock_open:
-            mock_files = [MagicMock(), MagicMock()]
-            mock_files[0].__enter__.return_value.read.return_value = json.dumps({"id": 1, "name": "test1"})
-            mock_files[1].__enter__.return_value.read.return_value = json.dumps({"id": 2, "name": "test2"})
-            mock_open.side_effect = mock_files
+        mock_open.side_effect = [
+            MagicMock(
+                __enter__=MagicMock(
+                    return_value=MagicMock(
+                        read=MagicMock(
+                            return_value=json.dumps({"id": 1, "name": "test1"})
+                        )
+                    )
+                )
+            ),
+            MagicMock(
+                __enter__=MagicMock(
+                    return_value=MagicMock(
+                        read=MagicMock(
+                            return_value=json.dumps({"id": 2, "name": "test2"})
+                        )
+                    )
+                )
+            ),
+        ]
 
-            updater = DocDBUpdater("some/path/directory", self.expected_configs)
-            result = updater.read_metadata_files()
+        updater = DocDBUpdater("path/to/directory", self.expected_configs)
+        result = updater.read_metadata_files()
 
-            self.assertEqual(len(result), 2)
-            self.assertEqual(result[0]["id"], 1)
-            self.assertEqual(result[1]["name"], "test2")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], 1)
+        self.assertEqual(result[1]["name"], "test2")
 
     @patch(
         "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
@@ -88,8 +103,7 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_mongo_client.__getitem__.return_value = mock_db
 
         docdb_updater = DocDBUpdater(
-            metadata_dir="test_dir",
-            mongo_configs=self.expected_configs
+            metadata_dir="test_dir", mongo_configs=self.expected_configs
         )
         docdb_updater.mongo_client = mock_mongo_client
         docdb_updater.collection = mock_collection
@@ -99,7 +113,9 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_collection.insert_many.assert_called_once_with(
             [{"data": "test_data"}]
         )
-        mock_logging_info.assert_called_once_with("Documents in test_dir inserted successfully.")
+        mock_logging_info.assert_called_once_with(
+            "Documents in test_dir inserted successfully."
+        )
 
     @patch(
         "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
@@ -116,8 +132,7 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_mongo_client.__getitem__.return_value = mock_db
 
         docdb_updater = DocDBUpdater(
-            metadata_dir="empty_dir",
-            mongo_configs=self.expected_configs
+            metadata_dir="empty_dir", mongo_configs=self.expected_configs
         )
         docdb_updater.mongo_client = mock_mongo_client
         docdb_updater.collection = mock_collection
@@ -125,7 +140,9 @@ class TestDocDBUpdater(unittest.TestCase):
         docdb_updater.bulk_write_records()
 
         mock_collection.insert_many.assert_not_called()
-        mock_logging_error.assert_called_once_with("No JSON files found in the directory empty_dir.")
+        mock_logging_error.assert_called_once_with(
+            "No JSON files found in the directory empty_dir."
+        )
 
 
 if __name__ == "__main__":

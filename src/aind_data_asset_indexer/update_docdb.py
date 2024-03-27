@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import List
 
 import boto3
 from pymongo import MongoClient
@@ -68,7 +69,7 @@ class DocDBUpdater:
         db = self.mongo_client[mongo_configs.db_name]
         self.collection = db[mongo_configs.collection_name]
 
-    def read_metadata_files(self):
+    def read_metadata_files(self) -> List:
         """Reads metadata files in input directory"""
         json_data = []
         for filename in os.listdir(self.metadata_dir):
@@ -94,9 +95,10 @@ class DocDBUpdater:
 
 
 if __name__ == "__main__":
-    mongo_configs = get_mongo_credentials(db_name=DB_NAME, collection_name=COLLECTION_NAME)
+    mongo_configs = get_mongo_credentials(
+        db_name=DB_NAME, collection_name=COLLECTION_NAME
+    )
     job_runner = DocDBUpdater(
-        metadata_dir=METADATA_DIR,
-        mongo_configs=mongo_configs
+        metadata_dir=METADATA_DIR, mongo_configs=mongo_configs
     )
     job_runner.bulk_write_records()
