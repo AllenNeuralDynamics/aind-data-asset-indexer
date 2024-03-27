@@ -1,14 +1,19 @@
 """Module to update DocDB based on s3 records."""
-import pandas as pd
 import json
+import logging
 import os
-# from aind_data_access_api.document_db import Client as DocDBClient
-from pymongo import MongoClient
 from dataclasses import dataclass, field
+
+import boto3
+from pymongo import MongoClient
 
 DB_NAME = os.getenv("DB_NAME")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+METADATA_DIR = os.getenv("METADATA_DIRECTORY")
 READWRITE_SECRET = os.getenv("READWRITE_SECRET")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -47,15 +52,12 @@ def get_mongo_credentials(
     )
 
 
-class DocDBIndexRunner:
+class DocDBUpdater:
     """Class to handle indexing of records in DocDB."""
 
-    def __init__(self, metadata_dir: str, db_name: str, collection_name: str):
-        """Class Constructor, creates DocDB Client to read/write to collection."""
+    def __init__(self, metadata_dir: str, mongo_configs: MongoConfigs):
+        """Creates DocDB Client to read/write to collection."""
         self.metadata_dir = metadata_dir
-        mongo_configs = get_mongo_credentials(
-            db_name=db_name, collection_name=collection_name
-        )
         self.mongo_client = MongoClient(
             mongo_configs.host,
             port=mongo_configs.port,
@@ -66,28 +68,35 @@ class DocDBIndexRunner:
         db = self.mongo_client[mongo_configs.db_name]
         self.collection = db[mongo_configs.collection_name]
 
-    def overwrite_records(self):
-        """"""
-        for f in os.scandir(self.metadata_dir):
-            contents = f["Body"].read().decode("utf-8")
-            json_contents = json.loads(contents)
-            x = self.collection.update_one(
-                {"_id": json_contents["_id"]},
-                {"$set": json_contents},
+    def read_metadata_files(self):
+        """Reads metadata files in input directory"""
+        json_data = []
+        for filename in os.listdir(self.metadata_dir):
+            if filename.endswith(".nd.json"):
+                filepath = os.path.join(self.metadata_dir, filename)
+                with open(filepath, "r") as file:
+                    json_data.append(json.load(file))
+        return json_data
+
+    def bulk_write_records(self):
+        """Inserts metadata files in directory to DocDB collection"""
+        json_data = self.read_metadata_files()
+        if json_data:
+            self.collection.insert_many(json_data)
+            logger.info(
+                f"Documents in {self.metadata_dir} inserted successfully."
             )
-            print(x.raw_result)
-            return None
+        else:
+            logger.error(
+                f"No JSON files found in the directory {self.metadata_dir}."
+            )
+        return None
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    mongo_configs = get_mongo_credentials(db_name=DB_NAME, collection_name=COLLECTION_NAME)
+    job_runner = DocDBUpdater(
+        metadata_dir=METADATA_DIR,
+        mongo_configs=mongo_configs
+    )
+    job_runner.bulk_write_records()
