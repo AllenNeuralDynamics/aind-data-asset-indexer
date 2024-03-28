@@ -72,7 +72,7 @@ class DocDBUpdater:
 
     def read_metadata_files(self) -> Dict:
         """Reads metadata files from metadata directory
-        to creates a dictionary with s3-prefix : data """
+        to creates a dictionary with s3-prefix : data"""
         json_data_dict = {}
         for folder_entry in os.scandir(self.metadata_dir):
             if folder_entry.is_dir():
@@ -80,8 +80,8 @@ class DocDBUpdater:
                 folder_path = os.path.join(self.metadata_dir, prefix)
                 for file_entry in os.scandir(folder_path):
                     if (
-                            file_entry.name.endswith(".nd.json")
-                            and file_entry.is_file()
+                        file_entry.name.endswith(".nd.json")
+                        and file_entry.is_file()
                     ):
                         file_path = file_entry.path
                         with open(file_path, "r") as file:

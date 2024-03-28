@@ -1,8 +1,7 @@
 """Test module for docdb updater"""
-import json
 import os
 import unittest
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 from aind_data_asset_indexer.update_docdb import (
     DocDBUpdater,
@@ -68,22 +67,29 @@ class TestDocDBUpdater(unittest.TestCase):
         self.assertEqual(mongo_configs.collection_name, "test_collection")
 
     def test_read_metadata_files(self):
-        docdb_updater = DocDBUpdater(metadata_dir=str(METADATA_DIR), mongo_configs=self.expected_configs)
+        """Tests that files are read as expected."""
+        docdb_updater = DocDBUpdater(
+            metadata_dir=str(METADATA_DIR), mongo_configs=self.expected_configs
+        )
         result = docdb_updater.read_metadata_files()
         self.assertEqual(len(result), 2)
         self.assertEqual(result["ecephys_test_1"]["schema_version"], "0.0.1")
         self.assertEqual(result["ecephys_test_1"]["name"], "ecephys_test_1")
-        self.assertEqual(result["ecephys_test_1"]["metadata_status"], "Invalid")
+        self.assertEqual(
+            result["ecephys_test_1"]["metadata_status"], "Invalid"
+        )
         self.assertEqual(result["ecephys_test_2"]["schema_version"], "0.0.8")
-        self.assertEqual(result["ecephys_test_2"]["procedures"]["schema_version"], "0.9.3")
-        self.assertEqual(result["ecephys_test_2"]["metadata_status"], "Invalid")
+        self.assertEqual(
+            result["ecephys_test_2"]["procedures"]["schema_version"], "0.9.3"
+        )
+        self.assertEqual(
+            result["ecephys_test_2"]["metadata_status"], "Invalid"
+        )
 
     @patch(
         "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
     )
-    def test_bulk_write_records(
-        self, mock_read_metadata_files
-    ):
+    def test_bulk_write_records(self, mock_read_metadata_files):
         """Tests write records successfully as expected."""
         mock_collection = MagicMock()
         mock_db = MagicMock()
@@ -100,7 +106,16 @@ class TestDocDBUpdater(unittest.TestCase):
         docdb_updater.bulk_write_records()
 
         mock_collection.bulk_write.assert_called_once_with(
-            [UpdateMany({'name': 'data'}, {'$set': 'test_data'}, True, None, None, None)]
+            [
+                UpdateMany(
+                    {"name": "data"},
+                    {"$set": "test_data"},
+                    True,
+                    None,
+                    None,
+                    None,
+                )
+            ]
         )
 
     @patch(
