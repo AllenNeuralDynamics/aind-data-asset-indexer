@@ -3,10 +3,11 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import List
+from typing import Dict
 
 import boto3
 from pymongo import MongoClient
+from pymongo.operations import UpdateMany
 
 DB_NAME = os.getenv("DB_NAME")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
@@ -69,24 +70,42 @@ class DocDBUpdater:
         db = self.mongo_client[mongo_configs.db_name]
         self.collection = db[mongo_configs.collection_name]
 
-    def read_metadata_files(self) -> List:
-        """Reads metadata files in input directory"""
-        json_data = []
-        for filename in os.listdir(self.metadata_dir):
-            if filename.endswith(".nd.json"):
-                filepath = os.path.join(self.metadata_dir, filename)
-                with open(filepath, "r") as file:
-                    json_data.append(json.load(file))
-        return json_data
+    def read_metadata_files(self) -> Dict:
+        """Reads metadata files from metadata directory
+        to creates a dictionary with s3-prefix : data """
+        json_data_dict = {}
+        for folder_entry in os.scandir(self.metadata_dir):
+            if folder_entry.is_dir():
+                prefix = folder_entry.name
+                folder_path = os.path.join(self.metadata_dir, prefix)
+                for file_entry in os.scandir(folder_path):
+                    if (
+                            file_entry.name.endswith(".nd.json")
+                            and file_entry.is_file()
+                    ):
+                        file_path = file_entry.path
+                        with open(file_path, "r") as file:
+                            json_data_dict[prefix] = json.load(file)
+        return json_data_dict
 
     def bulk_write_records(self):
-        """Inserts metadata files in directory to DocDB collection"""
+        """Updates DocDB collection with metadata files"""
         json_data = self.read_metadata_files()
         if json_data:
-            self.collection.insert_many(json_data)
-            logger.info(
-                f"Documents in {self.metadata_dir} inserted successfully."
-            )
+            bulk_operations = []
+            for prefix, data in json_data.items():
+                filter_query = {"name": prefix}
+                update_data = {"$set": data}
+                bulk_operations.append(
+                    UpdateMany(filter_query, update_data, upsert=True)
+                )
+
+            if bulk_operations:
+                result = self.collection.bulk_write(bulk_operations)
+                logger.info(
+                    f"{result.upserted_count} documents inserted and"
+                    f" {result.modified_count} documents updated successfully."
+                )
         else:
             logger.error(
                 f"No JSON files found in the directory {self.metadata_dir}."

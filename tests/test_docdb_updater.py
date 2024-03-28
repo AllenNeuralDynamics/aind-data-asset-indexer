@@ -1,17 +1,24 @@
 """Test module for docdb updater"""
 import json
+import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 
 from aind_data_asset_indexer.update_docdb import (
     DocDBUpdater,
     MongoConfigs,
     get_mongo_credentials,
 )
+from pathlib import Path
+from pymongo.operations import UpdateMany
+
+TEST_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
+METADATA_DIR = TEST_DIR / "resources" / "metadata_dir"
 
 
 class TestMongoConfigs(unittest.TestCase):
     """Test class for MongoConfigs."""
+
     def test_mongo_configs_creation(self):
         """Tests MongoConfigs definition"""
         mongo_config = MongoConfigs(
@@ -32,6 +39,7 @@ class TestMongoConfigs(unittest.TestCase):
 
 class TestDocDBUpdater(unittest.TestCase):
     """Test class for DocDBUpdater"""
+
     expected_configs = MongoConfigs(
         host="localhost",
         port=27017,
@@ -59,45 +67,22 @@ class TestDocDBUpdater(unittest.TestCase):
         self.assertEqual(mongo_configs.db_name, "test_db")
         self.assertEqual(mongo_configs.collection_name, "test_collection")
 
-    @patch("aind_data_asset_indexer.update_docdb.os.listdir")
-    @patch("builtins.open", new_callable=MagicMock)
-    def test_read_metadata_files(self, mock_open, list_dir):
-        """Tests that metadata files are read as expected."""
-        list_dir.return_value = ["file1.nd.json", "file2.nd.json"]
-        mock_open.side_effect = [
-            MagicMock(
-                __enter__=MagicMock(
-                    return_value=MagicMock(
-                        read=MagicMock(
-                            return_value=json.dumps({"id": 1, "name": "test1"})
-                        )
-                    )
-                )
-            ),
-            MagicMock(
-                __enter__=MagicMock(
-                    return_value=MagicMock(
-                        read=MagicMock(
-                            return_value=json.dumps({"id": 2, "name": "test2"})
-                        )
-                    )
-                )
-            ),
-        ]
-
-        updater = DocDBUpdater("path/to/directory", self.expected_configs)
-        result = updater.read_metadata_files()
-
+    def test_read_metadata_files(self):
+        docdb_updater = DocDBUpdater(metadata_dir=str(METADATA_DIR), mongo_configs=self.expected_configs)
+        result = docdb_updater.read_metadata_files()
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["id"], 1)
-        self.assertEqual(result[1]["name"], "test2")
+        self.assertEqual(result["ecephys_test_1"]["schema_version"], "0.0.1")
+        self.assertEqual(result["ecephys_test_1"]["name"], "ecephys_test_1")
+        self.assertEqual(result["ecephys_test_1"]["metadata_status"], "Invalid")
+        self.assertEqual(result["ecephys_test_2"]["schema_version"], "0.0.8")
+        self.assertEqual(result["ecephys_test_2"]["procedures"]["schema_version"], "0.9.3")
+        self.assertEqual(result["ecephys_test_2"]["metadata_status"], "Invalid")
 
     @patch(
         "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
     )
-    @patch("aind_data_asset_indexer.update_docdb.logger.info")
     def test_bulk_write_records(
-        self, mock_logging_info, mock_read_metadata_files
+        self, mock_read_metadata_files
     ):
         """Tests write records successfully as expected."""
         mock_collection = MagicMock()
@@ -111,21 +96,18 @@ class TestDocDBUpdater(unittest.TestCase):
         )
         docdb_updater.mongo_client = mock_mongo_client
         docdb_updater.collection = mock_collection
-        mock_read_metadata_files.return_value = [{"data": "test_data"}]
+        mock_read_metadata_files.return_value = {"data": "test_data"}
         docdb_updater.bulk_write_records()
 
-        mock_collection.insert_many.assert_called_once_with(
-            [{"data": "test_data"}]
-        )
-        mock_logging_info.assert_called_once_with(
-            "Documents in test_dir inserted successfully."
+        mock_collection.bulk_write.assert_called_once_with(
+            [UpdateMany({'name': 'data'}, {'$set': 'test_data'}, True, None, None, None)]
         )
 
     @patch(
         "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
     )
     @patch("aind_data_asset_indexer.update_docdb.logger.error")
-    def test_bulk_write_records_failure(
+    def test_bulk_write_records_empty_dir(
         self, mock_logging_error, mock_read_metadata_files
     ):
         """Tests write records fails as expected."""
