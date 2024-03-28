@@ -9,7 +9,6 @@ from aind_data_access_api.rds_tables import Client as RDSClient
 from aind_data_access_api.rds_tables import RDSCredentials
 from sqlalchemy import types
 
-
 REDSHIFT_SECRETS_NAME = os.getenv("REDSHIFT_SECRETS_NAME")
 BUCKETS = os.getenv("BUCKETS")
 TABLE_NAME = os.getenv("TABLE_NAME")
