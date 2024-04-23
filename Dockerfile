@@ -3,7 +3,6 @@ FROM python:3.10-slim
 WORKDIR /app
 
 ADD src ./src
-ADD .env .
 ADD pyproject.toml .
 ADD setup.py .
 
