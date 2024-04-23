@@ -12,7 +12,7 @@ from pymongo.operations import UpdateMany
 DB_NAME = os.getenv("DB_NAME")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 METADATA_DIR = os.getenv("METADATA_DIRECTORY")
-READWRITE_SECRET = os.getenv("READWRITE_SECRET")
+DOCDB_SECRETS_NAME = os.getenv("DOCDB_SECRETS_NAME")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def get_mongo_credentials(
 ) -> MongoConfigs:
     """Retrieves secrets credentials based on http request type"""
     secrets_client = boto3.client("secretsmanager")
-    secret_value = secrets_client.get_secret_value(SecretId=READWRITE_SECRET)
+    secret_value = secrets_client.get_secret_value(SecretId=DOCDB_SECRETS_NAME)
     secrets_client.close()
     secret = secret_value["SecretString"]
     secret_json = json.loads(secret)
