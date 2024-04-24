@@ -1,4 +1,4 @@
-"""Module to crawl through s3"""
+"""Module to crawl through s3 and create redshift table"""
 
 import os
 import subprocess
@@ -32,7 +32,7 @@ class MetadataAnalyticsTableRow:
     }
 
 
-class AnalyticsJobRunner:
+class AnalyticsTableJobRunner:
     """Class to handle creating metadata analytics table in redshift"""
 
     def __init__(
@@ -215,7 +215,7 @@ class AnalyticsJobRunner:
 
 
 if __name__ == "__main__":
-    job_runner = AnalyticsJobRunner(
+    job_runner = AnalyticsTableJobRunner(
         redshift_secrets_name=REDSHIFT_SECRETS_NAME,
         buckets=BUCKETS,
         table_name=TABLE_NAME,

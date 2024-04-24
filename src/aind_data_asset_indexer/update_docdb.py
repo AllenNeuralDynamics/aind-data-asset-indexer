@@ -88,9 +88,8 @@ class DocDBUpdater:
                             json_data_dict[prefix] = json.load(file)
         return json_data_dict
 
-    def bulk_write_records(self):
+    def bulk_write_records(self, json_data):
         """Updates DocDB collection with metadata files"""
-        json_data = self.read_metadata_files()
         if json_data:
             bulk_operations = []
             for prefix, data in json_data.items():
@@ -112,6 +111,27 @@ class DocDBUpdater:
             )
         return None
 
+    def delete_records(self, json_data):
+        """Deletes records from docdb if not in s3"""
+        docdb_records = self.collection.find({}, {'_id': False})
+        docdb_prefixes = {record['name'] for record in docdb_records}
+
+        prefixes_to_delete = docdb_prefixes - set(json_data.keys())
+
+        if prefixes_to_delete:
+            self.collection.delete_many({'s3_prefix': {'$in': list(prefixes_to_delete)}})
+            logger.info(f"Deleted {len(prefixes_to_delete)} records from DocDB collection.")
+        else:
+            pass
+
+        return None
+
+    def run_sync_records_job(self):
+        """Runs job to sync records from s3 to docdb"""
+        json_data = self.read_metadata_files()
+        self.bulk_write_records(json_data)
+        self.delete_records(json_data)
+
 
 if __name__ == "__main__":
     mongo_configs = get_mongo_credentials(
@@ -120,4 +140,4 @@ if __name__ == "__main__":
     job_runner = DocDBUpdater(
         metadata_dir=METADATA_DIR, mongo_configs=mongo_configs
     )
-    job_runner.bulk_write_records()
+    job_runner.run_sync_records_job()

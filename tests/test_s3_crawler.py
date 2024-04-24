@@ -1,4 +1,4 @@
-"""Tests methods AnalyticsJobRunner class"""
+"""Tests methods AnalyticsTableJobRunner class"""
 
 import builtins
 import os
@@ -10,7 +10,7 @@ from aind_data_access_api.rds_tables import Client as RDSClient
 from aind_data_access_api.rds_tables import RDSCredentials
 
 from aind_data_asset_indexer.s3_crawler import (
-    AnalyticsJobRunner,
+    AnalyticsTableJobRunner,
     MetadataAnalyticsTableRow,
 )
 
@@ -25,8 +25,8 @@ class MockDirEntry(MagicMock):
         self.configure_mock(is_dir=MagicMock(return_value=is_dir))
 
 
-class TestAnalyticsJobRunner(unittest.TestCase):
-    """Test methods in AnalyticsJobRunner class"""
+class TestAnalyticsTableJobRunner(unittest.TestCase):
+    """Test methods in AnalyticsTableJobRunner class"""
 
     sample_rds_credentials = RDSCredentials(
         username="some_rds_user",
@@ -52,10 +52,10 @@ class TestAnalyticsJobRunner(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.s3_crawler.RDSCredentials")
     def setUp(self, mock_rds_credentials):
-        """Constructs AnalyticsJobRunner with mock creds"""
+        """Constructs AnalyticsTableJobRunner with mock creds"""
         self.mock_credentials = Mock(spec=RDSCredentials)
         mock_rds_credentials.return_value = self.sample_rds_credentials
-        self.runner = AnalyticsJobRunner(
+        self.runner = AnalyticsTableJobRunner(
             redshift_secrets_name=os.getenv("REDSHIFT_SECRETS_NAME"),
             buckets=os.getenv("BUCKETS"),
             table_name=os.getenv("TABLE_NAME"),
@@ -189,11 +189,11 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         result_df = self.runner._join_dataframes(df1, df2, bucket_name)
         pd.testing.assert_frame_equal(result_df, expected_df)
 
-    @patch.object(AnalyticsJobRunner, "_get_list_of_folders")
-    @patch.object(AnalyticsJobRunner, "_download_metadata_files")
-    @patch.object(AnalyticsJobRunner, "_create_dataframe_from_list_of_folders")
-    @patch.object(AnalyticsJobRunner, "_create_dataframe_from_metadata_files")
-    @patch.object(AnalyticsJobRunner, "_join_dataframes")
+    @patch.object(AnalyticsTableJobRunner, "_get_list_of_folders")
+    @patch.object(AnalyticsTableJobRunner, "_download_metadata_files")
+    @patch.object(AnalyticsTableJobRunner, "_create_dataframe_from_list_of_folders")
+    @patch.object(AnalyticsTableJobRunner, "_create_dataframe_from_metadata_files")
+    @patch.object(AnalyticsTableJobRunner, "_join_dataframes")
     def test_crawl_s3_buckets(
         self,
         mock_join_dataframes,
@@ -276,7 +276,7 @@ class TestAnalyticsJobRunner(unittest.TestCase):
         pd.testing.assert_frame_equal(result_df, expected_df)
 
     @patch(
-        "aind_data_asset_indexer.s3_crawler.AnalyticsJobRunner."
+        "aind_data_asset_indexer.s3_crawler.AnalyticsTableJobRunner."
         "_crawl_s3_buckets"
     )
     def test_run_job(self, mock_crawl_s3_buckets):
