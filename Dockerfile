@@ -10,4 +10,4 @@ RUN apt-get update
 RUN pip install . --no-cache-dir
 RUN pip install awscli
 
-CMD ["python", "src/aind_data_asset_indexer/s3_crawler.py"]
+CMD ["./src/aind_data_asset_indexer/run.sh"]
