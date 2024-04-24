@@ -10,4 +10,5 @@ RUN apt-get update
 RUN pip install . --no-cache-dir
 RUN pip install awscli
 
+RUN chmod +x ./src/aind_data_asset_indexer/run.sh
 CMD ["./src/aind_data_asset_indexer/run.sh"]
