@@ -134,7 +134,7 @@ class DocDBUpdater:
                 {"s3_prefix": {"$in": list(prefixes_to_delete)}}
             )
             logger.info(
-                f"Deleted {len(prefixes_to_delete)} records from the "
+                f"Deleted {len(prefixes_to_delete)} records from "
                 f"DocDB collection."
             )
         else:
