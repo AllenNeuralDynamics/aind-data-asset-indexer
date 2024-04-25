@@ -47,7 +47,11 @@ class JobRunner:
 
         """
 
-        source_bucket = co_response.get("sourceBucket")
+        if "sourceBucket" in co_response.keys():
+            source_bucket_key = "sourceBucket"
+        else:
+            source_bucket_key = "source_bucket"
+        source_bucket = co_response.get(source_bucket_key)
         bucket = source_bucket.get("bucket") if source_bucket else None
         prefix = source_bucket.get("prefix") if source_bucket else None
         origin = source_bucket.get("origin") if source_bucket else None
