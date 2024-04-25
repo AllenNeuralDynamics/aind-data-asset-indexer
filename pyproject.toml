@@ -59,7 +59,7 @@ exclude = '''
 '''
 
 [tool.coverage.run]
-omit = ["*__init__*", "*run_job*"]
+omit = ["*__init__*"]
 source = ["src", "tests"]
 
 [tool.coverage.report]

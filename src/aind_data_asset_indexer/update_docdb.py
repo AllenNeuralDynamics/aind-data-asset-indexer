@@ -130,15 +130,20 @@ class DocDBUpdater:
         prefixes_to_delete = set(docdb_prefixes) - set(s3_prefixes)
 
         if prefixes_to_delete:
-            self.collection.delete_many({'s3_prefix': {'$in': list(prefixes_to_delete)}})
-            logger.info(f"Deleted {len(prefixes_to_delete)} records from DocDB collection.")
+            self.collection.delete_many(
+                {"s3_prefix": {"$in": list(prefixes_to_delete)}}
+            )
+            logger.info(
+                f"Deleted {len(prefixes_to_delete)} records from the "
+                f"DocDB collection."
+            )
         else:
             logger.info("Records in S3 and DocDB are synced.")
 
         return None
 
     def run_sync_records_job(self):
-        """Runs job to sync records from s3 to docdb"""
+        """Syncs records in DocDB to S3. """
         json_data = self.read_metadata_files()
         s3_prefixes = list(json_data.keys())
         self.bulk_write_records(json_data)

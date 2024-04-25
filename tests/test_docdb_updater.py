@@ -1,15 +1,16 @@
 """Test module for docdb updater"""
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from pymongo.operations import UpdateMany
 
 from aind_data_asset_indexer.update_docdb import (
     DocDBUpdater,
     MongoConfigs,
     get_mongo_credentials,
 )
-from pathlib import Path
-from pymongo.operations import UpdateMany
 
 TEST_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 METADATA_DIR = TEST_DIR / "resources" / "metadata_dir"
@@ -115,9 +116,7 @@ class TestDocDBUpdater(unittest.TestCase):
         )
 
     @patch("aind_data_asset_indexer.update_docdb.logger.error")
-    def test_bulk_write_records_empty_dir(
-        self, mock_logging_error
-    ):
+    def test_bulk_write_records_empty_dir(self, mock_logging_error):
         """Tests write records fails as expected."""
         mock_collection = MagicMock()
         mock_db = MagicMock()
@@ -145,19 +144,20 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_db.__getitem__.return_value = mock_collection
         mock_mongo_client = MagicMock()
         mock_mongo_client.__getitem__.return_value = mock_db
-        s3_prefixes = ['prefix1', 'prefix2', 'prefix3']
-        docdb_prefixes = ['prefix1', 'prefix2', 'prefix3', 'prefix4']
-        expected_prefixes_to_delete = {'prefix4'}
+        s3_prefixes = ["prefix1", "prefix2", "prefix3"]
+        docdb_prefixes = ["prefix1", "prefix2", "prefix3", "prefix4"]
+        expected_prefixes_to_delete = {"prefix4"}
 
         docdb_updater = DocDBUpdater(
             metadata_dir="test_dir", mongo_configs=self.expected_configs
         )
         docdb_updater.mongo_client = mock_mongo_client
         docdb_updater.collection = mock_collection
-        docdb_updater.collection.distinct.return_value = docdb_prefixes\
-
+        docdb_updater.collection.distinct.return_value = docdb_prefixes
         docdb_updater.delete_records(s3_prefixes)
-        docdb_updater.collection.delete_many.assert_called_once_with({'s3_prefix': {'$in': list(expected_prefixes_to_delete)}})
+        docdb_updater.collection.delete_many.assert_called_once_with(
+            {"s3_prefix": {"$in": list(expected_prefixes_to_delete)}}
+        )
         mock_logging_info.assert_called_once_with(
             "Deleted 1 records from DocDB collection."
         )
@@ -170,16 +170,15 @@ class TestDocDBUpdater(unittest.TestCase):
         mock_db.__getitem__.return_value = mock_collection
         mock_mongo_client = MagicMock()
         mock_mongo_client.__getitem__.return_value = mock_db
-        s3_prefixes = ['prefix1', 'prefix2', 'prefix3']
-        docdb_prefixes = ['prefix1', 'prefix2', 'prefix3']
+        s3_prefixes = ["prefix1", "prefix2", "prefix3"]
+        docdb_prefixes = ["prefix1", "prefix2", "prefix3"]
 
         docdb_updater = DocDBUpdater(
             metadata_dir="test_dir", mongo_configs=self.expected_configs
         )
         docdb_updater.mongo_client = mock_mongo_client
         docdb_updater.collection = mock_collection
-        docdb_updater.collection.distinct.return_value = docdb_prefixes\
-
+        docdb_updater.collection.distinct.return_value = docdb_prefixes
         docdb_updater.delete_records(s3_prefixes)
         docdb_updater.collection.delete_many.assert_not_called()
         mock_logging_info.assert_called_once_with(
@@ -187,8 +186,12 @@ class TestDocDBUpdater(unittest.TestCase):
         )
 
     @patch("aind_data_asset_indexer.update_docdb.logger.info")
-    @patch('aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files')
-    def test_run_sync_records_job(self, mock_read_metadata_files, mock_logging_info):
+    @patch(
+        "aind_data_asset_indexer.update_docdb.DocDBUpdater.read_metadata_files"
+    )
+    def test_run_sync_records_job(
+        self, mock_read_metadata_files, mock_logging_info
+    ):
         """Runs job to sync records from s3 to docdb"""
         mock_collection = MagicMock()
         mock_db = MagicMock()

@@ -191,8 +191,12 @@ class TestAnalyticsTableJobRunner(unittest.TestCase):
 
     @patch.object(AnalyticsTableJobRunner, "_get_list_of_folders")
     @patch.object(AnalyticsTableJobRunner, "_download_metadata_files")
-    @patch.object(AnalyticsTableJobRunner, "_create_dataframe_from_list_of_folders")
-    @patch.object(AnalyticsTableJobRunner, "_create_dataframe_from_metadata_files")
+    @patch.object(
+        AnalyticsTableJobRunner, "_create_dataframe_from_list_of_folders"
+    )
+    @patch.object(
+        AnalyticsTableJobRunner, "_create_dataframe_from_metadata_files"
+    )
     @patch.object(AnalyticsTableJobRunner, "_join_dataframes")
     def test_crawl_s3_buckets(
         self,
