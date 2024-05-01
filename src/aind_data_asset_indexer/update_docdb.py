@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, List, Optional
 
 import boto3
 from pymongo import MongoClient
@@ -88,9 +88,14 @@ class DocDBUpdater:
                             json_data_dict[prefix] = json.load(file)
         return json_data_dict
 
-    def bulk_write_records(self):
-        """Updates DocDB collection with metadata files"""
-        json_data = self.read_metadata_files()
+    def bulk_write_records(self, json_data: Optional[Dict]):
+        """
+        Updates DocDB collection with metadata files
+        Parameters
+        ----------
+        json_data: Dict
+             Dictionary of records in s3.
+        """
         if json_data:
             bulk_operations = []
             for prefix, data in json_data.items():
@@ -112,6 +117,38 @@ class DocDBUpdater:
             )
         return None
 
+    def delete_records(self, s3_prefixes: List[str]):
+        """
+        Cross-checks the names of records in docDB with the ones in
+        s3 and deletes records from docdb if not in s3.
+        Parameters
+        ----------
+        s3_prefixes: List[str]
+            The names of records in s3.
+        """
+        docdb_prefixes = self.collection.distinct("name")
+        prefixes_to_delete = set(docdb_prefixes) - set(s3_prefixes)
+
+        if prefixes_to_delete:
+            self.collection.delete_many(
+                {"s3_prefix": {"$in": list(prefixes_to_delete)}}
+            )
+            logger.info(
+                f"Deleted {len(prefixes_to_delete)} records from "
+                f"DocDB collection."
+            )
+        else:
+            logger.info("Records in S3 and DocDB are synced.")
+
+        return None
+
+    def run_sync_records_job(self):
+        """Syncs records in DocDB to S3. """
+        json_data = self.read_metadata_files()
+        s3_prefixes = list(json_data.keys())
+        self.bulk_write_records(json_data)
+        self.delete_records(s3_prefixes=s3_prefixes)
+
 
 if __name__ == "__main__":
     mongo_configs = get_mongo_credentials(
@@ -120,4 +157,4 @@ if __name__ == "__main__":
     job_runner = DocDBUpdater(
         metadata_dir=METADATA_DIR, mongo_configs=mongo_configs
     )
-    job_runner.bulk_write_records()
+    job_runner.run_sync_records_job()
