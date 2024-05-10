@@ -76,7 +76,6 @@ class AnalyticsTableJobRunner:
             "ls",
             f"{bucket_name}",
         ]
-        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         with open(output_filepath, "w") as outfile:
             subprocess.run(
                 download_command_str_bucket_to_local_filepath, stdout=outfile
@@ -95,13 +94,13 @@ class AnalyticsTableJobRunner:
         output_directory: str
            Filepath for output directory
         """
-        # TODO: output_directory should have a subdir with the bucket name, or else 2 objs with same s3_prefix will overwrite.
+        out_dir = os.path.join(output_directory, bucket_name)
         sync_metadata_command_str_bucket_to_local = [
             "aws",
             "s3",
             "sync",
             f"s3://{bucket_name}",
-            f"{output_directory}",
+            f"{out_dir}",
             "--exclude",
             str("*"),
             "--include",
@@ -132,17 +131,20 @@ class AnalyticsTableJobRunner:
 
     @staticmethod
     def _create_dataframe_from_metadata_files(
-        output_directory,
+        bucket_name: str, output_directory: str
     ) -> pd.DataFrame:
         """
         Create a table of folders with metadata file.
         Parameters
         ----------
+        bucket_name : str
+            Name of bucket in s3
         output_directory : str
-             Path to directory containing copies of data asset records.
+            Path to directory containing copies of data asset records.
         """
+        out_dir = os.path.join(output_directory, bucket_name)
         subfolders = [
-            f.name for f in os.scandir(output_directory) if f.is_dir()
+            f.name for f in os.scandir(out_dir) if f.is_dir()
         ]
         return pd.DataFrame({"s3_prefix": subfolders})
 
@@ -193,7 +195,7 @@ class AnalyticsTableJobRunner:
                 folders_filepath
             )
             metadata_df = self._create_dataframe_from_metadata_files(
-                metadata_directory
+                bucket_name=bucket, output_directory=metadata_directory
             )
             merged_df = self._join_dataframes(
                 df1=folders_df, df2=metadata_df, bucket_name=bucket
