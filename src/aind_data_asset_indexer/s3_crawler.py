@@ -95,6 +95,7 @@ class AnalyticsTableJobRunner:
         output_directory: str
            Filepath for output directory
         """
+        # TODO: output_directory should have a subdir with the bucket name, or else 2 objs with same s3_prefix will overwrite.
         sync_metadata_command_str_bucket_to_local = [
             "aws",
             "s3",

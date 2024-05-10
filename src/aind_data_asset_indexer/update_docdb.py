@@ -73,6 +73,7 @@ class DocDBUpdater:
     def read_metadata_files(self) -> Dict:
         """Reads metadata files from metadata directory
         to creates a dictionary with s3-prefix : data"""
+        # TODO: cannot load all file contents into a single dict
         json_data_dict = {}
         for folder_entry in os.scandir(self.metadata_dir):
             if folder_entry.is_dir():
@@ -98,7 +99,9 @@ class DocDBUpdater:
         """
         if json_data:
             bulk_operations = []
+            # TODO: We should send the Bulk Write operations in chunks, not all at once
             for prefix, data in json_data.items():
+                # TODO: this part should be querying for name (s3_prefix) and location (bucket)
                 filter_query = {"name": prefix}
                 update_data = {"$set": data}
                 bulk_operations.append(
@@ -126,10 +129,12 @@ class DocDBUpdater:
         s3_prefixes: List[str]
             The names of records in s3.
         """
+        # TODO: this part should be querying for name (s3_prefix) and location (bucket)
         docdb_prefixes = self.collection.distinct("name")
         prefixes_to_delete = set(docdb_prefixes) - set(s3_prefixes)
 
         if prefixes_to_delete:
+            # TODO: should this part be "name" instead of "s3_prefix"?
             self.collection.delete_many(
                 {"s3_prefix": {"$in": list(prefixes_to_delete)}}
             )
