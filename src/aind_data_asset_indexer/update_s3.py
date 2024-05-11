@@ -144,7 +144,7 @@ class S3Updater:
             logger.info(f"Syncing DocDB records for bucket: {bucket}")
             records = self.query_records_from_bucket(bucket)
             self.upsert_to_s3(bucket, records)
-            self.delete_from_s3(bucket, records)
+            self.delete_from_s3(bucket)
         return
 
 
