@@ -13,8 +13,6 @@ from aind_data_asset_indexer.mongo_configs import (
     get_mongo_credentials,
 )
 
-DB_NAME = os.getenv("DB_NAME")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 METADATA_DIR = os.getenv("METADATA_DIRECTORY")
 
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +40,7 @@ class DocDBUpdater:
         to creates a dictionary with s3-prefix : data"""
         # TODO: cannot load all file contents into a single dict
         json_data_dict = {}
+
         for folder_entry in os.scandir(self.metadata_dir):
             if folder_entry.is_dir():
                 prefix = folder_entry.name
@@ -68,8 +67,7 @@ class DocDBUpdater:
             bulk_operations = []
             # TODO: We should send the Bulk Write operations in chunks, not all at once
             for prefix, data in json_data.items():
-                # TODO: this part should be querying for name (s3_prefix) and location (bucket)
-                filter_query = {"name": prefix}
+                filter_query = {"name": prefix, "location": data["location"]}
                 update_data = {"$set": data}
                 bulk_operations.append(
                     UpdateMany(filter_query, update_data, upsert=True)
@@ -123,9 +121,7 @@ class DocDBUpdater:
 
 
 if __name__ == "__main__":
-    mongo_configs = get_mongo_credentials(
-        db_name=DB_NAME, collection_name=COLLECTION_NAME
-    )
+    mongo_configs = get_mongo_credentials()
     job_runner = DocDBUpdater(
         metadata_dir=METADATA_DIR, mongo_configs=mongo_configs
     )
