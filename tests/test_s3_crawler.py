@@ -95,7 +95,7 @@ class TestAnalyticsTableJobRunner(unittest.TestCase):
             "s3",
             "sync",
             "s3://test_bucket",
-            "test/directory/",
+            "test/directory/test_bucket",
             "--exclude",
             "*",
             "--include",

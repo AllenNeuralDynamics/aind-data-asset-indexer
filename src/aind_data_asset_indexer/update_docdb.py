@@ -1,57 +1,24 @@
 """Module to update DocDB based on s3 records."""
+
 import json
 import logging
 import os
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-import boto3
 from pymongo import MongoClient
 from pymongo.operations import UpdateMany
+
+from aind_data_asset_indexer.mongo_configs import (
+    MongoConfigs,
+    get_mongo_credentials,
+)
 
 DB_NAME = os.getenv("DB_NAME")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 METADATA_DIR = os.getenv("METADATA_DIRECTORY")
-DOCDB_SECRETS_NAME = os.getenv("DOCDB_SECRETS_NAME")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class MongoConfigs:
-    """Class to store MongoClient parameters"""
-
-    host: str
-    port: int
-    username: str
-    password: str = field(repr=False)
-    db_name: str
-    collection_name: str
-
-
-def get_mongo_credentials(
-    db_name: str,
-    collection_name: str,
-) -> MongoConfigs:
-    """Retrieves secrets credentials based on http request type"""
-    secrets_client = boto3.client("secretsmanager")
-    secret_value = secrets_client.get_secret_value(SecretId=DOCDB_SECRETS_NAME)
-    secrets_client.close()
-    secret = secret_value["SecretString"]
-    secret_json = json.loads(secret)
-    ro_username = secret_json["username"]
-    ro_password = secret_json["password"]
-    host = secret_json["host"]
-    port = secret_json["port"]
-    return MongoConfigs(
-        username=ro_username,
-        password=ro_password,
-        host=host,
-        port=port,
-        db_name=db_name,
-        collection_name=collection_name,
-    )
 
 
 class DocDBUpdater:
@@ -148,7 +115,7 @@ class DocDBUpdater:
         return None
 
     def run_sync_records_job(self):
-        """Syncs records in DocDB to S3. """
+        """Syncs records in DocDB to S3."""
         json_data = self.read_metadata_files()
         s3_prefixes = list(json_data.keys())
         self.bulk_write_records(json_data)
