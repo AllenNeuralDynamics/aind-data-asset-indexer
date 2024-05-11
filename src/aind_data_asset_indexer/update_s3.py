@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import subprocess
-from typing import Dict, List, Optional
 
 from pymongo import MongoClient
 
@@ -47,15 +46,17 @@ class S3Updater:
         records: List[Dict]
             List of s3_prefixes for records in DocDB that match the bucket.
         """
-
-        records = self.collection.find({"location": bucket}, {"name": 1})
-        # TODO: add sanity check that all name (s3_prefix) are unique in this bucket?
-        # TODO: write result to file instead of returning it?
-        s3_prefixes = [record["name"] for record in records]
+        query = {"location": bucket}
+        count = self.collection.count_documents(query)
+        if count:
+            cursor = self.collection.find(query, {"name": 1})
+            # TODO: add sanity check that all name (s3_prefix) are unique in this bucket?
+            # TODO: write result to file instead of returning it?
+            s3_prefixes = [record["name"] for record in cursor]
         logger.info(
-            f"Found {len(s3_prefixes)} records from DocDB for bucket: {bucket}."
+            f"Found {count} records from DocDB for bucket: {bucket}."
         )
-        return records
+        return s3_prefixes
 
     def upsert_to_s3(self, bucket, records):
         """Syncs records in DocDB with S3."""
@@ -73,18 +74,19 @@ class S3Updater:
                 self.upsert_one_to_s3(bucket, s3_prefix)
                 count_new += 1
             else:
+                record_data = self.collection.find_one({"name": s3_prefix, "location": bucket})
                 with open(expected_file_path, "r") as file:
-                    record_data = json.load(file)
+                    s3_data = json.load(file)
                     # TODO: check if we need to use some other deep comparison method
-                    if record_data != s3_prefix:
+                    if record_data != s3_data:
                         logger.info(
-                            f"Record {s3_prefix['name']} in S3 does not match record in DocDB."
+                            f"Metadata for {s3_prefix} in {bucket} does not match record in DocDB."
                         )
                         self.upsert_one_to_s3(bucket, s3_prefix)
                         count_updated += 1
                     else:
                         logger.info(
-                            f"Record {s3_prefix['name']} in S3 matches record in DocDB."
+                            f"Metadata for {s3_prefix} in {bucket} matches record in DocDB."
                         )
         logger.info(
             f"Created {count_new} objects and updated {count_updated} objects in S3 bucket {bucket}."
@@ -101,7 +103,13 @@ class S3Updater:
             # TODO: verify cp command can overwrite existing file
             with open(file_path, "w") as file:
                 json.dump(record, file)
-            aws_cmd = f"aws s3 cp {file_path} s3://{bucket}/{prefix}/metadata.nd.json"
+            aws_cmd = [
+                "aws",
+                "s3",
+                "cp",
+                f"{file_path}",
+                f"s3://{bucket}/{prefix}/metadata.nd.json",
+            ]
             subprocess.run(aws_cmd)
 
     def delete_from_s3(self, bucket):
@@ -111,10 +119,7 @@ class S3Updater:
         for file in os.scandir(metadata_dir):
             if file.is_dir():
                 s3_prefix = file.name
-                record = self.collection.find(
-                    {"name": s3_prefix, "location": bucket}
-                )
-                count = record.count()
+                count = self.collection.count_documents({"name": s3_prefix, "location": bucket})
                 if count == 0:
                     print(
                         f"No record found in DocDB with {s3_prefix} and bucket {bucket}."
@@ -132,7 +137,12 @@ class S3Updater:
     def delete_one_from_s3(self, bucket, prefix):
         """Deletes one record from S3 that is not in DocDB."""
         # TODO: check this
-        aws_cmd = f"aws s3 rm s3://{bucket}/{prefix}/metadata.nd.json"
+        aws_cmd = [
+            "aws",
+            "s3",
+            "rm",
+            f"s3://{bucket}/{prefix}/metadata.nd.json",
+        ]
         subprocess.run(aws_cmd)
         return
 
