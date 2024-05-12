@@ -143,9 +143,7 @@ class AnalyticsTableJobRunner:
             Path to directory containing copies of data asset records.
         """
         out_dir = os.path.join(output_directory, bucket_name)
-        subfolders = [
-            f.name for f in os.scandir(out_dir) if f.is_dir()
-        ]
+        subfolders = [f.name for f in os.scandir(out_dir) if f.is_dir()]
         return pd.DataFrame({"s3_prefix": subfolders})
 
     @staticmethod

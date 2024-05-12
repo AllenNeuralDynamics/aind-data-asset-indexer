@@ -53,9 +53,7 @@ class S3Updater:
             # TODO: add sanity check that all name (s3_prefix) are unique in this bucket?
             # TODO: write result to file instead of returning it?
             s3_prefixes = [record["name"] for record in cursor]
-        logger.info(
-            f"Found {count} records from DocDB for bucket: {bucket}."
-        )
+        logger.info(f"Found {count} records from DocDB for bucket: {bucket}.")
         return s3_prefixes
 
     def upsert_to_s3(self, bucket, records):
@@ -74,7 +72,9 @@ class S3Updater:
                 self.upsert_one_to_s3(bucket, s3_prefix)
                 count_new += 1
             else:
-                record_data = self.collection.find_one({"name": s3_prefix, "location": bucket})
+                record_data = self.collection.find_one(
+                    {"name": s3_prefix, "location": bucket}
+                )
                 with open(expected_file_path, "r") as file:
                     s3_data = json.load(file)
                     # TODO: check if we need to use some other deep comparison method
@@ -119,7 +119,9 @@ class S3Updater:
         for file in os.scandir(metadata_dir):
             if file.is_dir():
                 s3_prefix = file.name
-                count = self.collection.count_documents({"name": s3_prefix, "location": bucket})
+                count = self.collection.count_documents(
+                    {"name": s3_prefix, "location": bucket}
+                )
                 if count == 0:
                     print(
                         f"No record found in DocDB with {s3_prefix} and bucket {bucket}."
