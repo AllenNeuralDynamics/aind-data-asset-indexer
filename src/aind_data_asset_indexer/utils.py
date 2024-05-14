@@ -245,8 +245,8 @@ def build_metadata_record_from_prefix(
     -------
     Optional[str]
       The Metadata record as a json string. Will return None if
-      metadata_nd_overwrite is set to false, there is a metadata.nd.json file,
-      and the file is corrupt.
+      metadata_nd_overwrite is set to false, or there is a
+      metadata.nd.json file and the file is corrupt.
 
     """
     stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
