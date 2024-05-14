@@ -1,0 +1,19 @@
+{
+   "Error": {
+      "Code": "403",
+      "Message": "Forbidden"
+   },
+   "ResponseMetadata": {
+      "RequestId": "RequestId",
+      "HostId": "HostId",
+      "HTTPStatusCode": 403,
+      "HTTPHeaders": {
+         "x-amz-request-id": "XAmzRequestId",
+         "x-amz-id-2": "XAmzRequestIdTwo",
+         "content-type": "application/xml",
+         "date": "Mon, 13 May 2024 16:28:10 GMT",
+         "server": "AmazonS3"
+      },
+      "RetryAttempts": 0
+   }
+}

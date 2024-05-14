@@ -1,0 +1,21 @@
+{
+   "ResponseMetadata": {
+      "RequestId": "RequestId",
+      "HostId": "HostId",
+      "HTTPStatusCode": 200,
+      "HTTPHeaders": {
+         "x-amz-id-2": "x-amz-id-2",
+         "x-amz-request-id": "x-amz-request-id",
+         "date": "Mon, 13 May 2024 22:17:57 GMT",
+         "x-amz-version-id": "x-amz-version-id",
+         "x-amz-server-side-encryption": "AES256",
+         "etag": "\"2a8f8240fe3b7705a6f255a06c6ffaa4\"",
+         "server": "AmazonS3",
+         "content-length": "0"
+      },
+      "RetryAttempts": 0
+   },
+   "ETag": "\"2a8f8240fe3b7705a6f255a06c6ffaa4\"",
+   "ServerSideEncryption": "AES256",
+   "VersionId": "VersionId"
+}

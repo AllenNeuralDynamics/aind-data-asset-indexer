@@ -1,0 +1,29 @@
+{
+   "ResponseMetadata": {
+      "RequestId": "0000000000000000",
+      "HostId": "someHostId",
+      "HTTPStatusCode": 200,
+      "HTTPHeaders": {
+         "x-amz-id-2": "someID",
+         "x-amz-request-id": "0000000000000000",
+         "date": "Mon, 13 May 2024 16:11:04 GMT",
+         "last-modified": "Sat, 04 Nov 2023 01:13:41 GMT",
+         "etag": "\"92734946c64fc87408ef79e5e92937bc\"",
+         "x-amz-server-side-encryption": "AES256",
+         "x-amz-version-id": "someVersionID",
+         "accept-ranges": "bytes",
+         "content-type": "application/json",
+         "server": "AmazonS3",
+         "content-length": "823"
+      },
+      "RetryAttempts": 0
+   },
+   "AcceptRanges": "bytes",
+   "LastModified": "2023-11-04 01:13:41+00:00",
+   "ContentLength": 823,
+   "ETag": "\"92734946c64fc87408ef79e5e92937bc\"",
+   "VersionId": "VersionID",
+   "ContentType": "application/json",
+   "ServerSideEncryption": "AES256",
+   "Metadata": {}
+}

@@ -1,0 +1,19 @@
+{
+   "Error": {
+      "Code": "404",
+      "Message": "Not Found"
+   },
+   "ResponseMetadata": {
+      "RequestId": "RequestId",
+      "HostId": "HostId",
+      "HTTPStatusCode": 404,
+      "HTTPHeaders": {
+         "x-amz-request-id": "XAmzRequestID",
+         "x-amz-id-2": "XAmzIdTwo",
+         "content-type": "application/xml",
+         "date": "Mon, 13 May 2024 16:24:57 GMT",
+         "server": "AmazonS3"
+      },
+      "RetryAttempts": 0
+   }
+}

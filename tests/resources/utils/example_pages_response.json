@@ -1,0 +1,105 @@
+[
+   {
+      "ResponseMetadata": {
+         "RequestId": "RequestId",
+         "HostId": "HostId",
+         "HTTPStatusCode": 200,
+         "HTTPHeaders": {
+            "x-amz-id-2": "x-amz-id-2",
+            "x-amz-request-id": "x-amz-request-id",
+            "date": "Mon, 13 May 2024 21:22:24 GMT",
+            "x-amz-bucket-region": "us-west-2",
+            "content-type": "application/xml",
+            "transfer-encoding": "chunked",
+            "server": "AmazonS3"
+         },
+         "RetryAttempts": 0
+      },
+      "IsTruncated": true,
+      "Name": "aind-ephys-data-dev-u5u0i5",
+      "Prefix": "",
+      "Delimiter": "/",
+      "MaxKeys": 3,
+      "CommonPrefixes": [
+         {
+            "Prefix": "ecephys_567890_2000-01-01_04-00-00/"
+         },
+         {
+            "Prefix": "ecephys_642478_2023-01-17_13-56-29/"
+         },
+         {
+            "Prefix": "ecephys_642478_2023-01-17_14-38-38/"
+         }
+      ],
+      "EncodingType": "url",
+      "KeyCount": 3,
+      "NextContinuationToken": "1c9Nj"
+   },
+   {
+      "ResponseMetadata": {
+         "RequestId": "RequestId",
+         "HostId": "HostId",
+         "HTTPStatusCode": 200,
+         "HTTPHeaders": {
+            "x-amz-id-2": "x-amz-id-2",
+            "x-amz-request-id": "x-amz-request-id",
+            "date": "Mon, 13 May 2024 21:22:24 GMT",
+            "x-amz-bucket-region": "us-west-2",
+            "content-type": "application/xml",
+            "transfer-encoding": "chunked",
+            "server": "AmazonS3"
+         },
+         "RetryAttempts": 0
+      },
+      "IsTruncated": true,
+      "Name": "aind-ephys-data-dev-u5u0i5",
+      "Prefix": "",
+      "Delimiter": "/",
+      "MaxKeys": 3,
+      "CommonPrefixes": [
+         {
+            "Prefix": "ecephys_655019_2000-01-01_01-00-00/"
+         },
+         {
+            "Prefix": "ecephys_655019_2000-01-01_01-01-01/"
+         },
+         {
+            "Prefix": "ecephys_655019_2000-01-01_01-01-02/"
+         }
+      ],
+      "EncodingType": "url",
+      "KeyCount": 3,
+      "ContinuationToken": "1c9N",
+      "NextContinuationToken": "1GQ5"
+   },
+   {
+      "ResponseMetadata": {
+         "RequestId": "RequestId",
+         "HostId": "HostId",
+         "HTTPStatusCode": 200,
+         "HTTPHeaders": {
+            "x-amz-id-2": "x-amz-id-2",
+            "x-amz-request-id": "x-amz-request-id",
+            "date": "Mon, 13 May 2024 21:22:24 GMT",
+            "x-amz-bucket-region": "us-west-2",
+            "content-type": "application/xml",
+            "transfer-encoding": "chunked",
+            "server": "AmazonS3"
+         },
+         "RetryAttempts": 0
+      },
+      "IsTruncated": false,
+      "Name": "aind-ephys-data-dev-u5u0i5",
+      "Prefix": "",
+      "Delimiter": "/",
+      "MaxKeys": 3,
+      "CommonPrefixes": [
+         {
+            "Prefix": "ecephys_684156_2000-01-01_00-00-01/"
+         }
+      ],
+      "EncodingType": "url",
+      "KeyCount": 1,
+      "ContinuationToken": "1GQ5"
+   }
+]
