@@ -143,7 +143,7 @@ class DocDBUpdater:
         return None
 
     def run_sync_records_job(self):
-        """Syncs records in DocDB to S3. """
+        """Syncs records in DocDB to S3."""
         json_data = self.read_metadata_files()
         s3_prefixes = list(json_data.keys())
         self.bulk_write_records(json_data)
