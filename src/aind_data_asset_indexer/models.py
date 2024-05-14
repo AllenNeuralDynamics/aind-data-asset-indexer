@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+import boto3
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -28,3 +29,19 @@ class IndexJobSettings(BaseSettings):
             "the metadata.nd.json file if it exists in S3."
         ),
     )
+
+    @classmethod
+    def from_param_store(cls, param_store_name: str):
+        """
+        Construct class from aws param store
+        Parameters
+        ----------
+        param_store_name : str
+        """
+        param_store_client = boto3.client("ssm")
+        response = param_store_client.get_parameter(
+            Name=param_store_name, WithDecryption=True
+        )
+        param_store_client.close()
+        parameters = response["Parameter"]["Value"]
+        return cls.model_validate_json(parameters)
