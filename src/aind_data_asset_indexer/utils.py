@@ -3,7 +3,9 @@ import hashlib
 import json
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
+from urllib.parse import urlparse
 
+from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.metadata import Metadata
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
@@ -14,11 +16,43 @@ from mypy_boto3_s3.type_defs import (
 )
 
 # TODO: This would be better if it was available in aind-data-schema
+from pymongo import MongoClient
+
 core_schema_file_names = [
     s.default_filename()
     for s in SchemaWriter.get_schemas()
     if s.default_filename() != Metadata.default_filename()
 ]
+
+
+def create_metadata_object_key(prefix: str) -> str:
+    stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+    return f"{stripped_prefix}/{Metadata.default_filename()}"
+
+
+def is_record_location_valid(record: dict, expected_bucket: str) -> bool:
+    if record.get("location") is None:
+        return False
+    else:
+        parts = urlparse(record.get("location"), allow_fragments=False)
+        if parts.scheme != "s3":
+            return False
+        elif parts.netloc != expected_bucket:
+            return False
+        else:
+            stripped_prefix = (
+                parts[1:-1] if parts.path.endswith("/") else parts[1:]
+            )
+            if stripped_prefix == "" or len(stripped_prefix.split("/")) > 1:
+                return False
+            else:
+                return True
+
+
+def get_s3_bucket_and_prefix(s3_location: str) -> Dict[str, str]:
+    parts = urlparse(s3_location, allow_fragments=False)
+
+    return {"bucket": parts.netloc, "prefix": parts.path[1:]}
 
 
 def compute_md5_hash(json_contents: str) -> str:
@@ -225,6 +259,7 @@ def build_metadata_record_from_prefix(
     metadata_nd_overwrite: bool,
     prefix: str,
     s3_client: S3Client,
+    optional_name: Optional[str] = None,
 ) -> Optional[str]:
     """
     For a given bucket and prefix, this method will return a JSON string
@@ -240,6 +275,9 @@ def build_metadata_record_from_prefix(
     metadata_nd_overwrite : bool
     prefix : str
     s3_client : S3Client
+    optional_name : Optional[str]
+      If optional is None, then a name will be constructed from the s3_prefix.
+      Default is None.
 
     Returns
     -------
@@ -262,9 +300,11 @@ def build_metadata_record_from_prefix(
         s3_file_responses = get_dict_of_file_info(
             s3_client=s3_client, bucket=bucket, keys=file_keys
         )
-        # Strip the trailing slash from the prefix
+        record_name = (
+            stripped_prefix if optional_name is None else optional_name
+        )
         metadata_dict = {
-            "name": stripped_prefix,
+            "name": record_name,
             "location": f"s3://{bucket}/{stripped_prefix}",
         }
         for object_key, response_data in s3_file_responses.items():
@@ -274,9 +314,6 @@ def build_metadata_record_from_prefix(
                     s3_client=s3_client, bucket=bucket, object_key=object_key
                 )
                 if json_contents is not None:
-                    # Old version of pycharm highlights a warning since
-                    # it doesn't know check above ensures json_contents is not
-                    # None
                     # noinspection PyTypeChecker
                     is_corrupt = is_dict_corrupt(input_dict=json_contents)
                     if not is_corrupt:
@@ -298,3 +335,96 @@ def build_metadata_record_from_prefix(
             if metadata_contents is None
             else json.dumps(metadata_contents)
         )
+
+
+def does_metadata_record_exist_in_docdb(
+    docdb_client: MongoClient,
+    db_name: str,
+    collection_name: str,
+    location: str,
+) -> bool:
+    db = docdb_client[db_name]
+    collection = db[collection_name]
+    records = list(
+        collection.find(
+            filter={"location": location}, projection={"_id": 1}, limit=1
+        )
+    )
+    if len(records) == 0:
+        return False
+    else:
+        return True
+
+
+def get_record_from_docdb(
+    docdb_client: MongoClient,
+    db_name: str,
+    collection_name: str,
+    record_id: str,
+) -> Optional[dict]:
+    """
+    Download a record from docdb using the record _id.
+    Parameters
+    ----------
+    docdb_client : MongoClient
+    db_name : str
+    collection_name : str
+    record_id : str
+
+    Returns
+    -------
+    Optional[dict]
+        None if record does not exist. Otherwise, it will return the record as
+        a dict.
+
+    """
+    db = docdb_client[db_name]
+    collection = db[collection_name]
+    records = list(collection.find(filter={"_id": record_id}, limit=1))
+    if len(records) > 0:
+        return records[0]
+    else:
+        return None
+
+
+def paginate_docdb(
+    db_name: str,
+    collection_name,
+    docdb_client,
+    page_size: int = 1000,
+    filter_query: Optional[dict] = None,
+) -> Iterator[List[dict]]:
+    if filter_query is None:
+        filter_query = {}
+    db = docdb_client[db_name]
+    collection = db[collection_name]
+    cursor = collection.find(filter=filter_query)
+    obj = next(cursor, None)
+    while obj:
+        page = [obj]
+        while len(page) < page_size and obj:
+            obj = next(cursor, None)
+            if obj:
+                page.append(obj)
+        yield page
+
+
+def build_codeocean_id_to_name_map(
+    codeocean_client: CodeOceanClient,
+) -> Dict[str, Optional[str]]:
+    id_to_name_map = dict()
+    co_response = codeocean_client.search_data_assets(type="dataset")
+    start_index = 0
+    for r in co_response.json().get("results", []):
+        id_to_name_map[r["id"]] = r["name"]
+    while (
+        co_response.json().get("has_more", False)
+        and len(co_response.json().get("results")) > 0
+    ):
+        start_index += len(co_response.json().get("results"))
+        co_response = codeocean_client.search_data_assets(
+            type="dataset", start=start_index
+        )
+        for r in co_response.json().get("results", []):
+            id_to_name_map[r["id"]] = r.get("name")
+    return id_to_name_map
