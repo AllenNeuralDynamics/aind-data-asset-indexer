@@ -130,7 +130,7 @@ def compute_md5_hash(json_contents: str) -> str:
 
     """
     contents = json.dumps(
-        json.loads(json_contents), indent=3, ensure_ascii=False
+        json.loads(json_contents), indent=3, ensure_ascii=False, sort_keys=True
     ).encode("utf-8")
     return hashlib.md5(contents).hexdigest()
 
