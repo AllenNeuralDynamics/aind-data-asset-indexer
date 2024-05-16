@@ -137,10 +137,11 @@ class TestUtils(unittest.TestCase):
             {"bucket": "some_bucket", "prefix": "prefix2"}, results2
         )
 
-    def test_is_record_location_valid_true(self):
-        """Tests is_record_location_valid returns true"""
+    def test_is_record_location_valid_true0(self):
+        """Tests is_record_location_valid returns true when expected_prefix is
+        set to None"""
 
-        example_record = example_record = {
+        example_record = {
             "_id": "abc-123",
             "name": "some_name",
             "location": "s3://some_bucket/prefix1",
@@ -148,6 +149,23 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(
             is_record_location_valid(
                 example_record, expected_bucket="some_bucket"
+            )
+        )
+
+    def test_is_record_location_valid_true1(self):
+        """Tests is_record_location_valid returns true when expected_prefix is
+        set."""
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "some_name",
+            "location": "s3://some_bucket/prefix1",
+        }
+        self.assertTrue(
+            is_record_location_valid(
+                example_record,
+                expected_bucket="some_bucket",
+                expected_prefix="prefix1",
             )
         )
 
@@ -204,6 +222,23 @@ class TestUtils(unittest.TestCase):
         self.assertFalse(
             is_record_location_valid(
                 example_record, expected_bucket="some_other_bucket"
+            )
+        )
+
+    def test_is_record_location_valid_false4(self):
+        """Tests is_record_location_valid returns false when prefixes don't
+        match"""
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "some_name",
+            "location": "s3://some_bucket/prefix1",
+        }
+        self.assertFalse(
+            is_record_location_valid(
+                example_record,
+                expected_bucket="some_bucket",
+                expected_prefix="prefix",
             )
         )
 

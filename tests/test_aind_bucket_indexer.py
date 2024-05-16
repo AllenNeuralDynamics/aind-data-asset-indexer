@@ -3,6 +3,7 @@
 import json
 import os
 import unittest
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -433,6 +434,57 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "operationTime": Timestamp(1715819252, 1),
                 "updatedExisting": False,
             }
+        )
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "download_json_file_from_s3"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.warning")
+    def test_process_prefix_no_record_yes_file_good_file_bad_location(
+        self,
+        mock_log_warn: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+        mock_download_json_file_from_s3: MagicMock,
+    ):
+        """Tests _process_prefix method when there is no record in DocDb,
+        there is and there is metadata.nd.json file in S3, and the file can
+        be serialized to json, but the location inside the metadata record
+        does not match actual location of the record."""
+        mock_db = MagicMock()
+        mock_docdb_client.__getitem__.return_value = mock_db
+        mock_collection = MagicMock()
+        mock_db.__getitem__.return_value = mock_collection
+
+        mock_does_s3_object_exist.return_value = True
+        # Test what happens when the location in the record does not match the
+        # expected location
+        mocked_downloaded_record = deepcopy(self.example_md_record)
+        mocked_downloaded_record["location"] = (
+            f"s3://{self.basic_job.job_settings.s3_bucket}/"
+            f"ecephys_642478_2020-01-10_10-10-10"
+        )
+        mock_download_json_file_from_s3.return_value = mocked_downloaded_record
+
+        location_to_id_map = dict()
+        self.basic_job._process_prefix(
+            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+            docdb_client=mock_docdb_client,
+            s3_client=mock_s3_client,
+            location_to_id_map=location_to_id_map,
+        )
+        mock_collection.assert_not_called()
+        mock_log_warn.assert_called_once_with(
+            "Location field in record "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2020-01-10_10-10-10 does not match actual location"
+            " of record s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29!"
         )
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")

@@ -38,11 +38,13 @@ def create_metadata_object_key(prefix: str) -> str:
       For example, ecephys_123456_2020-10-10_01-02-03/metadata.nd.json
 
     """
-    stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+    stripped_prefix = prefix.strip("/")
     return f"{stripped_prefix}/{Metadata.default_filename()}"
 
 
-def is_record_location_valid(record: dict, expected_bucket: str) -> bool:
+def is_record_location_valid(
+    record: dict, expected_bucket: str, expected_prefix: Optional[str] = None
+) -> bool:
     """
     Check if a given record has a valid location url.
     Parameters
@@ -51,6 +53,9 @@ def is_record_location_valid(record: dict, expected_bucket: str) -> bool:
       Metadata record as a dictionary
     expected_bucket : str
       The expected s3 bucket the location should have.
+    expected_prefix: Optional[str]
+      If provided, also check that the record location matches the expected
+      s3_prefix. Default is None, which won't perform the check.
 
     Returns
     -------
@@ -58,9 +63,13 @@ def is_record_location_valid(record: dict, expected_bucket: str) -> bool:
       True if there is a location field and the url in the field has a form
       like 's3://{expected_bucket}/prefix'
       Will return False if there is no s3 scheme, the bucket does not match
-      the expected bucket, or the prefix contains forward slashes.
+      the expected bucket, the prefix contains forward slashes, or the prefix
+      doesn't match the expected prefix.
 
     """
+    expected_strippped_prefix = (
+        None if expected_prefix is None else expected_prefix.strip("/")
+    )
     if record.get("location") is None:
         return False
     else:
@@ -70,12 +79,15 @@ def is_record_location_valid(record: dict, expected_bucket: str) -> bool:
         elif parts.netloc != expected_bucket:
             return False
         else:
-            stripped_prefix = (
-                parts.path[1:-1]
-                if parts.path.endswith("/")
-                else parts.path[1:]
-            )
-            if stripped_prefix == "" or len(stripped_prefix.split("/")) > 1:
+            stripped_prefix = parts.path.strip("/")
+            if (
+                stripped_prefix == ""
+                or len(stripped_prefix.split("/")) > 1
+                or (
+                    expected_prefix is not None
+                    and stripped_prefix != expected_strippped_prefix
+                )
+            ):
                 return False
             else:
                 return True
@@ -98,9 +110,7 @@ def get_s3_bucket_and_prefix(s3_location: str) -> Dict[str, str]:
 
     """
     parts = urlparse(s3_location, allow_fragments=False)
-    stripped_prefix = (
-        parts.path[1:-1] if parts.path.endswith("/") else parts.path[1:]
-    )
+    stripped_prefix = parts.path.strip("/")
     return {"bucket": parts.netloc, "prefix": stripped_prefix}
 
 
@@ -144,7 +154,7 @@ def upload_metadata_json_str_to_s3(
       Response of the put object operation.
 
     """
-    stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+    stripped_prefix = prefix.strip("/")
     object_key = f"{stripped_prefix}/{Metadata.default_filename()}"
     contents = json.dumps(
         json.loads(metadata_json), indent=3, ensure_ascii=False
@@ -336,7 +346,7 @@ def build_metadata_record_from_prefix(
       metadata.nd.json file and the file is corrupt.
 
     """
-    stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+    stripped_prefix = prefix.strip("/")
     metadata_nd_file_key = stripped_prefix + "/" + Metadata.default_filename()
     does_metadata_nd_file_exist = does_s3_object_exist(
         s3_client=s3_client, bucket=bucket, key=metadata_nd_file_key
@@ -408,7 +418,7 @@ def does_metadata_record_exist_in_docdb(
     True if there is a record in DocDb. Otherwise, False.
 
     """
-    stripped_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+    stripped_prefix = prefix.strip("/")
     location = f"s3//{bucket}/{stripped_prefix}"
     db = docdb_client[db_name]
     collection = db[collection_name]
@@ -520,7 +530,7 @@ def build_docdb_location_to_id_map(
     Dict[str, str]
 
     """
-    stripped_prefixes = [p[:-1] if p.endswith("/") else p for p in prefixes]
+    stripped_prefixes = [p.strip("/") for p in prefixes]
     locations = [f"s3://{bucket}/{p}" for p in stripped_prefixes]
     filter_query = {"location": {"$in": locations}}
     projection = {"_id": 1, "location": 1}

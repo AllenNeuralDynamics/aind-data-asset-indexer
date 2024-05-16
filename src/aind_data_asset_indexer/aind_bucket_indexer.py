@@ -201,9 +201,7 @@ class AindIndexBucketJob:
 
         """
         # Check if metadata record exits
-        stripped_prefix = (
-            s3_prefix[:-1] if s3_prefix.endswith("/") else s3_prefix
-        )
+        stripped_prefix = s3_prefix.strip("/")
         location = f"s3://{self.job_settings.s3_bucket}/{stripped_prefix}"
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
@@ -216,7 +214,10 @@ class AindIndexBucketJob:
             key=object_key,
         )
         if does_metadata_file_exist:
-            # If record not in DocDb, then copy it to DocDb
+            # If record not in DocDb, then copy it to DocDb if the location
+            # in the metadata record matches the location the record lives in
+            # Otherwise, log a warning that the metadata record location does
+            # not make sense.
             if record_id is None:
                 json_contents = download_json_file_from_s3(
                     s3_client=s3_client,
@@ -224,14 +225,29 @@ class AindIndexBucketJob:
                     object_key=object_key,
                 )
                 if json_contents:
-                    db = docdb_client[self.job_settings.doc_db_db_name]
-                    collection = db[self.job_settings.doc_db_collection_name]
-                    response = collection.update_one(
-                        {"_id": json_contents["_id"]},
-                        {"$set": json_contents},
-                        upsert=True,
-                    )
-                    logging.info(response.raw_result)
+                    # noinspection PyTypeChecker
+                    if is_record_location_valid(
+                        json_contents,
+                        expected_bucket=self.job_settings.s3_bucket,
+                        expected_prefix=s3_prefix,
+                    ):
+                        db = docdb_client[self.job_settings.doc_db_db_name]
+                        collection = db[
+                            self.job_settings.doc_db_collection_name
+                        ]
+                        response = collection.update_one(
+                            {"_id": json_contents["_id"]},
+                            {"$set": json_contents},
+                            upsert=True,
+                        )
+                        logging.info(response.raw_result)
+                    else:
+                        logging.warning(
+                            f"Location field in record "
+                            f"{json_contents.get('location')} does not match "
+                            f"actual location of record "
+                            f"s3://{self.job_settings.s3_bucket}/{s3_prefix}!"
+                        )
                 else:
                     logging.warning(
                         f"Unable to download file from S3!"
