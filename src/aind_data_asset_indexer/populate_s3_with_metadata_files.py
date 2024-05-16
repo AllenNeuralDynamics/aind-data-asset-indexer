@@ -16,6 +16,7 @@ from aind_data_asset_indexer.utils import (
     upload_metadata_json_str_to_s3,
 )
 
+logging.basicConfig(level=logging.INFO)
 # pydantic raises too many serialization warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 

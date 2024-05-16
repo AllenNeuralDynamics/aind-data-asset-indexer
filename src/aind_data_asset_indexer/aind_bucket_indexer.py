@@ -28,6 +28,7 @@ from aind_data_asset_indexer.utils import (
     upload_metadata_json_str_to_s3,
 )
 
+logging.basicConfig(level=logging.INFO)
 # pydantic raises too many serialization warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -112,7 +113,7 @@ class AindIndexBucketJob:
                 s3_object_hash = (
                     None
                     if s3_object_info is None
-                    else s3_object_info["e_tag"][1:-1]
+                    else s3_object_info["e_tag"].strip('"')
                 )
                 if record_md5_hash != s3_object_hash:
                     response = upload_metadata_json_str_to_s3(
@@ -200,7 +201,7 @@ class AindIndexBucketJob:
           record already exists in DocDb for a given s3 bucket, prefix
 
         """
-        # Check if metadata record exits
+        # Check if metadata record exists
         stripped_prefix = s3_prefix.strip("/")
         location = f"s3://{self.job_settings.s3_bucket}/{stripped_prefix}"
         if location_to_id_map.get(location) is not None:
@@ -359,7 +360,9 @@ class AindIndexBucketJob:
             collection_name=self.job_settings.doc_db_collection_name,
             page_size=500,
             filter_query={
-                "location": f"^s3://{self.job_settings.s3_bucket}.*"
+                "location": {
+                    "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                }
             },
         )
         for page in docdb_pages:
