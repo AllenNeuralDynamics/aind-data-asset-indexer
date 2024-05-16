@@ -4,7 +4,10 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from aind_data_asset_indexer.models import IndexJobSettings
+from aind_data_asset_indexer.models import (
+    AindIndexBucketJobSettings,
+    IndexJobSettings,
+)
 
 
 class TestIndexJobSettings(unittest.TestCase):
@@ -62,6 +65,37 @@ class TestIndexJobSettings(unittest.TestCase):
             metadata_nd_overwrite=True,
         )
         self.assertEqual(expected_job_settings, job_settings)
+
+
+class TestAindIndexBucketJobSettings(unittest.TestCase):
+    """Tests AindIndexBucketJobSettings class"""
+
+    def test_defaults(self):
+        """Tests default values with class constructor."""
+        job_settings = AindIndexBucketJobSettings(
+            s3_bucket="some_bucket",
+            doc_db_host="some_docdb_host",
+            doc_db_port=12345,
+            doc_db_password="some_docdb_password",
+            doc_db_user_name="some_docdb_username",
+            doc_db_db_name="some_docdb_dbname",
+            doc_db_collection_name="some_docdb_collection_name",
+        )
+        self.assertEqual("some_bucket", job_settings.s3_bucket)
+        self.assertEqual(20, job_settings.n_partitions)
+        self.assertFalse(job_settings.metadata_nd_overwrite)
+        self.assertIsNone(job_settings.lookback_days)
+        self.assertEqual("some_docdb_host", job_settings.doc_db_host)
+        self.assertEqual(12345, job_settings.doc_db_port)
+        self.assertEqual(
+            "some_docdb_password",
+            job_settings.doc_db_password.get_secret_value(),
+        )
+        self.assertEqual("some_docdb_username", job_settings.doc_db_user_name)
+        self.assertEqual("some_docdb_dbname", job_settings.doc_db_db_name)
+        self.assertEqual(
+            "some_docdb_collection_name", job_settings.doc_db_collection_name
+        )
 
 
 if __name__ == "__main__":

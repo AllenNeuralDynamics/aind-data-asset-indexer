@@ -1,6 +1,7 @@
 """Module to handle populating s3 bucket with metadata files."""
 import argparse
 import logging
+import os
 import sys
 import warnings
 from typing import List
@@ -16,6 +17,7 @@ from aind_data_asset_indexer.utils import (
     upload_metadata_json_str_to_s3,
 )
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 # pydantic raises too many serialization warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 

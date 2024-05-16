@@ -3,7 +3,7 @@
 from typing import Optional
 
 import boto3
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -45,3 +45,14 @@ class IndexJobSettings(BaseSettings):
         param_store_client.close()
         parameters = response["Parameter"]["Value"]
         return cls.model_validate_json(parameters)
+
+
+class AindIndexBucketJobSettings(IndexJobSettings):
+    """Aind Index Bucket Job Settings"""
+
+    doc_db_host: str
+    doc_db_port: int
+    doc_db_user_name: str
+    doc_db_password: SecretStr
+    doc_db_db_name: str
+    doc_db_collection_name: str
