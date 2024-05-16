@@ -100,7 +100,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("2a8f8240fe3b7705a6f255a06c6ffaa4", md5_hash)
+        self.assertEqual("e6dd2b7ab819f7a0fc21dba512a4071b", md5_hash)
 
     def test_is_dict_corrupt(self):
         """Tests is_dict_corrupt method"""
@@ -412,7 +412,10 @@ class TestUtils(unittest.TestCase):
             Bucket="some_bucket",
             Key="ecephys_642478_2023-01-17_13-56-29/metadata.nd.json",
             Body=json.dumps(
-                json.loads(metadata_json), indent=3, ensure_ascii=False
+                json.loads(metadata_json),
+                indent=3,
+                ensure_ascii=False,
+                sort_keys=True,
             ).encode("utf-8"),
         )
 

@@ -157,7 +157,7 @@ def upload_metadata_json_str_to_s3(
     stripped_prefix = prefix.strip("/")
     object_key = f"{stripped_prefix}/{Metadata.default_filename()}"
     contents = json.dumps(
-        json.loads(metadata_json), indent=3, ensure_ascii=False
+        json.loads(metadata_json), indent=3, ensure_ascii=False, sort_keys=True
     ).encode("utf-8")
     response = s3_client.put_object(
         Bucket=bucket, Key=object_key, Body=contents

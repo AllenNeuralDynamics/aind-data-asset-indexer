@@ -142,7 +142,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "last_modified": datetime(
                     2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
                 ),
-                "e_tag": '"2a8f8240fe3b7705a6f255a06c6ffaa4"',
+                "e_tag": '"e6dd2b7ab819f7a0fc21dba512a4071b"',
                 "version_id": "version_id",
             }
         }
