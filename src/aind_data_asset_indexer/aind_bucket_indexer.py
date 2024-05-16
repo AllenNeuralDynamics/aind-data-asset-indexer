@@ -1,9 +1,11 @@
+"""Module to handle syncing changes from DocDb to S3."""
+
 import argparse
 import json
 import logging
 import sys
 import warnings
-from typing import List
+from typing import Dict, List
 
 import boto3
 import dask.bag as dask_bag
@@ -59,6 +61,22 @@ class AindIndexBucketJob:
         docdb_client: MongoClient,
         s3_client: S3Client,
     ):
+        """
+        For a given record,
+        1. Check if it needs to be deleted (no s3 object found)
+        2. If there is an s3 object, then overwrite the s3 object if the docdb
+        is different.
+        Parameters
+        ----------
+        docdb_record : dict
+        docdb_client : MongoClient
+        s3_client : S3Client
+
+        Returns
+        -------
+        None
+
+        """
         if not is_record_location_valid(
             docdb_record, self.job_settings.s3_bucket
         ):
@@ -84,7 +102,7 @@ class AindIndexBucketJob:
                 response = collection.delete_one(
                     filter={"_id": docdb_record["_id"]}
                 )
-                logging.info(response)
+                logging.info(response.raw_result)
             else:  # There is a file in S3.
                 record_as_json_str = json.dumps(docdb_record, default=str)
                 record_md5_hash = compute_md5_hash(record_as_json_str)
@@ -104,14 +122,19 @@ class AindIndexBucketJob:
                         s3_client=s3_client,
                     )
                     logging.info(response)
+                else:
+                    logging.info(
+                        f"Objects are same. Skipping saving to "
+                        f"s3://{self.job_settings.s3_bucket}/{prefix}."
+                    )
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
     ) -> None:
         """
         The task to perform within a partition. If n_partitions is set to 20
-        and the outer prefix list had length 1000, then this should process
-        50 prefixes.
+        and the outer record list had length 1000, then this should process
+        50 records.
         Parameters
         ----------
         record_list : List[dict]
@@ -120,7 +143,7 @@ class AindIndexBucketJob:
         -------
 
         """
-        # create a s3_client here since dask doesn't serialize it
+        # create a clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
         doc_db_client = MongoClient(
             host=self.job_settings.doc_db_host,
@@ -146,11 +169,7 @@ class AindIndexBucketJob:
         across n_partitions. Process the set of records in each partition.
         Parameters
         ----------
-        records : List[str]
-
-        Returns
-        -------
-        None
+        records : List[dict]
 
         """
         record_bag = dask_bag.from_sequence(
@@ -166,8 +185,21 @@ class AindIndexBucketJob:
         s3_prefix: str,
         docdb_client: MongoClient,
         s3_client: S3Client,
-        location_to_id_map: dict,
+        location_to_id_map: Dict[str, str],
     ):
+        """
+
+        Parameters
+        ----------
+        s3_prefix : str
+        docdb_client : MongoClient
+        s3_client : S3Client
+        location_to_id_map : Dict[str, str]
+          A map created by looping through DocDb records and creating a dict
+          of {record['location']: record['_id']}. Can be used to check if a
+          record already exists in DocDb for a given s3 bucket, prefix
+
+        """
         # Check if metadata record exits
         stripped_prefix = (
             s3_prefix[:-1] if s3_prefix.endswith("/") else s3_prefix
@@ -199,14 +231,17 @@ class AindIndexBucketJob:
                         {"$set": json_contents},
                         upsert=True,
                     )
-                    logging.info(response)
+                    logging.info(response.raw_result)
                 else:
                     logging.warning(
                         f"Unable to download file from S3!"
                         f" s3://{self.job_settings.s3_bucket}/{object_key}"
                     )
             else:
-                logging.info("Record already exists in DocDb. Skipping.")
+                logging.info(
+                    f"Record for s3://{self.job_settings.s3_bucket}/"
+                    f"{object_key} already exists in DocDb. Skipping."
+                )
         else:  # metadata.nd.json file does not exist in S3. Create a new one.
             # Build a new metadata file, save it to S3 and save it to DocDb.
             new_metadata_contents = build_metadata_record_from_prefix(
@@ -226,10 +261,13 @@ class AindIndexBucketJob:
                 logging.info(s3_response)
                 # Assume Lambda function will move it to DocDb. If it doesn't,
                 # then next index job will pick it up.
+            else:
+                logging.warning(
+                    f"Was unable to build metadata record for: "
+                    f"s3://{self.job_settings.s3_bucket}/{stripped_prefix}"
+                )
 
-    def _dask_task_to_process_prefix_list(
-        self, prefix_list: List[str]
-    ) -> None:
+    def _dask_task_to_process_prefix_list(self, prefix_list: List[str]):
         """
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
@@ -250,6 +288,8 @@ class AindIndexBucketJob:
             password=self.job_settings.doc_db_password.get_secret_value(),
             authSource="admin",
         )
+        # For the given prefix list, download all the records from docdb
+        # with those locations.
         location_to_id_map = build_docdb_location_to_id_map(
             bucket=self.job_settings.s3_bucket,
             prefixes=prefix_list,
@@ -274,10 +314,6 @@ class AindIndexBucketJob:
         Parameters
         ----------
         prefixes : List[str]
-
-        Returns
-        -------
-        None
 
         """
         prefix_bag = dask_bag.from_sequence(

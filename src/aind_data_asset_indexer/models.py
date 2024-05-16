@@ -48,6 +48,8 @@ class IndexJobSettings(BaseSettings):
 
 
 class AindIndexBucketJobSettings(IndexJobSettings):
+    """Aind Index Bucket Job Settings"""
+
     doc_db_host: str
     doc_db_port: int
     doc_db_user_name: str
