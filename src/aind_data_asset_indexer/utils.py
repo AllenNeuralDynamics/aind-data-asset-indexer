@@ -67,7 +67,7 @@ def is_record_location_valid(
       doesn't match the expected prefix.
 
     """
-    expected_strippped_prefix = (
+    expected_stripped_prefix = (
         None if expected_prefix is None else expected_prefix.strip("/")
     )
     if record.get("location") is None:
@@ -85,7 +85,7 @@ def is_record_location_valid(
                 or len(stripped_prefix.split("/")) > 1
                 or (
                     expected_prefix is not None
-                    and stripped_prefix != expected_strippped_prefix
+                    and stripped_prefix != expected_stripped_prefix
                 )
             ):
                 return False
