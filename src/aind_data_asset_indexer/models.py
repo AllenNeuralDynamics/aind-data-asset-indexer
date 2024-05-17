@@ -1,6 +1,6 @@
 """Module to hold job settings models"""
 
-from typing import Optional
+from typing import List, Optional
 
 import boto3
 from pydantic import Field, SecretStr
@@ -56,3 +56,20 @@ class AindIndexBucketJobSettings(IndexJobSettings):
     doc_db_password: SecretStr
     doc_db_db_name: str
     doc_db_collection_name: str
+
+
+class PopulateAindBucketsJobSettings(IndexJobSettings):
+    """Job Settings to populate a list of aind managed buckets with
+    metadata.nd.json files"""
+
+    # Set individual bucket off
+    s3_bucket: type(None) = None
+    s3_buckets: List[str]
+
+
+class AindIndexBucketsJobSettings(AindIndexBucketJobSettings):
+    """Job Settings to sync docdb with list of aind managed buckets."""
+
+    # Set individual bucket off
+    s3_bucket: type(None) = None
+    s3_buckets: List[str]

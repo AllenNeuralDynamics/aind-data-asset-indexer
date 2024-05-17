@@ -48,8 +48,10 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         "upload_metadata_json_str_to_s3"
     )
     @patch("boto3.client")
+    @patch("logging.info")
     def test_process_prefix_not_none(
         self,
+        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_upload_record: MagicMock,
         mock_build_record: MagicMock,
@@ -68,6 +70,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             metadata_json=json.dumps(self.example_md_record),
         )
+        mock_log_info.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."

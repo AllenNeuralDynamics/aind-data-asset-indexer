@@ -1,8 +1,0 @@
-{
-  "describedBy": "https://raw.githubusercontent.com/AllenNeuralDynamics/aind-data-schema/main/src/aind_data_schema/metadata.py",
-  "schema_version": "0.0.1",
-  "_id": "000000",
-  "name": "ecephys_test_1",
-  "metadata_status": "Invalid",
-  "subject": {}
-}
