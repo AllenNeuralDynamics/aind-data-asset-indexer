@@ -419,7 +419,7 @@ def does_metadata_record_exist_in_docdb(
 
     """
     stripped_prefix = prefix.strip("/")
-    location = f"s3//{bucket}/{stripped_prefix}"
+    location = f"s3://{bucket}/{stripped_prefix}"
     db = docdb_client[db_name]
     collection = db[collection_name]
     records = list(
