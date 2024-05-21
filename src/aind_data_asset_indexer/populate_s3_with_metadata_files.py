@@ -13,6 +13,8 @@ from mypy_boto3_s3 import S3Client
 from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
+    create_core_schema_object_keys_map,
+    does_s3_object_exist,
     iterate_through_top_level,
     upload_metadata_json_str_to_s3,
 )
@@ -59,6 +61,29 @@ class AindPopulateMetadataJsonJob:
             metadata_nd_overwrite=self.job_settings.metadata_nd_overwrite,
         )
         if md_record is not None:
+            bucket = self.job_settings.s3_bucket
+            object_keys = create_core_schema_object_keys_map(prefix)
+            for source, target in object_keys.items():
+                if does_s3_object_exist(
+                    s3_client=s3_client, bucket=bucket, key=source
+                ):
+                    logging.info(
+                        f"Copying {source} to {target} in s3://{bucket}"
+                    )
+                    response = s3_client.copy_object(
+                        Bucket=bucket,
+                        CopySource={"Bucket": bucket, "Key": source},
+                        Key=target,
+                    )
+                    logging.info(response)
+                else:
+                    logging.info(
+                        f"s3://{bucket}/{source} does not exist. Skipping copy."
+                    )
+            
+            logging.info(
+                f"Uploading metadata record for s3://{bucket}/{prefix}"
+            )
             # noinspection PyTypeChecker
             response = upload_metadata_json_str_to_s3(
                 metadata_json=md_record,

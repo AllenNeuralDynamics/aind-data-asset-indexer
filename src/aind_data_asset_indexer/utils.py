@@ -1,4 +1,5 @@
 """Package for common methods used such as interfacing with S3."""
+import datetime
 import hashlib
 import json
 from json.decoder import JSONDecodeError
@@ -23,6 +24,28 @@ core_schema_file_names = [
 ]
 
 
+def create_object_key(prefix: str, filename: str) -> str:
+    """
+    For a given s3 prefix and filename, create the expected 
+    object key for the file.
+    Parameters
+    ----------
+    prefix : str
+      For example, ecephys_123456_2020-10-10_01-02-03
+    filename : str
+      For example, 'metadata.nd.json'
+    
+    Returns
+    -------
+    str
+      For example,
+      ecephys_123456_2020-10-10_01-02-03/metadata.nd.json
+
+    """
+    stripped_prefix = prefix.strip("/")
+    return f"{stripped_prefix}/{filename}"
+
+
 def create_metadata_object_key(prefix: str) -> str:
     """
     For a given s3 prefix, create the expected object key for the
@@ -38,8 +61,49 @@ def create_metadata_object_key(prefix: str) -> str:
       For example, ecephys_123456_2020-10-10_01-02-03/metadata.nd.json
 
     """
+    return create_object_key(
+        prefix=prefix, filename=Metadata.default_filename()
+    )
+
+
+def create_core_schema_object_keys_map(prefix: str) -> Dict[str, str]:
+    """
+    For a given s3 prefix, return a dictionary of { source_object_key: 
+    target_object_key } for all possible core schema files in s3.
+    The source is the original core schema object key.
+    The target is in a sub-directory and has a date stamp appended.
+    Parameters
+    ----------
+    prefix : str
+      For example, ecephys_123456_2020-10-10_01-02-03
+
+    Returns
+    -------
+    Dict[str, str]
+      Returns a dictionary of all possible source and target core 
+      schema object keys.
+      For example, {
+        'ecephys_123456_2020-10-10_01-02-03/subject.json' :
+        'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.20240520.json',
+    }
+
+    """
+    target_sub_dir = "original_metadata"
+    # TODO: check date_stamp format
+    date_stamp = datetime.datetime.now().strftime("%Y%m%d")
     stripped_prefix = prefix.strip("/")
-    return f"{stripped_prefix}/{Metadata.default_filename()}"
+    object_keys = dict()
+    for s in core_schema_file_names:
+        source = create_object_key(
+            prefix=stripped_prefix, filename=s
+        )
+        target = create_object_key(
+            prefix=f"{stripped_prefix}/{target_sub_dir}",
+            filename=s.replace(".json", f".{date_stamp}.json"),
+            sub_dir=target_sub_dir,
+        )
+        object_keys[source] = target
+    return object_keys
 
 
 def is_record_location_valid(
