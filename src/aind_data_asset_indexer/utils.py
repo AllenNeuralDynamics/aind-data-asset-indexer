@@ -66,10 +66,12 @@ def create_metadata_object_key(prefix: str) -> str:
     )
 
 
-def create_core_schema_object_keys_map(prefix: str) -> Dict[str, str]:
+def create_core_schema_object_keys_map(
+    prefix: str,
+) -> Dict[str, Dict[str, str]]:
     """
-    For a given s3 prefix, return a dictionary of { source_object_key: 
-    target_object_key } for all possible core schema files in s3.
+    For a given s3 prefix, return a dictionary of { core_schema_file_name:
+    { source: source_object_key, target: target_object_key } } for all possible core schema files in s3.
     The source is the original core schema object key.
     The target is in a sub-directory and has a date stamp appended.
     Parameters
@@ -79,12 +81,15 @@ def create_core_schema_object_keys_map(prefix: str) -> Dict[str, str]:
 
     Returns
     -------
-    Dict[str, str]
-      Returns a dictionary of all possible source and target core 
-      schema object keys.
+    Dict[str, Dict[str, str]]
+      Returns a dictionary of all possible core schema file names and their corresponding
+      source and target core schema object keys.
       For example, {
-        'ecephys_123456_2020-10-10_01-02-03/subject.json' :
-        'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.20240520.json',
+        'subject.json': {
+            'source': 'ecephys_123456_2020-10-10_01-02-03/subject.json',
+            'target': 'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.20240520.json'
+        },
+        ...
     }
 
     """
@@ -94,15 +99,12 @@ def create_core_schema_object_keys_map(prefix: str) -> Dict[str, str]:
     stripped_prefix = prefix.strip("/")
     object_keys = dict()
     for s in core_schema_file_names:
-        source = create_object_key(
-            prefix=stripped_prefix, filename=s
-        )
+        source = create_object_key(prefix=stripped_prefix, filename=s)
         target = create_object_key(
             prefix=f"{stripped_prefix}/{target_sub_dir}",
             filename=s.replace(".json", f".{date_stamp}.json"),
-            sub_dir=target_sub_dir,
         )
-        object_keys[source] = target
+        object_keys[s] = {"source": source, "target": target}
     return object_keys
 
 
@@ -199,6 +201,39 @@ def compute_md5_hash(json_contents: str) -> str:
     return hashlib.md5(contents).hexdigest()
 
 
+def upload_json_str_to_s3(
+    bucket: str, object_key: str, json_str: str, s3_client: S3Client
+) -> PutObjectOutputTypeDef:
+    """
+    Upload JSON string contents to a location in S3.
+    Parameters
+    ----------
+    bucket : str
+        For example, 'aind-open-data'
+    object_key : str
+        For example, 'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.json'
+    json_str : str
+        JSON string to upload as JSON file.
+    s3_client : S3Client
+
+    Returns
+    -------
+    PutObjectOutputTypeDef
+      Response of the put object operation.
+
+    """
+    contents = json.dumps(
+        json.loads(json_str),
+        indent=3,
+        ensure_ascii=False,
+        sort_keys=True,
+    ).encode("utf-8")
+    response = s3_client.put_object(
+        Bucket=bucket, Key=object_key, Body=contents
+    )
+    return response
+
+
 def upload_metadata_json_str_to_s3(
     bucket: str, metadata_json: str, prefix: str, s3_client: S3Client
 ) -> PutObjectOutputTypeDef:
@@ -218,13 +253,12 @@ def upload_metadata_json_str_to_s3(
       Response of the put object operation.
 
     """
-    stripped_prefix = prefix.strip("/")
-    object_key = f"{stripped_prefix}/{Metadata.default_filename()}"
-    contents = json.dumps(
-        json.loads(metadata_json), indent=3, ensure_ascii=False, sort_keys=True
-    ).encode("utf-8")
-    response = s3_client.put_object(
-        Bucket=bucket, Key=object_key, Body=contents
+    object_key = create_metadata_object_key(prefix)
+    response = upload_json_str_to_s3(
+        bucket=bucket,
+        object_key=object_key,
+        json_str=metadata_json,
+        s3_client=s3_client,
     )
     return response
 

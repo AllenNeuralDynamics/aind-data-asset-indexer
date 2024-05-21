@@ -1,5 +1,6 @@
 """Module to handle populating s3 bucket with metadata files."""
 import argparse
+import json
 import logging
 import os
 import sys
@@ -16,6 +17,7 @@ from aind_data_asset_indexer.utils import (
     create_core_schema_object_keys_map,
     does_s3_object_exist,
     iterate_through_top_level,
+    upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
 
@@ -62,11 +64,15 @@ class AindPopulateMetadataJsonJob:
         )
         if md_record is not None:
             bucket = self.job_settings.s3_bucket
+            md_record_json = json.loads(md_record)
             object_keys = create_core_schema_object_keys_map(prefix)
-            for source, target in object_keys.items():
+            for core_schema_filename, key_mapping in object_keys.items():
+                source = key_mapping["source"]
+                target = key_mapping["target"]
                 if does_s3_object_exist(
                     s3_client=s3_client, bucket=bucket, key=source
                 ):
+                    # Copy original core json files to /original_metadata
                     logging.info(
                         f"Copying {source} to {target} in s3://{bucket}"
                     )
@@ -76,11 +82,32 @@ class AindPopulateMetadataJsonJob:
                         Key=target,
                     )
                     logging.info(response)
+                    # Overwrite core schema fields from metadata.nd.json to the core json files.
+                    core_field = core_schema_filename.replace(".json", "")
+                    if core_field in md_record_json:
+                        core_json = md_record_json[core_field]
+                        core_json_str = json.dumps(core_json)
+                        logging.info(
+                            f"Overwriting s3://{bucket}/{source} with new "
+                            f"{core_field} from metadata.nd.json"
+                        )
+                        response = upload_json_str_to_s3(
+                            bucket=bucket,
+                            object_key=source,
+                            json_str=core_json_str,
+                            s3_client=s3_client,
+                        )
+                        logging.info(response)
+                    else:
+                        logging.warning(
+                            f"{core_field} not found in metadata.nd.json for {prefix} but "
+                            f"s3://{bucket}/{source} exists. Skipping overwrite."
+                        )
                 else:
                     logging.info(
                         f"s3://{bucket}/{source} does not exist. Skipping copy."
                     )
-            
+            # Upload metadata.nd.json to s3
             logging.info(
                 f"Uploading metadata record for s3://{bucket}/{prefix}"
             )
