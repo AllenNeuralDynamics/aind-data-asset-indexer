@@ -62,6 +62,7 @@ class AindPopulateMetadataJsonJob:
             bucket=self.job_settings.s3_bucket,
             metadata_nd_overwrite=self.job_settings.metadata_nd_overwrite,
         )
+        # TODO: check behavior if metadata_nd_overwrite is False (md_record still exists)
         if md_record is not None:
             bucket = self.job_settings.s3_bucket
             md_record_json = json.loads(md_record)
@@ -84,7 +85,10 @@ class AindPopulateMetadataJsonJob:
                     logging.info(response)
                     # Overwrite core schema fields from metadata.nd.json to the core json files.
                     core_field = core_schema_filename.replace(".json", "")
-                    if core_field in md_record_json:
+                    if (
+                        core_field in md_record_json
+                        and md_record_json[core_field] is not None
+                    ):
                         core_json = md_record_json[core_field]
                         core_json_str = json.dumps(core_json)
                         logging.info(
@@ -99,6 +103,7 @@ class AindPopulateMetadataJsonJob:
                         )
                         logging.info(response)
                     else:
+                        # TODO: verify how this is handled
                         logging.warning(
                             f"{core_field} not found in metadata.nd.json for {prefix} but "
                             f"s3://{bucket}/{source} exists. Skipping overwrite."
@@ -108,6 +113,7 @@ class AindPopulateMetadataJsonJob:
                         f"s3://{bucket}/{source} does not exist. Skipping copy."
                     )
             # Upload metadata.nd.json to s3
+            # TODO: do we also want to copy original metadata.nd.json file to /original_metadata?
             logging.info(
                 f"Uploading metadata record for s3://{bucket}/{prefix}"
             )
