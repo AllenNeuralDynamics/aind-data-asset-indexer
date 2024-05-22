@@ -2,6 +2,7 @@
 import datetime
 import hashlib
 import json
+from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
@@ -94,8 +95,7 @@ def create_core_schema_object_keys_map(
 
     """
     target_sub_dir = "original_metadata"
-    # TODO: check date_stamp format
-    date_stamp = datetime.datetime.now().strftime("%Y%m%d")
+    date_stamp = datetime.now().strftime("%Y%m%d")
     stripped_prefix = prefix.strip("/")
     object_keys = dict()
     for s in core_schema_file_names:
@@ -178,6 +178,25 @@ def get_s3_bucket_and_prefix(s3_location: str) -> Dict[str, str]:
     parts = urlparse(s3_location, allow_fragments=False)
     stripped_prefix = parts.path.strip("/")
     return {"bucket": parts.netloc, "prefix": stripped_prefix}
+
+
+def get_s3_location(bucket: str, prefix: str) -> str:
+    """
+    For a given bucket and prefix, return a location url in format
+    s3://{bucket}/{prefix}
+    Parameters
+    ----------
+    bucket : str
+    prefix : str
+
+    Returns
+    -------
+    str
+      For example, 's3://some_bucket/some_prefix'
+
+    """
+    stripped_prefix = prefix.strip("/")
+    return f"s3://{bucket}/{stripped_prefix}"
 
 
 def compute_md5_hash(json_contents: str) -> str:
@@ -444,25 +463,24 @@ def build_metadata_record_from_prefix(
       metadata.nd.json file and the file is corrupt.
 
     """
-    stripped_prefix = prefix.strip("/")
-    metadata_nd_file_key = stripped_prefix + "/" + Metadata.default_filename()
+    metadata_nd_file_key = create_metadata_object_key(prefix)
     does_metadata_nd_file_exist = does_s3_object_exist(
         s3_client=s3_client, bucket=bucket, key=metadata_nd_file_key
     )
     if metadata_nd_overwrite or not does_metadata_nd_file_exist:
         file_keys = [
-            stripped_prefix + "/" + file_name
+            create_object_key(prefix=prefix, filename=file_name)
             for file_name in core_schema_file_names
         ]
         s3_file_responses = get_dict_of_file_info(
             s3_client=s3_client, bucket=bucket, keys=file_keys
         )
         record_name = (
-            stripped_prefix if optional_name is None else optional_name
+            prefix.strip("/") if optional_name is None else optional_name
         )
         metadata_dict = {
             "name": record_name,
-            "location": f"s3://{bucket}/{stripped_prefix}",
+            "location": get_s3_location(bucket=bucket, prefix=prefix),
         }
         for object_key, response_data in s3_file_responses.items():
             if response_data is not None:
@@ -516,8 +534,7 @@ def does_metadata_record_exist_in_docdb(
     True if there is a record in DocDb. Otherwise, False.
 
     """
-    stripped_prefix = prefix.strip("/")
-    location = f"s3://{bucket}/{stripped_prefix}"
+    location = get_s3_location(bucket=bucket, prefix=prefix)
     db = docdb_client[db_name]
     collection = db[collection_name]
     records = list(
@@ -628,8 +645,7 @@ def build_docdb_location_to_id_map(
     Dict[str, str]
 
     """
-    stripped_prefixes = [p.strip("/") for p in prefixes]
-    locations = [f"s3://{bucket}/{p}" for p in stripped_prefixes]
+    locations = [get_s3_location(bucket=bucket, prefix=p) for p in prefixes]
     filter_query = {"location": {"$in": locations}}
     projection = {"_id": 1, "location": 1}
     db = docdb_client[db_name]

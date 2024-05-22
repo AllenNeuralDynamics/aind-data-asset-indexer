@@ -23,6 +23,7 @@ from aind_data_asset_indexer.utils import (
     download_json_file_from_s3,
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
+    get_s3_location,
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
@@ -203,8 +204,9 @@ class AindIndexBucketJob:
 
         """
         # Check if metadata record exists
-        stripped_prefix = s3_prefix.strip("/")
-        location = f"s3://{self.job_settings.s3_bucket}/{stripped_prefix}"
+        location = get_s3_location(
+            bucket=self.job_settings.s3_bucket, prefix=s3_prefix
+        )
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
         else:
@@ -247,8 +249,7 @@ class AindIndexBucketJob:
                         logging.warning(
                             f"Location field in record "
                             f"{json_contents.get('location')} does not match "
-                            f"actual location of record "
-                            f"s3://{self.job_settings.s3_bucket}/{s3_prefix}!"
+                            f"actual location of record {location}!"
                         )
                 else:
                     logging.warning(
@@ -281,8 +282,7 @@ class AindIndexBucketJob:
                 # then next index job will pick it up.
             else:
                 logging.warning(
-                    f"Was unable to build metadata record for: "
-                    f"s3://{self.job_settings.s3_bucket}/{stripped_prefix}"
+                    f"Was unable to build metadata record for: {location}"
                 )
 
     def _dask_task_to_process_prefix_list(self, prefix_list: List[str]):

@@ -14,17 +14,21 @@ from aind_data_asset_indexer.utils import (
     build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
+    create_core_schema_object_keys_map,
     create_metadata_object_key,
+    create_object_key,
     does_metadata_record_exist_in_docdb,
     does_s3_object_exist,
     download_json_file_from_s3,
     get_dict_of_file_info,
     get_record_from_docdb,
     get_s3_bucket_and_prefix,
+    get_s3_location,
     is_dict_corrupt,
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
+    upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
 
@@ -112,6 +116,17 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(is_dict_corrupt(bad_contents1))
         self.assertTrue(is_dict_corrupt(bad_contents2))
 
+    def test_create_object_key(self):
+        """Tests create_object_key"""
+        prefix1 = "prefix1/"
+        prefix2 = "prefix2/subdir"
+        filename1 = "subject.json"
+        filename2 = "rig.json"
+        obj_key1 = create_object_key(prefix1, filename1)
+        obj_key2 = create_object_key(prefix2, filename2)
+        self.assertEqual("prefix1/subject.json", obj_key1)
+        self.assertEqual("prefix2/subdir/rig.json", obj_key2)
+
     def test_create_metadata_object_key(self):
         """Tests create_metadata_object_key"""
         prefix1 = "prefix1/"
@@ -120,6 +135,27 @@ class TestUtils(unittest.TestCase):
         obj_key2 = create_metadata_object_key(prefix2)
         self.assertEqual("prefix1/metadata.nd.json", obj_key1)
         self.assertEqual("prefix2/metadata.nd.json", obj_key2)
+
+    @patch(
+        "aind_data_asset_indexer.utils.core_schema_file_names",
+        new=["mock_schema1.json", "mock_schema2.json"],
+    )
+    def test_create_core_schema_object_keys_map(self):
+        """Tests create_core_schema_object_keys_map"""
+        prefix = "prefix1/"
+        date_stamp = datetime.now().strftime("%Y%m%d")
+        expected_object_keys_map = {
+            "mock_schema1.json": {
+                "source": "prefix1/mock_schema1.json",
+                "target": f"prefix1/original_metadata/mock_schema1.{date_stamp}.json",
+            },
+            "mock_schema2.json": {
+                "source": "prefix1/mock_schema2.json",
+                "target": f"prefix1/original_metadata/mock_schema2.{date_stamp}.json",
+            },
+        }
+        result_object_keys_map = create_core_schema_object_keys_map(prefix)
+        self.assertDictEqual(expected_object_keys_map, result_object_keys_map)
 
     def test_get_s3_bucket_and_prefix(self):
         """Tests get_s3_bucket_and_prefix"""
@@ -136,6 +172,13 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(
             {"bucket": "some_bucket", "prefix": "prefix2"}, results2
         )
+
+    def test_get_s3_location(self):
+        """Tests get_s3_location"""
+        result1 = get_s3_location(bucket="some_bucket", prefix="prefix1")
+        result2 = get_s3_location(bucket="some_bucket", prefix="prefix2/")
+        self.assertEqual("s3://some_bucket/prefix1", result1)
+        self.assertEqual("s3://some_bucket/prefix2", result2)
 
     def test_is_record_location_valid_true0(self):
         """Tests is_record_location_valid returns true when expected_prefix is
@@ -393,6 +436,33 @@ class TestUtils(unittest.TestCase):
         ]
 
         self.assertEqual(expected_output, list(output))
+
+    @patch("boto3.client")
+    def test_upload_json_str_to_s3(self, mock_s3_client: MagicMock):
+        """Tests upload_json_str_to_s3 method"""
+        mock_s3_client.put_object.return_value = (
+            self.example_put_object_response1
+        )
+        expected_json_str = json.dumps(self.example_subject)
+        expected_bucket = "some_bucket"
+        expected_object_key = "ecephys_642478_2023-01-17_13-56-29/subject.json"
+        response = upload_json_str_to_s3(
+            bucket=expected_bucket,
+            object_key=expected_object_key,
+            json_str=expected_json_str,
+            s3_client=mock_s3_client,
+        )
+        self.assertEqual(self.example_put_object_response1, response)
+        mock_s3_client.put_object.assert_called_once_with(
+            Bucket=expected_bucket,
+            Key=expected_object_key,
+            Body=json.dumps(
+                json.loads(expected_json_str),
+                indent=3,
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8"),
+        )
 
     @patch("boto3.client")
     def test_upload_metadata_json_str_to_s3(self, mock_s3_client: MagicMock):
