@@ -1,5 +1,4 @@
 """Package for common methods used such as interfacing with S3."""
-import datetime
 import hashlib
 import json
 from datetime import datetime
@@ -432,23 +431,19 @@ def download_json_file_from_s3(
 
 def build_metadata_record_from_prefix(
     bucket: str,
-    metadata_nd_overwrite: bool,
     prefix: str,
     s3_client: S3Client,
     optional_name: Optional[str] = None,
 ) -> Optional[str]:
     """
     For a given bucket and prefix, this method will return a JSON string
-    representation of a Metadata record. If metadata_nd_overwrite is True or
-    a metadata.nd.json file does not exist, then a Metadata record will be
-    constructed from any core schema json files found under the prefix.
-    Otherwise, the method will return the metadata.nd.json file found in S3
-    as a JSON string if it is valid json. If not valid json, then it will
+    representation of a Metadata record. The Metadata record will be
+    constructed from any non-corrupt core schema json files found under the
+    prefix. If there are issues with Metadata construction, then it will
     return None.
     Parameters
     ----------
     bucket : str
-    metadata_nd_overwrite : bool
     prefix : str
     s3_client : S3Client
     optional_name : Optional[str]
@@ -458,58 +453,47 @@ def build_metadata_record_from_prefix(
     Returns
     -------
     Optional[str]
-      The Metadata record as a json string. Will return None if
-      metadata_nd_overwrite is set to false, or there is a
-      metadata.nd.json file and the file is corrupt.
+      The constructed Metadata record as a json string. Will return None if
+      there are issues with Metadata construction.
 
     """
-    metadata_nd_file_key = create_metadata_object_key(prefix)
-    does_metadata_nd_file_exist = does_s3_object_exist(
-        s3_client=s3_client, bucket=bucket, key=metadata_nd_file_key
+    file_keys = [
+        create_object_key(prefix=prefix, filename=file_name)
+        for file_name in core_schema_file_names
+    ]
+    s3_file_responses = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=file_keys
     )
-    if metadata_nd_overwrite or not does_metadata_nd_file_exist:
-        file_keys = [
-            create_object_key(prefix=prefix, filename=file_name)
-            for file_name in core_schema_file_names
-        ]
-        s3_file_responses = get_dict_of_file_info(
-            s3_client=s3_client, bucket=bucket, keys=file_keys
-        )
-        record_name = (
-            prefix.strip("/") if optional_name is None else optional_name
-        )
-        metadata_dict = {
-            "name": record_name,
-            "location": get_s3_location(bucket=bucket, prefix=prefix),
-        }
-        for object_key, response_data in s3_file_responses.items():
-            if response_data is not None:
-                field_name = object_key.split("/")[-1].replace(".json", "")
-                json_contents = download_json_file_from_s3(
-                    s3_client=s3_client, bucket=bucket, object_key=object_key
-                )
-                if json_contents is not None:
-                    # noinspection PyTypeChecker
-                    is_corrupt = is_dict_corrupt(input_dict=json_contents)
-                    if not is_corrupt:
-                        metadata_dict[field_name] = json_contents
+    record_name = (
+        prefix.strip("/") if optional_name is None else optional_name
+    )
+    metadata_dict = {
+        "name": record_name,
+        "location": get_s3_location(bucket=bucket, prefix=prefix),
+    }
+    for object_key, response_data in s3_file_responses.items():
+        if response_data is not None:
+            field_name = object_key.split("/")[-1].replace(".json", "")
+            json_contents = download_json_file_from_s3(
+                s3_client=s3_client, bucket=bucket, object_key=object_key
+            )
+            if json_contents is not None:
+                # noinspection PyTypeChecker
+                is_corrupt = is_dict_corrupt(input_dict=json_contents)
+                if not is_corrupt:
+                    metadata_dict[field_name] = json_contents
+    try:
         # TODO: We should handle constructing the Metadata file in a better way
         #  in aind-data-schema. By using model_validate, a lot of info from the
         #  original files get removed. For now, we can use model_construct
         #  until a better method is implemented in aind-data-schema. This will
         #  mark all the initial files as metadata_status=Unknown
-        return Metadata.model_construct(**metadata_dict).model_dump_json(
+        metadata_dict = Metadata.model_construct(**metadata_dict).model_dump_json(
             warnings=False, by_alias=True
         )
-    else:
-        metadata_contents = download_json_file_from_s3(
-            s3_client=s3_client, bucket=bucket, object_key=metadata_nd_file_key
-        )
-        return (
-            None
-            if metadata_contents is None
-            else json.dumps(metadata_contents)
-        )
+    except Exception as e:
+        metadata_dict = None
+    return metadata_dict
 
 
 def does_metadata_record_exist_in_docdb(

@@ -80,12 +80,13 @@ class AindIndexBucketJob:
         None
 
         """
+        bucket = self.job_settings.s3_bucket
         if not is_record_location_valid(
-            docdb_record, self.job_settings.s3_bucket
+            docdb_record, bucket
         ):
             logging.warning(
                 f"Record location {docdb_record.get('location')} is not valid "
-                f"for bucket {self.job_settings.s3_bucket}!"
+                f"for bucket {bucket}!"
             )
         else:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
@@ -128,7 +129,7 @@ class AindIndexBucketJob:
                 else:
                     logging.info(
                         f"Objects are same. Skipping saving to "
-                        f"s3://{self.job_settings.s3_bucket}/{prefix}."
+                        f"s3://{bucket}/{prefix}."
                     )
 
     def _dask_task_to_process_record_list(
@@ -204,8 +205,9 @@ class AindIndexBucketJob:
 
         """
         # Check if metadata record exists
+        bucket = self.job_settings.s3_bucket
         location = get_s3_location(
-            bucket=self.job_settings.s3_bucket, prefix=s3_prefix
+            bucket=bucket, prefix=s3_prefix
         )
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
@@ -214,7 +216,7 @@ class AindIndexBucketJob:
         object_key = create_metadata_object_key(prefix=s3_prefix)
         does_metadata_file_exist = does_s3_object_exist(
             s3_client=s3_client,
-            bucket=self.job_settings.s3_bucket,
+            bucket=bucket,
             key=object_key,
         )
         if does_metadata_file_exist:
@@ -225,14 +227,14 @@ class AindIndexBucketJob:
             if record_id is None:
                 json_contents = download_json_file_from_s3(
                     s3_client=s3_client,
-                    bucket=self.job_settings.s3_bucket,
+                    bucket=bucket,
                     object_key=object_key,
                 )
                 if json_contents:
                     # noinspection PyTypeChecker
                     if is_record_location_valid(
                         json_contents,
-                        expected_bucket=self.job_settings.s3_bucket,
+                        expected_bucket=bucket,
                         expected_prefix=s3_prefix,
                     ):
                         db = docdb_client[self.job_settings.doc_db_db_name]
@@ -253,27 +255,26 @@ class AindIndexBucketJob:
                         )
                 else:
                     logging.warning(
-                        f"Unable to download file from S3!"
-                        f" s3://{self.job_settings.s3_bucket}/{object_key}"
+                        f"Unable to download file from S3 for: "
+                        f"s3://{bucket}/{object_key}!"
                     )
             else:
                 logging.info(
-                    f"Record for s3://{self.job_settings.s3_bucket}/"
-                    f"{object_key} already exists in DocDb. Skipping."
+                    f"Record for s3://{bucket}/{object_key} "
+                    f"already exists in DocDb. Skipping."
                 )
         else:  # metadata.nd.json file does not exist in S3. Create a new one.
             # Build a new metadata file, save it to S3 and save it to DocDb.
             new_metadata_contents = build_metadata_record_from_prefix(
-                bucket=self.job_settings.s3_bucket,
+                bucket=bucket,
                 prefix=s3_prefix,
-                metadata_nd_overwrite=True,
                 s3_client=s3_client,
             )
             if new_metadata_contents is not None:
                 # noinspection PyTypeChecker
                 s3_response = upload_metadata_json_str_to_s3(
                     metadata_json=new_metadata_contents,
-                    bucket=self.job_settings.s3_bucket,
+                    bucket=bucket,
                     prefix=s3_prefix,
                     s3_client=s3_client,
                 )
@@ -282,7 +283,7 @@ class AindIndexBucketJob:
                 # then next index job will pick it up.
             else:
                 logging.warning(
-                    f"Was unable to build metadata record for: {location}"
+                    f"Unable to build metadata record for: {location}!"
                 )
 
     def _dask_task_to_process_prefix_list(self, prefix_list: List[str]):

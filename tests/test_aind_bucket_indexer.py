@@ -42,7 +42,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
         basic_job_configs = AindIndexBucketJobSettings(
             s3_bucket="aind-ephys-data-dev-u5u0i5",
-            metadata_nd_overwrite=False,
             n_partitions=2,
             doc_db_host="docdb_host",
             doc_db_port=123,
@@ -289,9 +288,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
             location_to_id_map=location_to_id_map,
         )
         mock_log_warn.assert_called_once_with(
-            "Was unable to build metadata record for: "
+            "Unable to build metadata record for: "
             f"s3://{self.basic_job.job_settings.s3_bucket}/"
-            f"ecephys_642478_2023-01-17_13-56-29"
+            f"ecephys_642478_2023-01-17_13-56-29!"
         )
 
     @patch(
@@ -375,9 +374,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
             location_to_id_map=location_to_id_map,
         )
         mock_log_warn.assert_called_once_with(
-            "Unable to download file from S3!"
+            f"Unable to download file from S3 for:"
             f" s3://{self.basic_job.job_settings.s3_bucket}/"
-            f"ecephys_642478_2023-01-17_13-56-29/metadata.nd.json"
+            f"ecephys_642478_2023-01-17_13-56-29/metadata.nd.json!"
         )
 
     @patch(

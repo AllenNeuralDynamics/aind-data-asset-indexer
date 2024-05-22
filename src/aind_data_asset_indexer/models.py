@@ -21,14 +21,6 @@ class IndexJobSettings(BaseSettings):
             "set to None, then all records will be processed."
         ),
     )
-    metadata_nd_overwrite: bool = Field(
-        default=False,
-        description=(
-            "If set to True, will ignore the metadata.nd.json file and use "
-            "the core schemas to build a new one. If set to False, then use"
-            "the metadata.nd.json file if it exists in S3."
-        ),
-    )
 
     @classmethod
     def from_param_store(cls, param_store_name: str):

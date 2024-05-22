@@ -31,12 +31,8 @@ class AindPopulateMetadataJsonJob:
     1) Crawl through an S3 bucket
     2) Look inside each prefix that adheres to data asset naming convention
     3) If the name is a data asset name, then it will look inside the prefix
-    4.0) If there is no metadata.nd.json file, then it will create one by using
-    any of the core json files it finds.
-    4.1) If the metadata_nd_overwrite option is set to False, then it will pass
-    a data asset if there is already a metadata.nd.json in that folder. If set
-    to True, then it will write a new metadata.nd.json file even if one already
-    exists.
+    4) It will create a metadata.nd.json by using any of the core json files
+    it finds. Any existing metadata.nd.json will be overwritten.
     """
 
     def __init__(self, job_settings: IndexJobSettings):
@@ -56,15 +52,13 @@ class AindPopulateMetadataJsonJob:
         None
 
         """
+        bucket = self.job_settings.s3_bucket
         md_record = build_metadata_record_from_prefix(
             prefix=prefix,
             s3_client=s3_client,
-            bucket=self.job_settings.s3_bucket,
-            metadata_nd_overwrite=self.job_settings.metadata_nd_overwrite,
+            bucket=bucket,
         )
-        # TODO: check behavior if metadata_nd_overwrite is False (md_record still exists)
         if md_record is not None:
-            bucket = self.job_settings.s3_bucket
             md_record_json = json.loads(md_record)
             object_keys = create_core_schema_object_keys_map(prefix)
             for core_schema_filename, key_mapping in object_keys.items():
@@ -106,7 +100,7 @@ class AindPopulateMetadataJsonJob:
                         # TODO: verify how this is handled
                         logging.warning(
                             f"{core_field} not found in metadata.nd.json for {prefix} but "
-                            f"s3://{bucket}/{source} exists. Skipping overwrite."
+                            f"s3://{bucket}/{source} exists! Skipping overwrite."
                         )
                 else:
                     logging.info(
@@ -120,15 +114,14 @@ class AindPopulateMetadataJsonJob:
             # noinspection PyTypeChecker
             response = upload_metadata_json_str_to_s3(
                 metadata_json=md_record,
-                bucket=self.job_settings.s3_bucket,
+                bucket=bucket,
                 prefix=prefix,
                 s3_client=s3_client,
             )
             logging.info(response)
         else:
             logging.warning(
-                f"Metadata record is None for "
-                f"s3://{self.job_settings.s3_bucket}/{prefix}!"
+                f"Unable to build metadata record for: s3://{bucket}/{prefix}!"
             )
 
     def _dask_task_to_process_prefix_list(

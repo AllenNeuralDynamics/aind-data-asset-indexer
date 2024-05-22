@@ -6,7 +6,7 @@ import unittest
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from botocore.exceptions import ClientError
 
@@ -490,19 +490,15 @@ class TestUtils(unittest.TestCase):
         )
 
     @patch("boto3.client")
-    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
-    def test_build_metadata_record_from_prefix_0(
+    def test_build_metadata_record_from_prefix(
         self,
         mock_download_json_file: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
-        mock_does_file_exist: MagicMock,
         mock_s3_client: MagicMock,
     ):
-        """Tests where metadata_nd_overwrite is False and metadata.nd.json
-        does not exist"""
-        mock_does_file_exist.return_value = False
+        """Tests build_metadata_record_from_prefix method"""
         mock_get_dict_of_file_info.return_value = {
             "ecephys_642478_2023-01-17_13-56-29/acquisition.json": None,
             "ecephys_642478_2023-01-17_13-56-29/data_description.json": None,
@@ -536,43 +532,42 @@ class TestUtils(unittest.TestCase):
                 bucket="aind-ephys-data-dev-u5u0i5",
                 prefix="ecephys_642478_2023-01-17_13-56-29",
                 s3_client=mock_s3_client,
-                metadata_nd_overwrite=False,
             )
+        )
+        mock_get_dict_of_file_info.assert_called_once_with(
+            s3_client=mock_s3_client,
+            bucket="aind-ephys-data-dev-u5u0i5",
+            keys=[
+                "ecephys_642478_2023-01-17_13-56-29/acquisition.json",
+                "ecephys_642478_2023-01-17_13-56-29/data_description.json",
+                "ecephys_642478_2023-01-17_13-56-29/instrument.json",
+                "ecephys_642478_2023-01-17_13-56-29/procedures.json",
+                "ecephys_642478_2023-01-17_13-56-29/processing.json",
+                "ecephys_642478_2023-01-17_13-56-29/rig.json",
+                "ecephys_642478_2023-01-17_13-56-29/session.json",
+                "ecephys_642478_2023-01-17_13-56-29/subject.json",
+                "ecephys_642478_2023-01-17_13-56-29/mri_session.json",
+            ],
+        )
+        mock_download_json_file.assert_has_calls(
+            [
+                call(
+                    s3_client=mock_s3_client,
+                    bucket="aind-ephys-data-dev-u5u0i5",
+                    object_key="ecephys_642478_2023-01-17_13-56-29/processing.json",
+                ),
+                call(
+                    s3_client=mock_s3_client,
+                    bucket="aind-ephys-data-dev-u5u0i5",
+                    object_key="ecephys_642478_2023-01-17_13-56-29/subject.json",
+                )
+            ]
         )
         # Small hack to avoid having to mock uuids and creation times
         md["_id"] = self.example_metadata_nd["_id"]
         md["created"] = self.example_metadata_nd["created"]
         md["last_modified"] = self.example_metadata_nd["last_modified"]
         self.assertEqual(self.example_metadata_nd, md)
-
-    @patch("boto3.client")
-    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
-    def test_build_metadata_record_from_prefix_1(
-        self,
-        mock_download_json_file: MagicMock,
-        mock_get_dict_of_file_info: MagicMock,
-        mock_does_file_exist: MagicMock,
-        mock_s3_client: MagicMock,
-    ):
-        """Tests where metadata_nd_overwrite is False and metadata.nd.json
-        does exist"""
-
-        mock_does_file_exist.return_value = True
-        mock_download_json_file.return_value = self.example_metadata_nd
-        # noinspection PyTypeChecker
-        md = json.loads(
-            build_metadata_record_from_prefix(
-                bucket="aind-ephys-data-dev-u5u0i5",
-                prefix="ecephys_642478_2023-01-17_13-56-29",
-                s3_client=mock_s3_client,
-                metadata_nd_overwrite=False,
-            )
-        )
-
-        self.assertEqual(self.example_metadata_nd, md)
-        mock_get_dict_of_file_info.assert_not_called()
 
     @patch("pymongo.MongoClient")
     def test_does_metadata_record_exist_in_docdb_true(

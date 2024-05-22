@@ -32,7 +32,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         cls.example_md_record = example_md_record
         basic_job_configs = IndexJobSettings(
             s3_bucket="aind-ephys-data-dev-u5u0i5",
-            metadata_nd_overwrite=True,
             n_partitions=2,
         )
         cls.basic_job_configs = basic_job_configs
@@ -92,7 +91,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             prefix=expected_prefix,
             s3_client=mock_s3_client,
             bucket=expected_bucket,
-            metadata_nd_overwrite=True,
         )
         # assert that the original core jsons were copied
         mock_does_s3_object_exist.assert_called()
@@ -197,7 +195,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             prefix=expected_prefix,
             s3_client=mock_s3_client,
             bucket=expected_bucket,
-            metadata_nd_overwrite=True,
         )
         # assert that the original core jsons were copied, including
         # corrupt rig.json
@@ -251,7 +248,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_log_info.assert_called()
         mock_log_warn.assert_called_once_with(
             f"rig not found in metadata.nd.json for {expected_prefix} but "
-            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists. Skipping overwrite."
+            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists! Skipping overwrite."
         )
         # assert that the metadata record was uploaded
         mock_upload_metadata_record.assert_called_once_with(
@@ -302,7 +299,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             bucket="aind-ephys-data-dev-u5u0i5",
-            metadata_nd_overwrite=True,
         )
         mock_does_s3_object_exist.assert_not_called()
         mock_s3_client.copy_object.assert_not_called()
@@ -310,7 +306,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_upload_metadata_record.assert_not_called()
         mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(
-            "Metadata record is None for "
+            "Unable to build metadata record for: "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29!"
         )
