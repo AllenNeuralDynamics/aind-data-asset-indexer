@@ -1,6 +1,7 @@
 """Package for common methods used such as interfacing with S3."""
 import hashlib
 import json
+import logging
 from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
@@ -22,6 +23,38 @@ core_schema_file_names = [
     for s in SchemaWriter.get_schemas()
     if s.default_filename() != Metadata.default_filename()
 ]
+
+
+def _log_message(
+    message: str, log_level: int = logging.INFO, log_flag: bool = True
+) -> None:
+    """
+    Log a message using the given log level. If log_flag is False,
+    then it will not log anything.
+
+    Parameters
+    ----------
+    message : str
+    log_level : int
+        Default is logging.INFO
+    log_flag : bool
+        Default is True
+
+    Returns
+    -------
+    None
+    """
+    if not log_flag:
+        return
+    if log_level not in [
+        logging.DEBUG,
+        logging.INFO,
+        logging.WARNING,
+        logging.ERROR,
+        logging.CRITICAL,
+    ]:
+        raise ValueError("Invalid log level")
+    logging.log(log_level, message)
 
 
 def create_object_key(prefix: str, filename: str) -> str:
@@ -495,6 +528,96 @@ def build_metadata_record_from_prefix(
     except Exception:
         metadata_dict = None
     return metadata_dict
+
+
+def copy_then_overwrite_core_json_files(
+    metadata_json: str,
+    bucket: str,
+    prefix: str,
+    s3_client: S3Client,
+    log_flag: bool = False,
+) -> None:
+    """
+    For a given Metadata record, copy the core schema files to a sub-directory,
+    and then overwrite the core schema file with the new core fields. If the
+    original core schema json was corrupt, then it will be deleted after its
+    original contents are copied.
+    Parameters
+    ----------
+    metadata_json : str
+        The JSON string representation of the Metadata record.
+    bucket : str
+        The name of the S3 bucket.
+    prefix : str
+        The prefix for the S3 object keys.
+    s3_client : S3Client
+        The S3 client object.
+    log_flag: bool
+        Flag indicating whether to log operations. Default is False.
+
+    Returns
+    -------
+    None
+
+    """
+    md_record_json = json.loads(metadata_json)
+    object_keys = create_core_schema_object_keys_map(prefix)
+    for core_schema_filename, key_mapping in object_keys.items():
+        source = key_mapping["source"]
+        target = key_mapping["target"]
+        if does_s3_object_exist(
+            s3_client=s3_client, bucket=bucket, key=source
+        ):
+            # Copy original core json files to /original_metadata
+            _log_message(
+                message=f"Copying {source} to {target} in s3://{bucket}",
+                log_flag=log_flag,
+            )
+            response = s3_client.copy_object(
+                Bucket=bucket,
+                CopySource={"Bucket": bucket, "Key": source},
+                Key=target,
+            )
+            _log_message(message=response, log_flag=log_flag)
+            # Overwrite core schema fields from metadata.nd.json to the core json files.
+            core_field = core_schema_filename.replace(".json", "")
+            if (
+                core_field in md_record_json
+                and md_record_json[core_field] is not None
+            ):
+                core_json = md_record_json[core_field]
+                core_json_str = json.dumps(core_json)
+                _log_message(
+                    message=f"Uploading new {core_field} to s3://{bucket}/{source}",
+                    log_flag=log_flag,
+                )
+                response = upload_json_str_to_s3(
+                    bucket=bucket,
+                    object_key=source,
+                    json_str=core_json_str,
+                    s3_client=s3_client,
+                )
+                _log_message(message=response, log_flag=log_flag)
+            else:
+                # If a core json was corrupt, it would exist in the metadata.nd.json
+                # Since a copy has been made already, we can delete it from the top level
+                _log_message(
+                    message=(
+                        f"{core_field} not found in metadata.nd.json for {prefix} but "
+                        f"s3://{bucket}/{source} exists! Deleting."
+                    ),
+                    log_level=logging.WARNING,
+                    log_flag=log_flag,
+                )
+                response = s3_client.delete_object(
+                    Bucket=bucket, Key=source
+                )
+                _log_message(message=response, log_flag=log_flag)
+        else:
+            _log_message(
+                message=f"s3://{bucket}/{source} does not exist. Skipping copy.",
+                log_flag=log_flag,
+            )
 
 
 def does_metadata_record_exist_in_docdb(

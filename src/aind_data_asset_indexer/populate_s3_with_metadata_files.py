@@ -1,6 +1,6 @@
 """Module to handle populating s3 bucket with metadata files."""
+
 import argparse
-import json
 import logging
 import os
 import sys
@@ -14,10 +14,8 @@ from mypy_boto3_s3 import S3Client
 from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
-    create_core_schema_object_keys_map,
-    does_s3_object_exist,
+    copy_then_overwrite_core_json_files,
     iterate_through_top_level,
-    upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
 
@@ -59,59 +57,14 @@ class AindPopulateMetadataJsonJob:
             bucket=bucket,
         )
         if md_record is not None:
-            md_record_json = json.loads(md_record)
-            object_keys = create_core_schema_object_keys_map(prefix)
-            for core_schema_filename, key_mapping in object_keys.items():
-                source = key_mapping["source"]
-                target = key_mapping["target"]
-                if does_s3_object_exist(
-                    s3_client=s3_client, bucket=bucket, key=source
-                ):
-                    # Copy original core json files to /original_metadata
-                    logging.info(
-                        f"Copying {source} to {target} in s3://{bucket}"
-                    )
-                    response = s3_client.copy_object(
-                        Bucket=bucket,
-                        CopySource={"Bucket": bucket, "Key": source},
-                        Key=target,
-                    )
-                    logging.info(response)
-                    # Overwrite core schema fields from metadata.nd.json to the core json files.
-                    core_field = core_schema_filename.replace(".json", "")
-                    if (
-                        core_field in md_record_json
-                        and md_record_json[core_field] is not None
-                    ):
-                        core_json = md_record_json[core_field]
-                        core_json_str = json.dumps(core_json)
-                        logging.info(
-                            f"Uploading new {core_field} to s3://{bucket}/{source}"
-                        )
-                        response = upload_json_str_to_s3(
-                            bucket=bucket,
-                            object_key=source,
-                            json_str=core_json_str,
-                            s3_client=s3_client,
-                        )
-                        logging.info(response)
-                    else:
-                        # If a core json was corrupt, it would not exist in the metadata.nd.json
-                        # Since a copy has been made already, we can delete it from the top level
-                        logging.warning(
-                            f"{core_field} not found in metadata.nd.json for {prefix} but "
-                            f"s3://{bucket}/{source} exists! Deleting."
-                        )
-                        response = s3_client.delete_object(
-                            Bucket=bucket, Key=source
-                        )
-                        logging.info(response)
-                else:
-                    logging.info(
-                        f"s3://{bucket}/{source} does not exist. Skipping copy."
-                    )
+            responses = copy_then_overwrite_core_json_files(
+                metadata_json=md_record,
+                bucket=bucket,
+                prefix=prefix,
+                s3_client=s3_client,
+                log_flag=True,
+            )
             # Upload metadata.nd.json to s3
-            # TODO: do we also want to copy original metadata.nd.json file to /original_metadata?
             logging.info(
                 f"Uploading metadata record for s3://{bucket}/{prefix}"
             )

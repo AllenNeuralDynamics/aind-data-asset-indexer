@@ -1,6 +1,7 @@
 """Tests methods in utils module"""
 
 import json
+import logging
 import os
 import unittest
 from copy import deepcopy
@@ -11,9 +12,11 @@ from unittest.mock import MagicMock, call, patch
 from botocore.exceptions import ClientError
 
 from aind_data_asset_indexer.utils import (
+    _log_message,
     build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
+    copy_then_overwrite_core_json_files,
     create_core_schema_object_keys_map,
     create_metadata_object_key,
     create_object_key,
@@ -100,6 +103,46 @@ class TestUtils(unittest.TestCase):
         cls.example_put_object_response1 = load_json_file(
             "example_put_object_response1.json"
         )
+
+    @patch("logging.log")
+    def test__log_message_true(self, mock_log: MagicMock):
+        """Tests _log_message method with log_flag set to True or not provided"""
+        message = "This is a test message"
+        valid_log_levels = [
+            logging.DEBUG,
+            logging.INFO,
+            logging.WARNING,
+            logging.ERROR,
+            logging.CRITICAL,
+        ]
+        invalid_log_levels = [logging.NOTSET, -1, 1, 100]
+        _log_message(message)
+        _log_message(message, log_flag=True)
+        for log_level in valid_log_levels:
+            _log_message(message, log_level)
+        mock_log.assert_has_calls(
+            [
+                call(logging.INFO, message),
+                call(logging.INFO, message),
+                call(logging.DEBUG, message),
+                call(logging.INFO, message),
+                call(logging.WARNING, message),
+                call(logging.ERROR, message),
+                call(logging.CRITICAL, message),
+            ]
+        )
+        for log_level in invalid_log_levels:
+            with self.assertRaises(ValueError):
+                _log_message(message, log_level)
+
+    @patch("logging.log")
+    def test__log_message_false(self, mock_log: MagicMock):
+        """Tests _log_message method with log_flag set to False"""
+        message = "This is a test message"
+        _log_message(message, log_flag=False)
+        _log_message(message, log_level=logging.WARNING, log_flag=False)
+        _log_message(message, log_level=logging.NOTSET, log_flag=False)
+        mock_log.assert_not_called()
 
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
@@ -563,7 +606,7 @@ class TestUtils(unittest.TestCase):
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
                     object_key="ecephys_642478_2023-01-17_13-56-29/subject.json",
-                )
+                ),
             ]
         )
         # Small hack to avoid having to mock uuids and creation times
@@ -571,6 +614,188 @@ class TestUtils(unittest.TestCase):
         md["created"] = self.example_metadata_nd["created"]
         md["last_modified"] = self.example_metadata_nd["last_modified"]
         self.assertEqual(self.example_metadata_nd, md)
+
+    @patch("aind_data_asset_indexer.utils." "upload_json_str_to_s3")
+    @patch("aind_data_asset_indexer.utils." "does_s3_object_exist")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.utils._log_message")
+    def test_copy_then_overwrite_core_json_files(
+        self,
+        mock_log_message: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+        mock_upload_core_record: MagicMock,
+    ):
+        """Tests copy_then_overwrite_core_json_files method."""
+        expected_bucket = "aind-ephys-data-dev-u5u0i5"
+        expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
+        expected_date_stamp = datetime.now().strftime("%Y%m%d")
+
+        # example_md_record only has processing and subject fields
+        def mock_source_files_exist(s3_client, bucket, key):
+            """Mock does_s3_object_exist function."""
+            mock_exist_files = [
+                f"{expected_prefix}/processing.json",
+                f"{expected_prefix}/subject.json",
+            ]
+            return True if key in mock_exist_files else False
+
+        mock_does_s3_object_exist.side_effect = mock_source_files_exist
+        response = copy_then_overwrite_core_json_files(
+            metadata_json=json.dumps(self.example_metadata_nd),
+            bucket=expected_bucket,
+            prefix=expected_prefix,
+            s3_client=mock_s3_client,
+        )
+        # assert that the original core jsons were copied
+        mock_does_s3_object_exist.assert_called()
+        mock_s3_client.copy_object.assert_has_calls(
+            [
+                call(
+                    Bucket=expected_bucket,
+                    CopySource={
+                        "Bucket": expected_bucket,
+                        "Key": f"{expected_prefix}/processing.json",
+                    },
+                    Key=f"{expected_prefix}/original_metadata/processing.{expected_date_stamp}.json",
+                ),
+                call(
+                    Bucket=expected_bucket,
+                    CopySource={
+                        "Bucket": expected_bucket,
+                        "Key": f"{expected_prefix}/subject.json",
+                    },
+                    Key=f"{expected_prefix}/original_metadata/subject.{expected_date_stamp}.json",
+                ),
+            ]
+        )
+        # assert that core jsons were overwritten
+        mock_upload_core_record.assert_has_calls(
+            [
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{expected_prefix}/processing.json",
+                    json_str=json.dumps(
+                        self.example_metadata_nd["processing"]
+                    ),
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{expected_prefix}/subject.json",
+                    json_str=json.dumps(self.example_metadata_nd["subject"]),
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+        respose_logs = [
+            c[1]["log_level"]
+            for c in mock_log_message.call_args_list
+            if "log_level" in c[1]
+        ]
+        self.assertEqual([], respose_logs)
+
+    @patch("aind_data_asset_indexer.utils." "upload_json_str_to_s3")
+    @patch("aind_data_asset_indexer.utils." "does_s3_object_exist")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.utils._log_message")
+    def test_copy_then_overwrite_core_json_files_mismatch(
+        self,
+        mock_log_message: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+        mock_upload_core_record: MagicMock,
+    ):
+        """Tests copy_then_overwrite_core_json_files method when an original core json
+        does not exist in generated metadata.nd.json."""
+        expected_bucket = "aind-ephys-data-dev-u5u0i5"
+        expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
+        expected_date_stamp = datetime.now().strftime("%Y%m%d")
+
+        # example_md_record only has processing and subject fields
+        # assume rig.json exists but is corrupt
+        def mock_source_files_exist(s3_client, bucket, key):
+            """Mock does_s3_object_exist function."""
+            mock_exist_files = [
+                f"{expected_prefix}/processing.json",
+                f"{expected_prefix}/rig.json",
+                f"{expected_prefix}/subject.json",
+            ]
+            return True if key in mock_exist_files else False
+
+        mock_does_s3_object_exist.side_effect = mock_source_files_exist
+        response = copy_then_overwrite_core_json_files(
+            metadata_json=json.dumps(self.example_metadata_nd),
+            bucket=expected_bucket,
+            prefix=expected_prefix,
+            s3_client=mock_s3_client,
+        )
+        # assert that the original core jsons were copied, including
+        # corrupt rig.json
+        mock_does_s3_object_exist.assert_called()
+        mock_s3_client.copy_object.assert_has_calls(
+            [
+                call(
+                    Bucket=expected_bucket,
+                    CopySource={
+                        "Bucket": expected_bucket,
+                        "Key": f"{expected_prefix}/processing.json",
+                    },
+                    Key=f"{expected_prefix}/original_metadata/processing.{expected_date_stamp}.json",
+                ),
+                call(
+                    Bucket=expected_bucket,
+                    CopySource={
+                        "Bucket": expected_bucket,
+                        "Key": f"{expected_prefix}/rig.json",
+                    },
+                    Key=f"{expected_prefix}/original_metadata/rig.{expected_date_stamp}.json",
+                ),
+                call(
+                    Bucket=expected_bucket,
+                    CopySource={
+                        "Bucket": expected_bucket,
+                        "Key": f"{expected_prefix}/subject.json",
+                    },
+                    Key=f"{expected_prefix}/original_metadata/subject.{expected_date_stamp}.json",
+                ),
+            ]
+        )
+        # assert that only valid core jsons were overwritten
+        mock_upload_core_record.assert_has_calls(
+            [
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{expected_prefix}/processing.json",
+                    json_str=json.dumps(
+                        self.example_metadata_nd["processing"]
+                    ),
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{expected_prefix}/subject.json",
+                    json_str=json.dumps(self.example_metadata_nd["subject"]),
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+        # assert the corrupt core json was deleted
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket=expected_bucket, Key=f"{expected_prefix}/rig.json"
+        )
+        expected_warn_log = {
+            "log_flag": False,
+            "log_level": logging.WARN,
+            "message": f"rig not found in metadata.nd.json for {expected_prefix} but "
+            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists! Deleting.",
+        }
+        respose_logs = [
+            c[1]
+            for c in mock_log_message.call_args_list
+            if "log_level" in c[1]
+        ]
+        self.assertEqual([expected_warn_log], respose_logs)
 
     @patch("pymongo.MongoClient")
     def test_does_metadata_record_exist_in_docdb_true(
