@@ -170,7 +170,8 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_upload_core_record: MagicMock,
         mock_upload_metadata_record: MagicMock,
     ):
-        """Tests _process_prefix method when original core json is corrupt."""
+        """Tests _process_prefix method when an original core json
+        does not exist in generated metadata.nd.json."""
 
         expected_bucket = "aind-ephys-data-dev-u5u0i5"
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
@@ -244,11 +245,14 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
                 ),
             ]
         )
-        # assert that a warning was logged for the corrupt core json
+        # assert the corrupt core json was deleted
         mock_log_info.assert_called()
         mock_log_warn.assert_called_once_with(
             f"rig not found in metadata.nd.json for {expected_prefix} but "
-            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists! Skipping overwrite."
+            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists! Deleting."
+        )
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket=expected_bucket, Key=f"{expected_prefix}/rig.json"
         )
         # assert that the metadata record was uploaded
         mock_upload_metadata_record.assert_called_once_with(

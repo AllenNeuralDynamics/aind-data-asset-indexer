@@ -396,11 +396,11 @@ def is_dict_corrupt(input_dict: dict) -> bool:
       False otherwise.
 
     """
-    for key in input_dict.keys():
+    for key, value in input_dict.items():
         if "$" in key or "." in key:
             return True
-        elif isinstance(input_dict[key], dict):
-            if is_dict_corrupt(input_dict[key]):
+        elif isinstance(value, dict):
+            if is_dict_corrupt(value):
                 return True
     return False
 
@@ -492,7 +492,7 @@ def build_metadata_record_from_prefix(
         metadata_dict = Metadata.model_construct(**metadata_dict).model_dump_json(
             warnings=False, by_alias=True
         )
-    except Exception as e:
+    except Exception:
         metadata_dict = None
     return metadata_dict
 

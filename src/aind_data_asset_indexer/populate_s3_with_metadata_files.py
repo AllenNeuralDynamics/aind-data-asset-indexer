@@ -86,8 +86,7 @@ class AindPopulateMetadataJsonJob:
                         core_json = md_record_json[core_field]
                         core_json_str = json.dumps(core_json)
                         logging.info(
-                            f"Overwriting s3://{bucket}/{source} with new "
-                            f"{core_field} from metadata.nd.json"
+                            f"Uploading new {core_field} to s3://{bucket}/{source}"
                         )
                         response = upload_json_str_to_s3(
                             bucket=bucket,
@@ -97,11 +96,16 @@ class AindPopulateMetadataJsonJob:
                         )
                         logging.info(response)
                     else:
-                        # TODO: verify how this is handled
+                        # If a core json was corrupt, it would not exist in the metadata.nd.json
+                        # Since a copy has been made already, we can delete it from the top level
                         logging.warning(
                             f"{core_field} not found in metadata.nd.json for {prefix} but "
-                            f"s3://{bucket}/{source} exists! Skipping overwrite."
+                            f"s3://{bucket}/{source} exists! Deleting."
                         )
+                        response = s3_client.delete_object(
+                            Bucket=bucket, Key=source
+                        )
+                        logging.info(response)
                 else:
                     logging.info(
                         f"s3://{bucket}/{source} does not exist. Skipping copy."
