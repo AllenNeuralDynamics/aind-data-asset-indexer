@@ -61,7 +61,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
         mock_copy_then_overwrite_core_json_files: MagicMock,
-        mock_upload_metadata_record: MagicMock,
+        mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method."""
 
@@ -84,7 +84,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             log_flag=True,
         )
-        mock_upload_metadata_record.assert_called_once_with(
+        mock_upload_record.assert_called_once_with(
             bucket=expected_bucket,
             prefix=expected_prefix,
             s3_client=mock_s3_client,
@@ -115,7 +115,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
         mock_copy_then_overwrite_core_json_files: MagicMock,
-        mock_upload_metadata_record: MagicMock,
+        mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method when None is returned from
         build_metadata_record_from_prefix."""
@@ -131,7 +131,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             bucket="aind-ephys-data-dev-u5u0i5",
         )
         mock_copy_then_overwrite_core_json_files.assert_not_called()
-        mock_upload_metadata_record.assert_not_called()
+        mock_upload_record.assert_not_called()
         mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(
             "Unable to build metadata record for: "

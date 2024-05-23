@@ -1,0 +1,23 @@
+{
+   "ResponseMetadata": {
+      "RequestId": "RequestId",
+      "HostId": "HostId",
+      "HTTPStatusCode": 200,
+      "HTTPHeaders": {
+         "x-amz-id-2": "x-amz-id-2",
+         "x-amz-request-id": "x-amz-request-id",
+         "date": "Thu, 23 May 2024 22:48:26 GMT",
+         "x-amz-bucket-region": "us-west-2",
+         "content-type": "application/xml",
+         "transfer-encoding": "chunked",
+         "server": "AmazonS3"
+      },
+      "RetryAttempts": 0
+   },
+   "IsTruncated": false,
+   "Name": "bucket",
+   "Prefix": "prefix/original_metadata/",
+   "MaxKeys": 1,
+   "EncodingType": "url",
+   "KeyCount": 0
+}

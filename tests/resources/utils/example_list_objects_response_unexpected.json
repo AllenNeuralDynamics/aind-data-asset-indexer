@@ -1,0 +1,40 @@
+{
+  "ResponseMetadata": {
+     "RequestId": "RequestId",
+     "HostId": "HostId",
+     "HTTPStatusCode": 200,
+     "HTTPHeaders": {
+        "x-amz-id-2": "x-amz-id-2",
+        "x-amz-request-id": "x-amz-request-id",
+        "date": "Thu, 23 May 2024 21:54:26 GMT",
+        "x-amz-bucket-region": "us-west-2",
+        "content-type": "application/xml",
+        "transfer-encoding": "chunked",
+        "server": "AmazonS3"
+     },
+     "RetryAttempts": 0
+  },
+  "IsTruncated": true,
+  "Contents": [
+     {
+        "Key": "prefix/original_metadata/data_description.20240522.json",
+        "LastModified": "2024-05-23 01:17:29+00:00",
+        "ETag": "ETag1",
+        "Size": 1385,
+        "StorageClass": "STANDARD"
+     },
+     {
+         "Key": "prefix/original_metadata/subject.20240522.json",
+         "LastModified": "2024-05-23 01:17:29+00:00",
+         "ETag": "ETag2",
+         "Size": 1385,
+         "StorageClass": "STANDARD"
+      }
+  ],
+  "Name": "bucket",
+  "Prefix": "prefix/original_metadata/",
+  "MaxKeys": 1,
+  "EncodingType": "url",
+  "KeyCount": 1,
+  "NextContinuationToken": "NextContinuationToken"
+}

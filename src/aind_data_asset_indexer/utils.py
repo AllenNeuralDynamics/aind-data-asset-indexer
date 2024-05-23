@@ -17,6 +17,8 @@ from mypy_boto3_s3.type_defs import (
 )
 from pymongo import MongoClient
 
+COPY_ORIGINAL_MD_SUBDIR = "original_metadata"
+
 # TODO: This would be better if it was available in aind-data-schema
 core_schema_file_names = [
     s.default_filename()
@@ -101,16 +103,20 @@ def create_metadata_object_key(prefix: str) -> str:
 
 def create_core_schema_object_keys_map(
     prefix: str,
+    target_prefix: str,
 ) -> Dict[str, Dict[str, str]]:
     """
     For a given s3 prefix, return a dictionary of { core_schema_file_name:
     { source: source_object_key, target: target_object_key } } for all possible core schema files in s3.
     The source is the original core schema object key.
-    The target is in a sub-directory and has a date stamp appended.
+    The target is in the target_prefix and has a date stamp appended.
     Parameters
     ----------
     prefix : str
-      For example, ecephys_123456_2020-10-10_01-02-03
+      The source prefix. For example, ecephys_123456_2020-10-10_01-02-03
+    target_prefix : str
+      The target prefix for target files.
+      For example, ecephys_123456_2020-10-10_01-02-03/original_metadata.
 
     Returns
     -------
@@ -126,14 +132,12 @@ def create_core_schema_object_keys_map(
     }
 
     """
-    target_sub_dir = "original_metadata"
     date_stamp = datetime.now().strftime("%Y%m%d")
-    stripped_prefix = prefix.strip("/")
     object_keys = dict()
     for s in core_schema_file_names:
-        source = create_object_key(prefix=stripped_prefix, filename=s)
+        source = create_object_key(prefix=prefix, filename=s)
         target = create_object_key(
-            prefix=f"{stripped_prefix}/{target_sub_dir}",
+            prefix=target_prefix,
             filename=s.replace(".json", f".{date_stamp}.json"),
         )
         object_keys[s] = {"source": source, "target": target}
@@ -339,6 +343,34 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
         else:
             raise e
 
+
+def does_s3_prefix_exist(s3_client: S3Client, bucket: str, prefix: str) -> bool:
+    """
+    Check if a prefix (folder) exists in a bucket. Uses the list_objects
+    operation with MaxKeys of 1 to check if the prefix exists.
+    
+    Parameters
+    ----------
+    s3_client : S3Client
+    bucket : str
+    prefix : str
+      For example, behavior_655019_2020-10-10_01-00-23
+
+    Returns
+    -------
+    bool
+      True if the prefix (folder) exists, otherwise False.
+
+    """
+    # Add a trailing slash so that we do not match s3 objects
+    prefix_to_check = prefix if prefix.endswith("/") else f"{prefix}/"
+    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix_to_check, MaxKeys=1)
+    if "Contents" in response:
+        if len(response["Contents"]) != 1:
+            raise ValueError("Unexpected number of objects returned")
+        return True
+    else:
+        return False
 
 def get_dict_of_file_info(
     s3_client: S3Client, bucket: str, keys: List[str]
@@ -561,7 +593,19 @@ def copy_then_overwrite_core_json_files(
 
     """
     md_record_json = json.loads(metadata_json)
-    object_keys = create_core_schema_object_keys_map(prefix)
+    tgt_copy_prefix = create_object_key(prefix, COPY_ORIGINAL_MD_SUBDIR)
+    if does_s3_prefix_exist(
+        s3_client=s3_client,
+        bucket=bucket,
+        prefix=tgt_copy_prefix
+    ):
+        _log_message(
+            message=(
+                f"Target copy folder s3://{bucket}/{tgt_copy_prefix} already exists."
+            ),
+            log_flag=log_flag,
+        )
+    object_keys = create_core_schema_object_keys_map(prefix, tgt_copy_prefix)
     for core_schema_filename, key_mapping in object_keys.items():
         source = key_mapping["source"]
         target = key_mapping["target"]
@@ -609,13 +653,11 @@ def copy_then_overwrite_core_json_files(
                     log_level=logging.WARNING,
                     log_flag=log_flag,
                 )
-                response = s3_client.delete_object(
-                    Bucket=bucket, Key=source
-                )
+                response = s3_client.delete_object(Bucket=bucket, Key=source)
                 _log_message(message=response, log_flag=log_flag)
         else:
             _log_message(
-                message=f"s3://{bucket}/{source} does not exist. Skipping copy.",
+                message=f"Source file s3://{bucket}/{source} does not exist. Skipping copy.",
                 log_flag=log_flag,
             )
 

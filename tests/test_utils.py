@@ -22,6 +22,7 @@ from aind_data_asset_indexer.utils import (
     create_object_key,
     does_metadata_record_exist_in_docdb,
     does_s3_object_exist,
+    does_s3_prefix_exist,
     download_json_file_from_s3,
     get_dict_of_file_info,
     get_record_from_docdb,
@@ -79,6 +80,19 @@ class TestUtils(unittest.TestCase):
             "example_head_object_response3.json"
         )
 
+        example_list_objects_response = load_json_file(
+            "example_list_objects_response.json"
+        )
+        example_list_objects_response_false = load_json_file(
+            "example_list_objects_response_false.json"
+        )
+        example_list_objects_response_unexpected = load_json_file(
+            "example_list_objects_response_unexpected.json"
+        )
+        cls.example_list_objects_response = example_list_objects_response
+        cls.example_list_objects_response_false = example_list_objects_response_false
+        cls.example_list_objects_response_unexpected = example_list_objects_response_unexpected
+        
         example_get_object_response1 = load_json_file(
             "example_get_object_response1.json"
         )
@@ -189,6 +203,7 @@ class TestUtils(unittest.TestCase):
     def test_create_core_schema_object_keys_map(self):
         """Tests create_core_schema_object_keys_map"""
         prefix = "prefix1/"
+        target_prefix = "prefix1/original_metadata/"
         date_stamp = datetime.now().strftime("%Y%m%d")
         expected_object_keys_map = {
             "mock_schema1.json": {
@@ -200,7 +215,7 @@ class TestUtils(unittest.TestCase):
                 "target": f"prefix1/original_metadata/mock_schema2.{date_stamp}.json",
             },
         }
-        result_object_keys_map = create_core_schema_object_keys_map(prefix)
+        result_object_keys_map = create_core_schema_object_keys_map(prefix, target_prefix)
         self.assertDictEqual(expected_object_keys_map, result_object_keys_map)
 
     def test_get_s3_bucket_and_prefix(self):
@@ -371,6 +386,55 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(
             {"Code": "403", "Message": "Forbidden"},
             e.exception.response["Error"],
+        )
+
+    @patch("boto3.client")
+    def test_does_s3_prefix_exist_true(self, mock_s3_client: MagicMock):
+        """Tests does_s3_prefix_exist when true"""
+        provided_target_prefix = "prefix/original_metadata"
+        expected_target_prefix = "prefix/original_metadata/"
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response
+        )
+        result = does_s3_prefix_exist(
+            bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+        )
+        mock_s3_client.list_objects_v2.assert_called_once_with(
+            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
+        )
+        self.assertTrue(result)
+
+    @patch("boto3.client")
+    def test_does_s3_prefix_exist_false(self, mock_s3_client: MagicMock):
+        """Tests does_s3_prefix_exist when false"""
+        provided_target_prefix = "prefix/original_metadata"
+        expected_target_prefix = "prefix/original_metadata/"
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response_false
+        )
+        result = does_s3_prefix_exist(
+            bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+        )
+        mock_s3_client.list_objects_v2.assert_called_once_with(
+            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
+        )
+        self.assertFalse(result)
+
+
+    @patch("boto3.client")
+    def test_does_s3_prefix_exist_error(self, mock_s3_client: MagicMock):
+        """Tests does_s3_prefix_exist when response is unexpected"""
+        provided_target_prefix = "prefix/original_metadata"
+        expected_target_prefix = "prefix/original_metadata/"
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response_unexpected
+        )
+        with self.assertRaises(ValueError) as e:
+            does_s3_prefix_exist(
+                bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+            )
+        mock_s3_client.list_objects_v2.assert_called_once_with(
+            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
         )
 
     @patch("boto3.client")
@@ -615,14 +679,16 @@ class TestUtils(unittest.TestCase):
         md["last_modified"] = self.example_metadata_nd["last_modified"]
         self.assertEqual(self.example_metadata_nd, md)
 
-    @patch("aind_data_asset_indexer.utils." "upload_json_str_to_s3")
-    @patch("aind_data_asset_indexer.utils." "does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
+    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
     def test_copy_then_overwrite_core_json_files(
         self,
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
@@ -632,6 +698,8 @@ class TestUtils(unittest.TestCase):
         expected_date_stamp = datetime.now().strftime("%Y%m%d")
 
         # example_md_record only has processing and subject fields
+        # assume /original_metadata already exists
+        mock_does_s3_prefix_exist.return_value = True
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
@@ -646,6 +714,17 @@ class TestUtils(unittest.TestCase):
             bucket=expected_bucket,
             prefix=expected_prefix,
             s3_client=mock_s3_client,
+        )
+        # assert that an existing /original_metadata folder was detected
+        mock_does_s3_prefix_exist.assert_called_once_with(
+            bucket=expected_bucket,
+            prefix=f"{expected_prefix}/original_metadata",
+            s3_client=mock_s3_client,
+        )
+        self.assertEqual(
+            f"Target copy folder s3://{expected_bucket}/{expected_prefix}"
+            f"/original_metadata already exists.",
+            mock_log_message.call_args_list[0][1]["message"],
         )
         # assert that the original core jsons were copied
         mock_does_s3_object_exist.assert_called()
@@ -695,14 +774,16 @@ class TestUtils(unittest.TestCase):
         ]
         self.assertEqual([], respose_logs)
 
-    @patch("aind_data_asset_indexer.utils." "upload_json_str_to_s3")
-    @patch("aind_data_asset_indexer.utils." "does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
+    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
     def test_copy_then_overwrite_core_json_files_mismatch(
         self,
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
@@ -714,6 +795,8 @@ class TestUtils(unittest.TestCase):
 
         # example_md_record only has processing and subject fields
         # assume rig.json exists but is corrupt
+        # assume /original_metadata does not exist
+        mock_does_s3_prefix_exist.return_value = False
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
