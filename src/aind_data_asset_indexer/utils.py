@@ -400,7 +400,8 @@ def is_dict_corrupt(input_dict: dict) -> bool:
         if "$" in key or "." in key:
             return True
         elif isinstance(input_dict[key], dict):
-            return is_dict_corrupt(input_dict[key])
+            if is_dict_corrupt(input_dict[key]):
+                return True
     return False
 
 

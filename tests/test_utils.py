@@ -111,10 +111,13 @@ class TestUtils(unittest.TestCase):
         good_contents = {"a": 1, "b": {"c": 2, "d": 3}}
         bad_contents1 = {"a.1": 1, "b": {"c": 2, "d": 3}}
         bad_contents2 = {"a": 1, "b": {"c": 2, "$d": 3}}
-
+        bad_contents3 = {"a": 1, "b": {"c": 2, "d": 3}, "$e": 4}
+        bad_contents4 = {"a": 1, "b": {"c": {"d": 3}, "$e": 4}}
         self.assertFalse(is_dict_corrupt(good_contents))
         self.assertTrue(is_dict_corrupt(bad_contents1))
         self.assertTrue(is_dict_corrupt(bad_contents2))
+        self.assertTrue(is_dict_corrupt(bad_contents3))
+        self.assertTrue(is_dict_corrupt(bad_contents4))
 
     def test_create_object_key(self):
         """Tests create_object_key"""
