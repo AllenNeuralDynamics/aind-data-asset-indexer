@@ -53,6 +53,18 @@ class TestUtils(unittest.TestCase):
             with open(TEST_UTILS_DIR / filename, "r") as f:
                 return json.load(f)
 
+        example_core_files = [
+            "acquisition",
+            "data_description",
+            "instrument",
+            "procedures",
+            "processing",
+            "rig",
+            "session",
+            "subject",
+            "mri_session",
+        ]
+        cls.example_core_files = example_core_files
         example_pages = load_json_file("example_pages_response.json")
         cls.example_pages = example_pages
 
@@ -203,29 +215,58 @@ class TestUtils(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.utils.core_schema_file_names",
-        new=["mock_schema1.json", "mock_schema2.json"],
+        new=["mock_schema1.json", "mock_schema2.json", "mock_schema3.json"],
     )
-    def test_create_core_schema_object_keys_map(self):
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
+    @patch("boto3.client")
+    def test_create_core_schema_object_keys_map(
+        self, mock_s3_client: MagicMock, mock_get_dict_of_file_info: MagicMock
+    ):
         """Tests create_core_schema_object_keys_map"""
         prefix = "prefix1/"
         target_prefix = "prefix1/original_metadata/"
-        date_stamp = datetime.now().strftime("%Y%m%d")
+        mock_get_dict_of_file_info.return_value = {
+            "prefix1/mock_schema1.json": None,
+            "prefix1/mock_schema2.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"f4827f025e79bafeb6947e14c4e3b51a"',
+                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
+            },
+            "prefix1/mock_schema3.json": {
+                "last_modified": datetime(
+                    2024, 5, 20, 5, 12, 12, tzinfo=timezone.utc
+                ),
+                "e_tag": '"92734946c64fc87408ef79e5e92937bc"',
+                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
+            },
+        }
         expected_object_keys_map = {
             "mock_schema1.json": {
                 "source": "prefix1/mock_schema1.json",
                 "target": (
-                    f"prefix1/original_metadata/mock_schema1.{date_stamp}.json"
+                    "prefix1/original_metadata/mock_schema1.unknown.json"
                 ),
             },
             "mock_schema2.json": {
                 "source": "prefix1/mock_schema2.json",
                 "target": (
-                    f"prefix1/original_metadata/mock_schema2.{date_stamp}.json"
+                    "prefix1/original_metadata/mock_schema2.20231104.json"
+                ),
+            },
+            "mock_schema3.json": {
+                "source": "prefix1/mock_schema3.json",
+                "target": (
+                    f"prefix1/original_metadata/mock_schema3.20240520.json"
                 ),
             },
         }
         result_object_keys_map = create_core_schema_object_keys_map(
-            prefix, target_prefix
+            s3_client=mock_s3_client,
+            bucket="some_bucket",
+            prefix=prefix,
+            target_prefix=target_prefix,
         )
         self.assertDictEqual(expected_object_keys_map, result_object_keys_map)
 
@@ -851,6 +892,7 @@ class TestUtils(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.create_core_schema_object_keys_map")
     @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
@@ -859,41 +901,55 @@ class TestUtils(unittest.TestCase):
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_prefix_exist: MagicMock,
+        mock_create_core_keys_map: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
         """Tests copy_then_overwrite_core_json_files method."""
-        expected_bucket = "aind-ephys-data-dev-u5u0i5"
-        expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
-        expected_date_stamp = datetime.now().strftime("%Y%m%d")
+        bucket = "aind-ephys-data-dev-u5u0i5"
+        pfx = "ecephys_642478_2023-01-17_13-56-29"
 
         # example_md_record only has processing and subject fields
         # assume /original_metadata already exists
         mock_does_s3_prefix_exist.return_value = True
+        mock_object_keys_map = {
+            f"{file}.json": {
+                "source": f"{pfx}/{file}.json",
+                "target": f"{pfx}/original_metadata/{file}.unknown.json",
+            }
+            for file in self.example_core_files
+        }
+        mock_object_keys_map["processing.json"][
+            "target"
+        ] = f"{pfx}/original_metadata/processing.20231104.json"
+        mock_object_keys_map["subject.json"][
+            "target"
+        ] = f"{pfx}/original_metadata/subject.20240202.json"
+        mock_create_core_keys_map.return_value = mock_object_keys_map
 
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
-                f"{expected_prefix}/processing.json",
-                f"{expected_prefix}/subject.json",
+                f"{pfx}/processing.json",
+                f"{pfx}/subject.json",
             ]
             return True if key in mock_exist_files else False
 
         mock_does_s3_object_exist.side_effect = mock_source_files_exist
         copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
-            bucket=expected_bucket,
-            prefix=expected_prefix,
+            bucket=bucket,
+            prefix=pfx,
             s3_client=mock_s3_client,
         )
         # assert that an existing /original_metadata folder was detected
         mock_does_s3_prefix_exist.assert_called_once_with(
-            bucket=expected_bucket,
-            prefix=f"{expected_prefix}/original_metadata",
+            bucket=bucket,
+            prefix=f"{pfx}/original_metadata",
             s3_client=mock_s3_client,
         )
         self.assertEqual(
-            f"Target copy folder s3://{expected_bucket}/{expected_prefix}"
+            f"Target copy folder s3://{bucket}/{pfx}"
             f"/original_metadata already exists.",
             mock_log_message.call_args_list[0][1]["message"],
         )
@@ -902,26 +958,20 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.copy_object.assert_has_calls(
             [
                 call(
-                    Bucket=expected_bucket,
+                    Bucket=bucket,
                     CopySource={
-                        "Bucket": expected_bucket,
-                        "Key": f"{expected_prefix}/processing.json",
+                        "Bucket": bucket,
+                        "Key": f"{pfx}/processing.json",
                     },
-                    Key=(
-                        f"{expected_prefix}/original_metadata/"
-                        f"processing.{expected_date_stamp}.json"
-                    ),
+                    Key=f"{pfx}/original_metadata/processing.20231104.json",
                 ),
                 call(
-                    Bucket=expected_bucket,
+                    Bucket=bucket,
                     CopySource={
-                        "Bucket": expected_bucket,
-                        "Key": f"{expected_prefix}/subject.json",
+                        "Bucket": bucket,
+                        "Key": f"{pfx}/subject.json",
                     },
-                    Key=(
-                        f"{expected_prefix}/original_metadata/"
-                        f"subject.{expected_date_stamp}.json"
-                    ),
+                    Key=f"{pfx}/original_metadata/subject.20240202.json",
                 ),
             ]
         )
@@ -929,16 +979,16 @@ class TestUtils(unittest.TestCase):
         mock_upload_core_record.assert_has_calls(
             [
                 call(
-                    bucket=expected_bucket,
-                    object_key=f"{expected_prefix}/processing.json",
+                    bucket=bucket,
+                    object_key=f"{pfx}/processing.json",
                     json_str=json.dumps(
                         self.example_metadata_nd["processing"]
                     ),
                     s3_client=mock_s3_client,
                 ),
                 call(
-                    bucket=expected_bucket,
-                    object_key=f"{expected_prefix}/subject.json",
+                    bucket=bucket,
+                    object_key=f"{pfx}/subject.json",
                     json_str=json.dumps(self.example_metadata_nd["subject"]),
                     s3_client=mock_s3_client,
                 ),
@@ -953,6 +1003,7 @@ class TestUtils(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.utils.create_core_schema_object_keys_map")
     @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
@@ -961,34 +1012,51 @@ class TestUtils(unittest.TestCase):
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_prefix_exist: MagicMock,
+        mock_create_core_keys_map: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
         """Tests copy_then_overwrite_core_json_files method when an original
         core json does not exist in generated metadata.nd.json."""
-        expected_bucket = "aind-ephys-data-dev-u5u0i5"
-        expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
-        expected_date_stamp = datetime.now().strftime("%Y%m%d")
+        bucket = "aind-ephys-data-dev-u5u0i5"
+        pfx = "ecephys_642478_2023-01-17_13-56-29"
 
         # example_md_record only has processing and subject fields
         # assume rig.json exists but is corrupt
         # assume /original_metadata does not exist
         mock_does_s3_prefix_exist.return_value = False
+        mock_object_keys_map = {
+            f"{file}.json": {
+                "source": f"{pfx}/{file}.json",
+                "target": f"{pfx}/original_metadata/{file}.unknown.json",
+            }
+            for file in self.example_core_files
+        }
+        mock_object_keys_map["processing.json"][
+            "target"
+        ] = f"{pfx}/original_metadata/processing.20231104.json"
+        mock_object_keys_map["subject.json"][
+            "target"
+        ] = f"{pfx}/original_metadata/subject.20240202.json"
+        mock_object_keys_map["rig.json"][
+            "target"
+        ] = f"{pfx}/original_metadata/rig.20220505.json"
+        mock_create_core_keys_map.return_value = mock_object_keys_map
 
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
-                f"{expected_prefix}/processing.json",
-                f"{expected_prefix}/rig.json",
-                f"{expected_prefix}/subject.json",
+                f"{pfx}/processing.json",
+                f"{pfx}/rig.json",
+                f"{pfx}/subject.json",
             ]
             return True if key in mock_exist_files else False
 
         mock_does_s3_object_exist.side_effect = mock_source_files_exist
         copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
-            bucket=expected_bucket,
-            prefix=expected_prefix,
+            bucket=bucket,
+            prefix=pfx,
             s3_client=mock_s3_client,
         )
         # assert that the original core jsons were copied, including
@@ -997,37 +1065,28 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.copy_object.assert_has_calls(
             [
                 call(
-                    Bucket=expected_bucket,
+                    Bucket=bucket,
                     CopySource={
-                        "Bucket": expected_bucket,
-                        "Key": f"{expected_prefix}/processing.json",
+                        "Bucket": bucket,
+                        "Key": f"{pfx}/processing.json",
                     },
-                    Key=(
-                        f"{expected_prefix}/original_metadata/"
-                        f"processing.{expected_date_stamp}.json"
-                    ),
+                    Key=(f"{pfx}/original_metadata/processing.20231104.json"),
                 ),
                 call(
-                    Bucket=expected_bucket,
+                    Bucket=bucket,
                     CopySource={
-                        "Bucket": expected_bucket,
-                        "Key": f"{expected_prefix}/rig.json",
+                        "Bucket": bucket,
+                        "Key": f"{pfx}/rig.json",
                     },
-                    Key=(
-                        f"{expected_prefix}/original_metadata/"
-                        f"rig.{expected_date_stamp}.json"
-                    ),
+                    Key=(f"{pfx}/original_metadata/rig.20220505.json"),
                 ),
                 call(
-                    Bucket=expected_bucket,
+                    Bucket=bucket,
                     CopySource={
-                        "Bucket": expected_bucket,
-                        "Key": f"{expected_prefix}/subject.json",
+                        "Bucket": bucket,
+                        "Key": f"{pfx}/subject.json",
                     },
-                    Key=(
-                        f"{expected_prefix}/original_metadata/"
-                        f"subject.{expected_date_stamp}.json"
-                    ),
+                    Key=(f"{pfx}/original_metadata/subject.20240202.json"),
                 ),
             ]
         )
@@ -1035,16 +1094,16 @@ class TestUtils(unittest.TestCase):
         mock_upload_core_record.assert_has_calls(
             [
                 call(
-                    bucket=expected_bucket,
-                    object_key=f"{expected_prefix}/processing.json",
+                    bucket=bucket,
+                    object_key=f"{pfx}/processing.json",
                     json_str=json.dumps(
                         self.example_metadata_nd["processing"]
                     ),
                     s3_client=mock_s3_client,
                 ),
                 call(
-                    bucket=expected_bucket,
-                    object_key=f"{expected_prefix}/subject.json",
+                    bucket=bucket,
+                    object_key=f"{pfx}/subject.json",
                     json_str=json.dumps(self.example_metadata_nd["subject"]),
                     s3_client=mock_s3_client,
                 ),
@@ -1052,14 +1111,14 @@ class TestUtils(unittest.TestCase):
         )
         # assert the corrupt core json was deleted
         mock_s3_client.delete_object.assert_called_once_with(
-            Bucket=expected_bucket, Key=f"{expected_prefix}/rig.json"
+            Bucket=bucket, Key=f"{pfx}/rig.json"
         )
-        expected_loc = f"s3://{expected_bucket}/{expected_prefix}/rig.json"
+        expected_loc = f"s3://{bucket}/{pfx}/rig.json"
         expected_warn_log = {
             "log_flag": False,
             "log_level": logging.WARN,
             "message": (
-                f"rig not found in metadata.nd.json for {expected_prefix} but "
+                f"rig not found in metadata.nd.json for {pfx} but "
                 f"{expected_loc} exists! Deleting."
             ),
         }

@@ -3,7 +3,6 @@
 import hashlib
 import json
 import logging
-from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
@@ -147,7 +146,10 @@ def create_core_schema_object_keys_map(
     for source_key, file_info in s3_file_responses.items():
         file_name = source_key.split("/")[-1]
         source = source_key
-        date_stamp = file_info["last_modified"].strftime("%Y%m%d")
+        if file_info is not None:
+            date_stamp = file_info["last_modified"].strftime("%Y%m%d")
+        else:
+            date_stamp = "unknown"
         target = create_object_key(
             prefix=target_prefix,
             filename=file_name.replace(".json", f".{date_stamp}.json"),
@@ -624,7 +626,12 @@ def copy_then_overwrite_core_json_files(
             ),
             log_flag=log_flag,
         )
-    object_keys = create_core_schema_object_keys_map(prefix, tgt_copy_prefix)
+    object_keys = create_core_schema_object_keys_map(
+        s3_client=s3_client,
+        bucket=bucket,
+        prefix=prefix,
+        target_prefix=tgt_copy_prefix,
+    )
     for file_name, key_mapping in object_keys.items():
         source = key_mapping["source"]
         target = key_mapping["target"]
