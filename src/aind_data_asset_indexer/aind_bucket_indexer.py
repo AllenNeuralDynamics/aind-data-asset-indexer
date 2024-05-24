@@ -18,6 +18,7 @@ from aind_data_asset_indexer.utils import (
     build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
+    copy_then_overwrite_core_json_files,
     create_metadata_object_key,
     does_s3_object_exist,
     download_json_file_from_s3,
@@ -81,9 +82,7 @@ class AindIndexBucketJob:
 
         """
         bucket = self.job_settings.s3_bucket
-        if not is_record_location_valid(
-            docdb_record, bucket
-        ):
+        if not is_record_location_valid(docdb_record, bucket):
             logging.warning(
                 f"Record location {docdb_record.get('location')} is not valid "
                 f"for bucket {bucket}!"
@@ -206,9 +205,7 @@ class AindIndexBucketJob:
         """
         # Check if metadata record exists
         bucket = self.job_settings.s3_bucket
-        location = get_s3_location(
-            bucket=bucket, prefix=s3_prefix
-        )
+        location = get_s3_location(bucket=bucket, prefix=s3_prefix)
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
         else:
@@ -247,6 +244,14 @@ class AindIndexBucketJob:
                             upsert=True,
                         )
                         logging.info(response.raw_result)
+                        # ensure core jsons are synced with metadata.nd.json
+                        copy_then_overwrite_core_json_files(
+                            metadata_json=json.dumps(json_contents),
+                            bucket=bucket,
+                            prefix=s3_prefix,
+                            s3_client=s3_client,
+                            log_flag=True,
+                        )
                     else:
                         logging.warning(
                             f"Location field in record "
@@ -265,6 +270,8 @@ class AindIndexBucketJob:
                 )
         else:  # metadata.nd.json file does not exist in S3. Create a new one.
             # Build a new metadata file, save it to S3 and save it to DocDb.
+            # Also copy the original core json files to a subfolder and then
+            # overwrite the top-level jsons with the new fields from metadata.nd.json.
             new_metadata_contents = build_metadata_record_from_prefix(
                 bucket=bucket,
                 prefix=s3_prefix,
@@ -272,6 +279,13 @@ class AindIndexBucketJob:
             )
             if new_metadata_contents is not None:
                 # noinspection PyTypeChecker
+                copy_then_overwrite_core_json_files(
+                    metadata_json=new_metadata_contents,
+                    bucket=bucket,
+                    prefix=s3_prefix,
+                    s3_client=s3_client,
+                    log_flag=True,
+                )
                 s3_response = upload_metadata_json_str_to_s3(
                     metadata_json=new_metadata_contents,
                     bucket=bucket,
