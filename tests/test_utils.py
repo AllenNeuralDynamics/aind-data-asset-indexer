@@ -258,7 +258,7 @@ class TestUtils(unittest.TestCase):
             "mock_schema3.json": {
                 "source": "prefix1/mock_schema3.json",
                 "target": (
-                    f"prefix1/original_metadata/mock_schema3.20240520.json"
+                    "prefix1/original_metadata/mock_schema3.20240520.json"
                 ),
             },
         }
