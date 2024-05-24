@@ -99,7 +99,8 @@ class AindIndexBucketJob:
             )
             if not does_file_exist_in_s3:
                 logging.warning(
-                    f"File not found in S3 at s3://{s3_bucket}/{object_key}! "
+                    f"File not found in S3 at "
+                    f"{get_s3_location(s3_bucket, object_key)}! "
                     f"Removing metadata record from DocDb."
                 )
                 db = docdb_client[self.job_settings.doc_db_db_name]
@@ -145,6 +146,10 @@ class AindIndexBucketJob:
                             s3_client=s3_client,
                             log_flag=True,
                         )
+                    logging.info(
+                        f"Uploading metadata record for: "
+                        f"{docdb_record['location']}"
+                    )
                     response = upload_metadata_json_str_to_s3(
                         bucket=s3_bucket,
                         prefix=prefix,
@@ -154,8 +159,8 @@ class AindIndexBucketJob:
                     logging.info(response)
                 else:
                     logging.info(
-                        f"Objects are same. Skipping saving to "
-                        f"s3://{bucket}/{prefix}."
+                        f"Metadata records are same. Skipping saving to "
+                        f"{docdb_record['location']}."
                     )
 
     def _dask_task_to_process_record_list(
@@ -248,6 +253,7 @@ class AindIndexBucketJob:
             # in the metadata record matches the location the record lives in
             # Otherwise, log a warning that the metadata record location does
             # not make sense.
+            s3_full_location = get_s3_location(bucket, object_key)
             if record_id is None:
                 json_contents = download_json_file_from_s3(
                     s3_client=s3_client,
@@ -290,11 +296,11 @@ class AindIndexBucketJob:
                 else:
                     logging.warning(
                         f"Unable to download file from S3 for: "
-                        f"s3://{bucket}/{object_key}!"
+                        f"{s3_full_location}!"
                     )
             else:
                 logging.info(
-                    f"Record for s3://{bucket}/{object_key} "
+                    f"Metadata record for {s3_full_location} "
                     f"already exists in DocDb. Skipping."
                 )
         else:  # metadata.nd.json file does not exist in S3. Create a new one.
@@ -315,6 +321,7 @@ class AindIndexBucketJob:
                     s3_client=s3_client,
                     log_flag=True,
                 )
+                logging.info(f"Uploading metadata record for: {location}")
                 s3_response = upload_metadata_json_str_to_s3(
                     metadata_json=new_metadata_contents,
                     bucket=bucket,

@@ -607,9 +607,10 @@ def copy_then_overwrite_core_json_files(
             log_flag=log_flag,
         )
     object_keys = create_core_schema_object_keys_map(prefix, tgt_copy_prefix)
-    for core_schema_filename, key_mapping in object_keys.items():
+    for file_name, key_mapping in object_keys.items():
         source = key_mapping["source"]
         target = key_mapping["target"]
+        source_location = get_s3_location(bucket=bucket, prefix=source)
         if does_s3_object_exist(
             s3_client=s3_client, bucket=bucket, key=source
         ):
@@ -625,21 +626,21 @@ def copy_then_overwrite_core_json_files(
             )
             _log_message(message=response, log_flag=log_flag)
             # Overwrite core schema fields from metadata.nd.json to the core json files.
-            core_field = core_schema_filename.replace(".json", "")
+            field_name = file_name.replace(".json", "")
             if (
-                core_field in md_record_json
-                and md_record_json[core_field] is not None
+                field_name in md_record_json
+                and md_record_json[field_name] is not None
             ):
-                core_json = md_record_json[core_field]
-                core_json_str = json.dumps(core_json)
+                field_contents = md_record_json[field_name]
+                field_contents_str = json.dumps(field_contents)
                 _log_message(
-                    message=f"Uploading new {core_field} to s3://{bucket}/{source}",
+                    message=f"Uploading new {field_name} to {source_location}",
                     log_flag=log_flag,
                 )
                 response = upload_json_str_to_s3(
                     bucket=bucket,
                     object_key=source,
-                    json_str=core_json_str,
+                    json_str=field_contents_str,
                     s3_client=s3_client,
                 )
                 _log_message(message=response, log_flag=log_flag)
@@ -648,8 +649,8 @@ def copy_then_overwrite_core_json_files(
                 # Since a copy has been made already, we can delete it from the top level
                 _log_message(
                     message=(
-                        f"{core_field} not found in metadata.nd.json for {prefix} but "
-                        f"s3://{bucket}/{source} exists! Deleting."
+                        f"{field_name} not found in metadata.nd.json for "
+                        f"{prefix} but {source_location} exists! Deleting."
                     ),
                     log_level=logging.WARNING,
                     log_flag=log_flag,
@@ -658,7 +659,10 @@ def copy_then_overwrite_core_json_files(
                 _log_message(message=response, log_flag=log_flag)
         else:
             _log_message(
-                message=f"Source file s3://{bucket}/{source} does not exist. Skipping copy.",
+                message=(
+                    f"Source file {source_location} does not exist. "
+                    f"Skipping copy."
+                ),
                 log_flag=log_flag,
             )
 
@@ -701,59 +705,77 @@ def sync_core_json_files(
     core_files_infos = get_dict_of_file_info(
         s3_client=s3_client, bucket=bucket, keys=core_files_keys
     )
-    for s in core_schema_file_names:
-        object_key = create_object_key(prefix, s)
-        field_name = s.replace(".json", "")
-        core_field = md_record_json[field_name]
-        if core_field is not None:
-            core_field_json = json.dumps(core_field)
+    for file_name in core_schema_file_names:
+        object_key = create_object_key(prefix, file_name)
+        field_name = file_name.replace(".json", "")
+        location = get_s3_location(bucket=bucket, prefix=object_key)
+        if (
+            field_name in md_record_json
+            and md_record_json[field_name] is not None
+        ):
+            field_contents = md_record_json[field_name]
+            field_contents_str = json.dumps(field_contents)
             # Core schema jsons are created if they don't already exist.
-            if core_files_infos[s] is None:
+            if core_files_infos[object_key] is None:
                 _log_message(
-                    message=f"Uploading new {field_name} to s3://{bucket}/{object_key}",
+                    message=(f"Uploading new {field_name} to {location}"),
                     log_flag=log_flag,
                 )
                 response = upload_json_str_to_s3(
                     bucket=bucket,
                     object_key=object_key,
-                    json_str=core_field_json,
+                    json_str=field_contents_str,
                     s3_client=s3_client,
                 )
                 _log_message(message=response, log_flag=log_flag)
             else:
-                # Core schema jsons are only updated if their contents are outdated.
-                s3_object_hash = core_files_infos[s]["e_tag"].strip('"')
-                core_field_md5_hash = compute_md5_hash(core_field_json)
+                s3_object_hash = core_files_infos[object_key]["e_tag"].strip(
+                    '"'
+                )
+                core_field_md5_hash = compute_md5_hash(field_contents_str)
                 if core_field_md5_hash != s3_object_hash:
                     _log_message(
-                        message=f"Uploading updated {field_name} to s3://{bucket}/{object_key}",
+                        message=(
+                            f"Uploading updated {field_name} to {location}"
+                        ),
                         log_flag=log_flag,
                     )
                     response = upload_json_str_to_s3(
                         bucket=bucket,
                         object_key=object_key,
-                        json_str=core_field_json,
+                        json_str=field_contents_str,
                         s3_client=s3_client,
                     )
                     _log_message(message=response, log_flag=log_flag)
                 else:
                     _log_message(
-                        message=f"{field_name} is up-to-date in s3://{bucket}/{object_key}. Skipping.",
+                        message=(
+                            f"{field_name} is up-to-date in {location}. "
+                            f"Skipping."
+                        ),
                         log_flag=log_flag,
                     )
         else:
-            # If a core field is None in metadata.nd.json, then the
-            # core schema json will be deleted.
-            _log_message(
-                message=(
-                    f"{field_name} not found in metadata.nd.json for {prefix} but "
-                    f"s3://{bucket}/{object_key} exists! Deleting."
-                ),
-                log_level=logging.INFO,
-                log_flag=log_flag,
-            )
-            response = s3_client.delete_object(Bucket=bucket, Key=object_key)
-            _log_message(message=response, log_flag=log_flag)
+            if core_files_infos[object_key] is not None:
+                _log_message(
+                    message=(
+                        f"{field_name} not found in metadata.nd.json for "
+                        f"{prefix} but {location} exists! Deleting."
+                    ),
+                    log_flag=log_flag,
+                )
+                response = s3_client.delete_object(
+                    Bucket=bucket, Key=object_key
+                )
+                _log_message(message=response, log_flag=log_flag)
+            else:
+                _log_message(
+                    message=(
+                        f"{field_name} not found in metadata.nd.json for "
+                        f"{prefix} nor in {location}! Skipping."
+                    ),
+                    log_flag=log_flag,
+                )
 
 
 def does_metadata_record_exist_in_docdb(

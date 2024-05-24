@@ -32,6 +32,7 @@ from aind_data_asset_indexer.utils import (
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
+    sync_core_json_files,
     upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
@@ -691,6 +692,156 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(self.example_metadata_nd, md)
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.utils._log_message")
+    def test_sync_core_json_files(
+        self,
+        mock_log_message: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
+        mock_upload_core_record: MagicMock,
+    ):
+        """Tests sync_core_json_files method."""
+        expected_bucket = "aind-ephys-data-dev-u5u0i5"
+        pfx = "ecephys_567890_2000-01-01_04-00-00"
+        s3_loc = f"s3://{expected_bucket}/{pfx}"
+
+        # assume in docdb:
+        # data_description was added,
+        # procedures was updated
+        # processing and subject were unchanged,
+        # rig was removed,
+        # and the other core fields are None
+        md_json_from_docdb = self.example_metadata_nd1
+        md5_hash_procecures_mock_original = "1145037da6d39eda39a68fc262eb9e2d"
+        md5_hash_processing_unchanged = "7ebb961de9e9b00accfd1358e4561ec1"
+        md5_hash_rig_mock_original = "898210b082095f3a945f6bd07f37283e"
+        md5_hash_subject_unchanged = "8b8cd50a6cf1f3f667be98a69db2ad89"
+        mock_get_dict_of_file_info.return_value = {
+            f"{pfx}/acquisition.json": None,
+            f"{pfx}/data_description.json": None,
+            f"{pfx}/instrument.json": None,
+            f"{pfx}/procedures.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": f'"{md5_hash_procecures_mock_original}"',
+                "version_id": "CxVdainLIA9brzChT0AmYHwVlSHY4ptH",
+            },
+            f"{pfx}/processing.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": f'"{md5_hash_processing_unchanged}"',
+                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
+            },
+            f"{pfx}/rig.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": f'"{md5_hash_rig_mock_original}"',
+                "version_id": "y7Xtfp7pmQlBrPtaGvK2pz85RUZcMv29",
+            },
+            f"{pfx}/session.json": None,
+            f"{pfx}/subject.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": f'"{md5_hash_subject_unchanged}"',
+                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
+            },
+            f"{pfx}/mri_session.json": None,
+        }
+        mock_upload_core_record.return_value = "mock_upload_response"
+        mock_s3_client.delete_object.return_value = "mock_delete_response"
+        sync_core_json_files(
+            metadata_json=json.dumps(md_json_from_docdb),
+            bucket=expected_bucket,
+            prefix=pfx,
+            s3_client=mock_s3_client,
+        )
+        mock_get_dict_of_file_info.assert_called_once_with(
+            s3_client=mock_s3_client,
+            bucket=expected_bucket,
+            keys=[
+                f"{pfx}/acquisition.json",
+                f"{pfx}/data_description.json",
+                f"{pfx}/instrument.json",
+                f"{pfx}/procedures.json",
+                f"{pfx}/processing.json",
+                f"{pfx}/rig.json",
+                f"{pfx}/session.json",
+                f"{pfx}/subject.json",
+                f"{pfx}/mri_session.json",
+            ],
+        )
+        # assert that only new or updated core jsons were uploaded to s3
+        mock_upload_core_record.assert_has_calls(
+            [
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{pfx}/data_description.json",
+                    json_str=json.dumps(
+                        md_json_from_docdb["data_description"]
+                    ),
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    bucket=expected_bucket,
+                    object_key=f"{pfx}/procedures.json",
+                    json_str=json.dumps(md_json_from_docdb["procedures"]),
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+        # assert that deleted core field was deleted from s3
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket=expected_bucket,
+            Key=f"{pfx}/rig.json",
+        )
+        # assert correct logs for all actions
+        expected_logs = [
+            (
+                f"acquisition not found in metadata.nd.json for {pfx} nor in "
+                f"{s3_loc}/acquisition.json! Skipping."
+            ),
+            (
+                f"Uploading new data_description to {s3_loc}/"
+                "data_description.json"
+            ),
+            "mock_upload_response",
+            (
+                f"instrument not found in metadata.nd.json for {pfx} nor in "
+                f"{s3_loc}/instrument.json! Skipping."
+            ),
+            f"Uploading updated procedures to {s3_loc}/procedures.json",
+            "mock_upload_response",
+            (
+                f"processing is up-to-date in {s3_loc}/processing.json. "
+                "Skipping."
+            ),
+            (
+                f"rig not found in metadata.nd.json for {pfx} but {s3_loc}/"
+                "rig.json exists! Deleting."
+            ),
+            "mock_delete_response",
+            (
+                f"session not found in metadata.nd.json for {pfx} nor in "
+                f"{s3_loc}/session.json! Skipping."
+            ),
+            f"subject is up-to-date in {s3_loc}/subject.json. Skipping.",
+            (
+                f"mri_session not found in metadata.nd.json for {pfx} nor in "
+                f"{s3_loc}/mri_session.json! Skipping."
+            ),
+        ]
+        actual_log_messages = [
+            c[1]["message"] for c in mock_log_message.call_args_list
+        ]
+        self.assertEqual(expected_logs, actual_log_messages)
+
+    @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
     @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
@@ -779,12 +930,12 @@ class TestUtils(unittest.TestCase):
                 ),
             ]
         )
-        respose_logs = [
+        response_logs = [
             c[1]["log_level"]
             for c in mock_log_message.call_args_list
             if "log_level" in c[1]
         ]
-        self.assertEqual([], respose_logs)
+        self.assertEqual([], response_logs)
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
@@ -880,18 +1031,21 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=expected_bucket, Key=f"{expected_prefix}/rig.json"
         )
+        expected_loc = f"s3://{expected_bucket}/{expected_prefix}/rig.json"
         expected_warn_log = {
             "log_flag": False,
             "log_level": logging.WARN,
-            "message": f"rig not found in metadata.nd.json for {expected_prefix} but "
-            f"s3://{expected_bucket}/{expected_prefix}/rig.json exists! Deleting.",
+            "message": (
+                f"rig not found in metadata.nd.json for {expected_prefix} but "
+                f"{expected_loc} exists! Deleting."
+            ),
         }
-        respose_logs = [
+        response_logs = [
             c[1]
             for c in mock_log_message.call_args_list
             if "log_level" in c[1]
         ]
-        self.assertEqual([expected_warn_log], respose_logs)
+        self.assertEqual([expected_warn_log], response_logs)
 
     @patch("pymongo.MongoClient")
     def test_does_metadata_record_exist_in_docdb_true(

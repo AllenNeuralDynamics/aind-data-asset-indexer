@@ -15,6 +15,7 @@ from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     copy_then_overwrite_core_json_files,
+    get_s3_location,
     iterate_through_top_level,
     upload_metadata_json_str_to_s3,
 )
@@ -51,6 +52,7 @@ class AindPopulateMetadataJsonJob:
 
         """
         bucket = self.job_settings.s3_bucket
+        location = get_s3_location(bucket=bucket, prefix=prefix)
         md_record = build_metadata_record_from_prefix(
             prefix=prefix,
             s3_client=s3_client,
@@ -64,10 +66,7 @@ class AindPopulateMetadataJsonJob:
                 s3_client=s3_client,
                 log_flag=True,
             )
-            # Upload metadata.nd.json to s3
-            logging.info(
-                f"Uploading metadata record for s3://{bucket}/{prefix}"
-            )
+            logging.info(f"Uploading metadata record for: {location}")
             # noinspection PyTypeChecker
             response = upload_metadata_json_str_to_s3(
                 metadata_json=md_record,
@@ -78,7 +77,7 @@ class AindPopulateMetadataJsonJob:
             logging.info(response)
         else:
             logging.warning(
-                f"Unable to build metadata record for: s3://{bucket}/{prefix}!"
+                f"Unable to build metadata record for: {location}!"
             )
 
     def _dask_task_to_process_prefix_list(
