@@ -101,6 +101,8 @@ def create_metadata_object_key(prefix: str) -> str:
 
 
 def create_core_schema_object_keys_map(
+    s3_client: S3Client,
+    bucket: str,
     prefix: str,
     target_prefix: str,
 ) -> Dict[str, Dict[str, str]]:
@@ -112,6 +114,8 @@ def create_core_schema_object_keys_map(
     The target is in the target_prefix and has a date stamp appended.
     Parameters
     ----------
+    s3_client : S3Client
+    bucket : str
     prefix : str
       The source prefix. For example, ecephys_123456_2020-10-10_01-02-03
     target_prefix : str
@@ -132,15 +136,23 @@ def create_core_schema_object_keys_map(
     }
 
     """
-    date_stamp = datetime.now().strftime("%Y%m%d")
+    source_keys = [
+        create_object_key(prefix=prefix, filename=s)
+        for s in core_schema_file_names
+    ]
+    s3_file_responses = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=source_keys
+    )
     object_keys = dict()
-    for s in core_schema_file_names:
-        source = create_object_key(prefix=prefix, filename=s)
+    for source_key, file_info in s3_file_responses.items():
+        file_name = source_key.split("/")[-1]
+        source = source_key
+        date_stamp = file_info["last_modified"].strftime("%Y%m%d")
         target = create_object_key(
             prefix=target_prefix,
-            filename=s.replace(".json", f".{date_stamp}.json"),
+            filename=file_name.replace(".json", f".{date_stamp}.json"),
         )
-        object_keys[s] = {"source": source, "target": target}
+        object_keys[file_name] = {"source": source, "target": target}
     return object_keys
 
 
