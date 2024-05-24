@@ -49,6 +49,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             doc_db_password="docdb_password",
             doc_db_db_name="dbname",
             doc_db_collection_name="collection_name",
+            copy_original_md_subdir="original_metadata",
         )
         cls.basic_job_configs = basic_job_configs
         cls.basic_job = AindIndexBucketJob(job_settings=basic_job_configs)
@@ -295,6 +296,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix=expected_prefix,
             s3_client=mock_s3_client,
             log_flag=True,
+            copy_original_md_subdir="original_metadata",
         )
 
         mock_log_info.assert_has_calls(
@@ -472,6 +474,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix=expected_prefix,
             s3_client=mock_s3_client,
             log_flag=True,
+            copy_original_md_subdir="original_metadata",
         )
         mock_upload_metadata_json_str_to_s3.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
@@ -599,6 +602,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             log_flag=True,
+            copy_original_md_subdir="original_metadata",
         )
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 

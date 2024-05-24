@@ -18,8 +18,6 @@ from mypy_boto3_s3.type_defs import (
 )
 from pymongo import MongoClient
 
-COPY_ORIGINAL_MD_SUBDIR = "original_metadata"
-
 # TODO: This would be better if it was available in aind-data-schema
 core_schema_file_names = [
     s.default_filename()
@@ -572,6 +570,7 @@ def copy_then_overwrite_core_json_files(
     bucket: str,
     prefix: str,
     s3_client: S3Client,
+    copy_original_md_subdir: str = "original_metadata",
     log_flag: bool = False,
 ) -> None:
     """
@@ -591,6 +590,9 @@ def copy_then_overwrite_core_json_files(
         The S3 client object.
     log_flag: bool
         Flag indicating whether to log operations. Default is False.
+    copy_original_md_subdir : str
+        Subdirectory to copy original core schema json files to.
+        Default is 'original_metadata'.
 
     Returns
     -------
@@ -598,7 +600,8 @@ def copy_then_overwrite_core_json_files(
 
     """
     md_record_json = json.loads(metadata_json)
-    tgt_copy_prefix = create_object_key(prefix, COPY_ORIGINAL_MD_SUBDIR)
+    tgt_copy_subdir = copy_original_md_subdir.strip("/")
+    tgt_copy_prefix = create_object_key(prefix, tgt_copy_subdir)
     if does_s3_prefix_exist(
         s3_client=s3_client, bucket=bucket, prefix=tgt_copy_prefix
     ):

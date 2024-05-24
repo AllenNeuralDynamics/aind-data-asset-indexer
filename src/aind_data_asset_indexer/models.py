@@ -21,6 +21,12 @@ class IndexJobSettings(BaseSettings):
             "set to None, then all records will be processed."
         ),
     )
+    copy_original_md_subdir: str = Field(
+        default="original_metadata",
+        description=(
+            "Subdirectory to copy original core schema json files to."
+        ),
+    )
 
     @classmethod
     def from_param_store(cls, param_store_name: str):

@@ -146,6 +146,9 @@ class AindIndexBucketJob:
                             prefix=prefix,
                             s3_client=s3_client,
                             log_flag=True,
+                            copy_original_md_subdir=(
+                                self.job_settings.copy_original_md_subdir
+                            ),
                         )
                     logging.info(
                         f"Uploading metadata record for: "
@@ -297,6 +300,9 @@ class AindIndexBucketJob:
                             prefix=s3_prefix,
                             s3_client=s3_client,
                             log_flag=True,
+                            copy_original_md_subdir=(
+                                self.job_settings.copy_original_md_subdir
+                            ),
                         )
                     else:
                         logging.warning(
@@ -331,6 +337,9 @@ class AindIndexBucketJob:
                     prefix=s3_prefix,
                     s3_client=s3_client,
                     log_flag=True,
+                    copy_original_md_subdir=(
+                        self.job_settings.copy_original_md_subdir
+                    ),
                 )
                 logging.info(f"Uploading metadata record for: {location}")
                 s3_response = upload_metadata_json_str_to_s3(

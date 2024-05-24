@@ -72,6 +72,9 @@ class AindPopulateMetadataJsonJob:
                 prefix=prefix,
                 s3_client=s3_client,
                 log_flag=True,
+                copy_original_md_subdir=(
+                    self.job_settings.copy_original_md_subdir
+                ),
             )
             logging.info(f"Uploading metadata record for: {location}")
             # noinspection PyTypeChecker
