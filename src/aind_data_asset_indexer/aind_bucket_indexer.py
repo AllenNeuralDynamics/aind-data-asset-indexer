@@ -21,6 +21,7 @@ from aind_data_asset_indexer.utils import (
     copy_then_overwrite_core_json_files,
     create_metadata_object_key,
     does_s3_object_exist,
+    does_s3_prefix_exist,
     download_json_file_from_s3,
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
@@ -28,6 +29,7 @@ from aind_data_asset_indexer.utils import (
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
+    sync_core_json_files,
     upload_metadata_json_str_to_s3,
 )
 
@@ -118,6 +120,31 @@ class AindIndexBucketJob:
                     else s3_object_info["e_tag"].strip('"')
                 )
                 if record_md5_hash != s3_object_hash:
+                    copy_exists_in_s3 = does_s3_prefix_exist(
+                        s3_client=s3_client,
+                        bucket=s3_bucket,
+                        prefix=f"{prefix}/original_metadata",
+                    )
+                    if copy_exists_in_s3:
+                        # if /original_metadata exists, then we only need to overwrite
+                        # the top-level jsons of updated core_fields
+                        sync_core_json_files(
+                            metadata_json=record_as_json_str,
+                            bucket=s3_bucket,
+                            prefix=prefix,
+                            s3_client=s3_client,
+                            log_flag=True,
+                        )
+                    else:
+                        # if /original_metadata does not exist, then we need to copy
+                        # and overwrite all the core jsons using the new metadata.nd.json
+                        copy_then_overwrite_core_json_files(
+                            metadata_json=record_as_json_str,
+                            bucket=s3_bucket,
+                            prefix=prefix,
+                            s3_client=s3_client,
+                            log_flag=True,
+                        )
                     response = upload_metadata_json_str_to_s3(
                         bucket=s3_bucket,
                         prefix=prefix,
@@ -246,7 +273,9 @@ class AindIndexBucketJob:
                         logging.info(response.raw_result)
                         # ensure core jsons are synced with metadata.nd.json
                         copy_then_overwrite_core_json_files(
-                            metadata_json=json.dumps(json_contents),
+                            metadata_json=json.dumps(
+                                json_contents, default=str
+                            ),
                             bucket=bucket,
                             prefix=s3_prefix,
                             s3_client=s3_client,

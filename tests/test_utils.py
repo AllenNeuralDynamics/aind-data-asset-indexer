@@ -90,9 +90,13 @@ class TestUtils(unittest.TestCase):
             "example_list_objects_response_unexpected.json"
         )
         cls.example_list_objects_response = example_list_objects_response
-        cls.example_list_objects_response_false = example_list_objects_response_false
-        cls.example_list_objects_response_unexpected = example_list_objects_response_unexpected
-        
+        cls.example_list_objects_response_false = (
+            example_list_objects_response_false
+        )
+        cls.example_list_objects_response_unexpected = (
+            example_list_objects_response_unexpected
+        )
+
         example_get_object_response1 = load_json_file(
             "example_get_object_response1.json"
         )
@@ -215,7 +219,9 @@ class TestUtils(unittest.TestCase):
                 "target": f"prefix1/original_metadata/mock_schema2.{date_stamp}.json",
             },
         }
-        result_object_keys_map = create_core_schema_object_keys_map(prefix, target_prefix)
+        result_object_keys_map = create_core_schema_object_keys_map(
+            prefix, target_prefix
+        )
         self.assertDictEqual(expected_object_keys_map, result_object_keys_map)
 
     def test_get_s3_bucket_and_prefix(self):
@@ -397,7 +403,9 @@ class TestUtils(unittest.TestCase):
             self.example_list_objects_response
         )
         result = does_s3_prefix_exist(
-            bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+            bucket="a_bucket",
+            prefix=provided_target_prefix,
+            s3_client=mock_s3_client,
         )
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
@@ -413,13 +421,14 @@ class TestUtils(unittest.TestCase):
             self.example_list_objects_response_false
         )
         result = does_s3_prefix_exist(
-            bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+            bucket="a_bucket",
+            prefix=provided_target_prefix,
+            s3_client=mock_s3_client,
         )
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
         )
         self.assertFalse(result)
-
 
     @patch("boto3.client")
     def test_does_s3_prefix_exist_error(self, mock_s3_client: MagicMock):
@@ -429,9 +438,11 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.list_objects_v2.return_value = (
             self.example_list_objects_response_unexpected
         )
-        with self.assertRaises(ValueError) as e:
+        with self.assertRaises(ValueError):
             does_s3_prefix_exist(
-                bucket="a_bucket", prefix=provided_target_prefix, s3_client=mock_s3_client
+                bucket="a_bucket",
+                prefix=provided_target_prefix,
+                s3_client=mock_s3_client,
             )
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
@@ -700,6 +711,7 @@ class TestUtils(unittest.TestCase):
         # example_md_record only has processing and subject fields
         # assume /original_metadata already exists
         mock_does_s3_prefix_exist.return_value = True
+
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
@@ -709,7 +721,7 @@ class TestUtils(unittest.TestCase):
             return True if key in mock_exist_files else False
 
         mock_does_s3_object_exist.side_effect = mock_source_files_exist
-        response = copy_then_overwrite_core_json_files(
+        copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=expected_bucket,
             prefix=expected_prefix,
@@ -797,6 +809,7 @@ class TestUtils(unittest.TestCase):
         # assume rig.json exists but is corrupt
         # assume /original_metadata does not exist
         mock_does_s3_prefix_exist.return_value = False
+
         def mock_source_files_exist(s3_client, bucket, key):
             """Mock does_s3_object_exist function."""
             mock_exist_files = [
@@ -807,7 +820,7 @@ class TestUtils(unittest.TestCase):
             return True if key in mock_exist_files else False
 
         mock_does_s3_object_exist.side_effect = mock_source_files_exist
-        response = copy_then_overwrite_core_json_files(
+        copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=expected_bucket,
             prefix=expected_prefix,

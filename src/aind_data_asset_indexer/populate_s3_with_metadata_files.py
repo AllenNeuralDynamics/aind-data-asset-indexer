@@ -57,7 +57,7 @@ class AindPopulateMetadataJsonJob:
             bucket=bucket,
         )
         if md_record is not None:
-            responses = copy_then_overwrite_core_json_files(
+            copy_then_overwrite_core_json_files(
                 metadata_json=md_record,
                 bucket=bucket,
                 prefix=prefix,

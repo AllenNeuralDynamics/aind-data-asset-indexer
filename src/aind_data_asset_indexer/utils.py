@@ -344,11 +344,13 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
             raise e
 
 
-def does_s3_prefix_exist(s3_client: S3Client, bucket: str, prefix: str) -> bool:
+def does_s3_prefix_exist(
+    s3_client: S3Client, bucket: str, prefix: str
+) -> bool:
     """
     Check if a prefix (folder) exists in a bucket. Uses the list_objects
     operation with MaxKeys of 1 to check if the prefix exists.
-    
+
     Parameters
     ----------
     s3_client : S3Client
@@ -364,13 +366,16 @@ def does_s3_prefix_exist(s3_client: S3Client, bucket: str, prefix: str) -> bool:
     """
     # Add a trailing slash so that we do not match s3 objects
     prefix_to_check = prefix if prefix.endswith("/") else f"{prefix}/"
-    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix_to_check, MaxKeys=1)
+    response = s3_client.list_objects_v2(
+        Bucket=bucket, Prefix=prefix_to_check, MaxKeys=1
+    )
     if "Contents" in response:
         if len(response["Contents"]) != 1:
             raise ValueError("Unexpected number of objects returned")
         return True
     else:
         return False
+
 
 def get_dict_of_file_info(
     s3_client: S3Client, bucket: str, keys: List[str]
@@ -530,9 +535,7 @@ def build_metadata_record_from_prefix(
     s3_file_responses = get_dict_of_file_info(
         s3_client=s3_client, bucket=bucket, keys=file_keys
     )
-    record_name = (
-        prefix.strip("/") if optional_name is None else optional_name
-    )
+    record_name = prefix.strip("/") if optional_name is None else optional_name
     metadata_dict = {
         "name": record_name,
         "location": get_s3_location(bucket=bucket, prefix=prefix),
@@ -554,9 +557,9 @@ def build_metadata_record_from_prefix(
         #  original files get removed. For now, we can use model_construct
         #  until a better method is implemented in aind-data-schema. This will
         #  mark all the initial files as metadata_status=Unknown
-        metadata_dict = Metadata.model_construct(**metadata_dict).model_dump_json(
-            warnings=False, by_alias=True
-        )
+        metadata_dict = Metadata.model_construct(
+            **metadata_dict
+        ).model_dump_json(warnings=False, by_alias=True)
     except Exception:
         metadata_dict = None
     return metadata_dict
@@ -595,9 +598,7 @@ def copy_then_overwrite_core_json_files(
     md_record_json = json.loads(metadata_json)
     tgt_copy_prefix = create_object_key(prefix, COPY_ORIGINAL_MD_SUBDIR)
     if does_s3_prefix_exist(
-        s3_client=s3_client,
-        bucket=bucket,
-        prefix=tgt_copy_prefix
+        s3_client=s3_client, bucket=bucket, prefix=tgt_copy_prefix
     ):
         _log_message(
             message=(
@@ -660,6 +661,99 @@ def copy_then_overwrite_core_json_files(
                 message=f"Source file s3://{bucket}/{source} does not exist. Skipping copy.",
                 log_flag=log_flag,
             )
+
+
+def sync_core_json_files(
+    metadata_json: str,
+    bucket: str,
+    prefix: str,
+    s3_client: S3Client,
+    log_flag: bool = False,
+) -> None:
+    """
+    Sync the core schema files with the core fields from metadata.nd.json.
+    Core schema jsons are only updated if their contents are outdated.
+    Core schema jsons are created if they don't already exist.
+    If a core field is None in metadata.nd.json, then the core schema json
+    will be deleted.
+    Parameters
+    ----------
+    metadata_json : str
+        The JSON string representation of the Metadata record.
+    bucket : str
+        The name of the S3 bucket.
+    prefix : str
+        The prefix for the S3 object keys.
+    s3_client : S3Client
+        The S3 client object.
+    log_flag: bool
+        Flag indicating whether to log operations. Default is False.
+
+    Returns
+    -------
+    None
+    """
+    md_record_json = json.loads(metadata_json)
+    core_files_keys = [
+        create_object_key(prefix=prefix, filename=s)
+        for s in core_schema_file_names
+    ]
+    core_files_infos = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=core_files_keys
+    )
+    for s in core_schema_file_names:
+        object_key = create_object_key(prefix, s)
+        field_name = s.replace(".json", "")
+        core_field = md_record_json[field_name]
+        if core_field is not None:
+            core_field_json = json.dumps(core_field)
+            # Core schema jsons are created if they don't already exist.
+            if core_files_infos[s] is None:
+                _log_message(
+                    message=f"Uploading new {field_name} to s3://{bucket}/{object_key}",
+                    log_flag=log_flag,
+                )
+                response = upload_json_str_to_s3(
+                    bucket=bucket,
+                    object_key=object_key,
+                    json_str=core_field_json,
+                    s3_client=s3_client,
+                )
+                _log_message(message=response, log_flag=log_flag)
+            else:
+                # Core schema jsons are only updated if their contents are outdated.
+                s3_object_hash = core_files_infos[s]["e_tag"].strip('"')
+                core_field_md5_hash = compute_md5_hash(core_field_json)
+                if core_field_md5_hash != s3_object_hash:
+                    _log_message(
+                        message=f"Uploading updated {field_name} to s3://{bucket}/{object_key}",
+                        log_flag=log_flag,
+                    )
+                    response = upload_json_str_to_s3(
+                        bucket=bucket,
+                        object_key=object_key,
+                        json_str=core_field_json,
+                        s3_client=s3_client,
+                    )
+                    _log_message(message=response, log_flag=log_flag)
+                else:
+                    _log_message(
+                        message=f"{field_name} is up-to-date in s3://{bucket}/{object_key}. Skipping.",
+                        log_flag=log_flag,
+                    )
+        else:
+            # If a core field is None in metadata.nd.json, then the
+            # core schema json will be deleted.
+            _log_message(
+                message=(
+                    f"{field_name} not found in metadata.nd.json for {prefix} but "
+                    f"s3://{bucket}/{object_key} exists! Deleting."
+                ),
+                log_level=logging.INFO,
+                log_flag=log_flag,
+            )
+            response = s3_client.delete_object(Bucket=bucket, Key=object_key)
+            _log_message(message=response, log_flag=log_flag)
 
 
 def does_metadata_record_exist_in_docdb(
