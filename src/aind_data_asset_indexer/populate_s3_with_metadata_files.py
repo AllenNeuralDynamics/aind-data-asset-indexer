@@ -32,6 +32,10 @@ class AindPopulateMetadataJsonJob:
     3) If the name is a data asset name, then it will look inside the prefix
     4) It will create a metadata.nd.json by using any of the core json files
     it finds. Any existing metadata.nd.json will be overwritten.
+    5.1) The contents of any existing core json files will be copied to
+    /original_metadata/{core_schema}.{date_stamp}.json.
+    5.2) The core json files will be overwritten with the new fields from
+    metadata.nd.json or deleted if they are not found in metadata.nd.json.
     """
 
     def __init__(self, job_settings: IndexJobSettings):
@@ -41,6 +45,9 @@ class AindPopulateMetadataJsonJob:
     def _process_prefix(self, prefix: str, s3_client: S3Client):
         """
         For a given prefix, build a metadata record and upload it to S3.
+        Original core json files will be first copied to a subfolder,
+        and then overwritten with the new fields from metadata.nd.json,
+        or deleted if the new field is None.
         Parameters
         ----------
         prefix : str

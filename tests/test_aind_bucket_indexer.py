@@ -161,7 +161,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.copy_then_overwrite_core_json_files")
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "copy_then_overwrite_core_json_files"
+    )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.sync_core_json_files")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")

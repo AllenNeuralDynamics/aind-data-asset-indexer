@@ -127,8 +127,8 @@ class AindIndexBucketJob:
                         prefix=f"{prefix}/original_metadata",
                     )
                     if copy_exists_in_s3:
-                        # if /original_metadata exists, then we only need to overwrite
-                        # the top-level jsons of updated core_fields
+                        # if /original_metadata exists, then we only need to
+                        # overwrite the top-level jsons of updated core_fields
                         sync_core_json_files(
                             metadata_json=record_as_json_str,
                             bucket=s3_bucket,
@@ -137,8 +137,9 @@ class AindIndexBucketJob:
                             log_flag=True,
                         )
                     else:
-                        # if /original_metadata does not exist, then we need to copy
-                        # and overwrite all the core jsons using the new metadata.nd.json
+                        # if /original_metadata does not exist, then we need
+                        # to copy and overwrite all the core jsons using the
+                        # new metadata.nd.json
                         copy_then_overwrite_core_json_files(
                             metadata_json=record_as_json_str,
                             bucket=s3_bucket,
@@ -223,6 +224,16 @@ class AindIndexBucketJob:
         location_to_id_map: Dict[str, str],
     ):
         """
+        Processes a prefix in S3.
+        # If metadata record exists in S3 and DocDB, do nothing.
+        # If record is in S3 but not DocDb, then copy it to DocDb if the
+        # location in the metadata record matches the actual location.
+        # Otherwise, log a warning.
+        # If record does not exist in both DocDB and S3, build a new metadata
+        # file and save it to S3 (assume Lambda function will save to DocDB).
+        # In both cases above, we also copy the original core json files to a
+        # subfolder and ensure the top level core jsons are in sync with the
+        # metadata.nd.json in S3.
 
         Parameters
         ----------
@@ -306,7 +317,7 @@ class AindIndexBucketJob:
         else:  # metadata.nd.json file does not exist in S3. Create a new one.
             # Build a new metadata file, save it to S3 and save it to DocDb.
             # Also copy the original core json files to a subfolder and then
-            # overwrite the top-level jsons with the new fields from metadata.nd.json.
+            # overwrite them with the new fields from metadata.nd.json.
             new_metadata_contents = build_metadata_record_from_prefix(
                 bucket=bucket,
                 prefix=s3_prefix,

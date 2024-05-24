@@ -125,7 +125,7 @@ class TestUtils(unittest.TestCase):
 
     @patch("logging.log")
     def test__log_message_true(self, mock_log: MagicMock):
-        """Tests _log_message method with log_flag set to True or not provided"""
+        """Tests _log_message method when log_flag is True or not provided"""
         message = "This is a test message"
         valid_log_levels = [
             logging.DEBUG,
@@ -156,7 +156,7 @@ class TestUtils(unittest.TestCase):
 
     @patch("logging.log")
     def test__log_message_false(self, mock_log: MagicMock):
-        """Tests _log_message method with log_flag set to False"""
+        """Tests _log_message method when log_flag is False"""
         message = "This is a test message"
         _log_message(message, log_flag=False)
         _log_message(message, log_level=logging.WARNING, log_flag=False)
@@ -213,11 +213,15 @@ class TestUtils(unittest.TestCase):
         expected_object_keys_map = {
             "mock_schema1.json": {
                 "source": "prefix1/mock_schema1.json",
-                "target": f"prefix1/original_metadata/mock_schema1.{date_stamp}.json",
+                "target": (
+                    f"prefix1/original_metadata/mock_schema1.{date_stamp}.json"
+                ),
             },
             "mock_schema2.json": {
                 "source": "prefix1/mock_schema2.json",
-                "target": f"prefix1/original_metadata/mock_schema2.{date_stamp}.json",
+                "target": (
+                    f"prefix1/original_metadata/mock_schema2.{date_stamp}.json"
+                ),
             },
         }
         result_object_keys_map = create_core_schema_object_keys_map(
@@ -676,12 +680,16 @@ class TestUtils(unittest.TestCase):
                 call(
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
-                    object_key="ecephys_642478_2023-01-17_13-56-29/processing.json",
+                    object_key=(
+                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
+                    ),
                 ),
                 call(
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
-                    object_key="ecephys_642478_2023-01-17_13-56-29/subject.json",
+                    object_key=(
+                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
+                    ),
                 ),
             ]
         )
@@ -899,7 +907,10 @@ class TestUtils(unittest.TestCase):
                         "Bucket": expected_bucket,
                         "Key": f"{expected_prefix}/processing.json",
                     },
-                    Key=f"{expected_prefix}/original_metadata/processing.{expected_date_stamp}.json",
+                    Key=(
+                        f"{expected_prefix}/original_metadata/"
+                        f"processing.{expected_date_stamp}.json"
+                    ),
                 ),
                 call(
                     Bucket=expected_bucket,
@@ -907,7 +918,10 @@ class TestUtils(unittest.TestCase):
                         "Bucket": expected_bucket,
                         "Key": f"{expected_prefix}/subject.json",
                     },
-                    Key=f"{expected_prefix}/original_metadata/subject.{expected_date_stamp}.json",
+                    Key=(
+                        f"{expected_prefix}/original_metadata/"
+                        f"subject.{expected_date_stamp}.json"
+                    ),
                 ),
             ]
         )
@@ -950,8 +964,8 @@ class TestUtils(unittest.TestCase):
         mock_does_s3_object_exist: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
-        """Tests copy_then_overwrite_core_json_files method when an original core json
-        does not exist in generated metadata.nd.json."""
+        """Tests copy_then_overwrite_core_json_files method when an original
+        core json does not exist in generated metadata.nd.json."""
         expected_bucket = "aind-ephys-data-dev-u5u0i5"
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         expected_date_stamp = datetime.now().strftime("%Y%m%d")
@@ -988,7 +1002,10 @@ class TestUtils(unittest.TestCase):
                         "Bucket": expected_bucket,
                         "Key": f"{expected_prefix}/processing.json",
                     },
-                    Key=f"{expected_prefix}/original_metadata/processing.{expected_date_stamp}.json",
+                    Key=(
+                        f"{expected_prefix}/original_metadata/"
+                        f"processing.{expected_date_stamp}.json"
+                    ),
                 ),
                 call(
                     Bucket=expected_bucket,
@@ -996,7 +1013,10 @@ class TestUtils(unittest.TestCase):
                         "Bucket": expected_bucket,
                         "Key": f"{expected_prefix}/rig.json",
                     },
-                    Key=f"{expected_prefix}/original_metadata/rig.{expected_date_stamp}.json",
+                    Key=(
+                        f"{expected_prefix}/original_metadata/"
+                        f"rig.{expected_date_stamp}.json"
+                    ),
                 ),
                 call(
                     Bucket=expected_bucket,
@@ -1004,7 +1024,10 @@ class TestUtils(unittest.TestCase):
                         "Bucket": expected_bucket,
                         "Key": f"{expected_prefix}/subject.json",
                     },
-                    Key=f"{expected_prefix}/original_metadata/subject.{expected_date_stamp}.json",
+                    Key=(
+                        f"{expected_prefix}/original_metadata/"
+                        f"subject.{expected_date_stamp}.json"
+                    ),
                 ),
             ]
         )

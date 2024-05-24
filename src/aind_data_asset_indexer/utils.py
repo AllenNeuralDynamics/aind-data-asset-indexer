@@ -1,4 +1,5 @@
-"""Package for common methods used such as interfacing with S3."""
+"""Package for common methods used such as interfacing with S3 and DocDB."""
+
 import hashlib
 import json
 import logging
@@ -61,7 +62,7 @@ def _log_message(
 
 def create_object_key(prefix: str, filename: str) -> str:
     """
-    For a given s3 prefix and filename, create the expected 
+    For a given s3 prefix and filename, create the expected
     object key for the file.
     Parameters
     ----------
@@ -69,7 +70,7 @@ def create_object_key(prefix: str, filename: str) -> str:
       For example, ecephys_123456_2020-10-10_01-02-03
     filename : str
       For example, 'metadata.nd.json'
-    
+
     Returns
     -------
     str
@@ -107,7 +108,8 @@ def create_core_schema_object_keys_map(
 ) -> Dict[str, Dict[str, str]]:
     """
     For a given s3 prefix, return a dictionary of { core_schema_file_name:
-    { source: source_object_key, target: target_object_key } } for all possible core schema files in s3.
+    { source: source_object_key, target: target_object_key } } for all possible
+    core schema files in s3.
     The source is the original core schema object key.
     The target is in the target_prefix and has a date stamp appended.
     Parameters
@@ -121,12 +123,12 @@ def create_core_schema_object_keys_map(
     Returns
     -------
     Dict[str, Dict[str, str]]
-      Returns a dictionary of all possible core schema file names and their corresponding
-      source and target core schema object keys.
+      Returns a dictionary of all possible core schema file names and their
+      corresponding source and target core schema object keys.
       For example, {
         'subject.json': {
-            'source': 'ecephys_123456_2020-10-10_01-02-03/subject.json',
-            'target': 'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.20240520.json'
+            'source': 'prefix/subject.json',
+            'target': 'prefix/original_metadata/subject.20240520.json'
         },
         ...
     }
@@ -266,7 +268,7 @@ def upload_json_str_to_s3(
     bucket : str
         For example, 'aind-open-data'
     object_key : str
-        For example, 'ecephys_123456_2020-10-10_01-02-03/original_metadata/subject.json'
+        For example, 'prefix/original_metadata/subject.json'
     json_str : str
         JSON string to upload as JSON file.
     s3_client : S3Client
@@ -602,7 +604,8 @@ def copy_then_overwrite_core_json_files(
     ):
         _log_message(
             message=(
-                f"Target copy folder s3://{bucket}/{tgt_copy_prefix} already exists."
+                f"Target copy folder s3://{bucket}/{tgt_copy_prefix} "
+                f"already exists."
             ),
             log_flag=log_flag,
         )
@@ -625,7 +628,7 @@ def copy_then_overwrite_core_json_files(
                 Key=target,
             )
             _log_message(message=response, log_flag=log_flag)
-            # Overwrite core schema fields from metadata.nd.json to the core json files.
+            # Overwrite core fields from metadata.nd.json to the s3 core jsons
             field_name = file_name.replace(".json", "")
             if (
                 field_name in md_record_json
@@ -645,8 +648,7 @@ def copy_then_overwrite_core_json_files(
                 )
                 _log_message(message=response, log_flag=log_flag)
             else:
-                # If a core json was corrupt, it would exist in the metadata.nd.json
-                # Since a copy has been made already, we can delete it from the top level
+                # Since a copy was made, we can delete it from the top level
                 _log_message(
                     message=(
                         f"{field_name} not found in metadata.nd.json for "
@@ -678,8 +680,9 @@ def sync_core_json_files(
     Sync the core schema files with the core fields from metadata.nd.json.
     Core schema jsons are only updated if their contents are outdated.
     Core schema jsons are created if they don't already exist.
-    If a core field is None in metadata.nd.json, then the core schema json
-    will be deleted.
+    If a core field is None in metadata.nd.json but the core schema json
+    exists in s3, then the core schema json will be deleted.
+
     Parameters
     ----------
     metadata_json : str
@@ -716,6 +719,7 @@ def sync_core_json_files(
             field_contents = md_record_json[field_name]
             field_contents_str = json.dumps(field_contents)
             # Core schema jsons are created if they don't already exist.
+            # Otherwise, they are only updated if their contents are outdated.
             if core_files_infos[object_key] is None:
                 _log_message(
                     message=(f"Uploading new {field_name} to {location}"),
@@ -756,6 +760,8 @@ def sync_core_json_files(
                         log_flag=log_flag,
                     )
         else:
+            # If a core field is None but the core json exists,
+            # delete the core json.
             if core_files_infos[object_key] is not None:
                 _log_message(
                     message=(
