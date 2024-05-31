@@ -230,8 +230,8 @@ class AindIndexBucketJob:
         Processes a prefix in S3.
         # If metadata record exists in S3 and DocDB, do nothing.
         # If record is in S3 but not DocDb, then copy it to DocDb if the
-        # location in the metadata record matches the actual location.
-        # Otherwise, log a warning.
+        # location in the metadata record matches the actual location and
+        # the record has an _id field. Otherwise, log a warning.
         # If record does not exist in both DocDB and S3, build a new metadata
         # file and save it to S3 (assume Lambda function will save to DocDB).
         # In both cases above, we also copy the original core json files to a
@@ -285,25 +285,30 @@ class AindIndexBucketJob:
                         collection = db[
                             self.job_settings.doc_db_collection_name
                         ]
-                        response = collection.update_one(
-                            {"_id": json_contents["_id"]},
-                            {"$set": json_contents},
-                            upsert=True,
-                        )
-                        logging.info(response.raw_result)
-                        # ensure core jsons are synced with metadata.nd.json
-                        copy_then_overwrite_core_json_files(
-                            metadata_json=json.dumps(
-                                json_contents, default=str
-                            ),
-                            bucket=bucket,
-                            prefix=s3_prefix,
-                            s3_client=s3_client,
-                            log_flag=True,
-                            copy_original_md_subdir=(
-                                self.job_settings.copy_original_md_subdir
-                            ),
-                        )
+                        if "_id" in json_contents:
+                            response = collection.update_one(
+                                {"_id": json_contents["_id"]},
+                                {"$set": json_contents},
+                                upsert=True,
+                            )
+                            logging.info(response.raw_result)
+                            copy_then_overwrite_core_json_files(
+                                metadata_json=json.dumps(
+                                    json_contents, default=str
+                                ),
+                                bucket=bucket,
+                                prefix=s3_prefix,
+                                s3_client=s3_client,
+                                log_flag=True,
+                                copy_original_md_subdir=(
+                                    self.job_settings.copy_original_md_subdir
+                                ),
+                            )
+                        else:
+                            logging.warning(
+                                f"Metadata record for {location} "
+                                f"does not have an _id field!"
+                            )
                     else:
                         logging.warning(
                             f"Location field in record "
