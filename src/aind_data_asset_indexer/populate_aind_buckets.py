@@ -17,7 +17,9 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 class PopulateAindBucketsJob:
-    """Job to populate a list of aind buckets with metadata.nd.json files."""
+    """Job to populate a list of aind buckets with metadata json files
+    and copy original core schema jsons to a subfolder.
+    """
 
     def __init__(self, job_settings: PopulateAindBucketsJobSettings):
         """Class constructor."""

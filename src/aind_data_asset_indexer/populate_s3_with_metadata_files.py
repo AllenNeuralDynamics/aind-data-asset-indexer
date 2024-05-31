@@ -1,4 +1,5 @@
 """Module to handle populating s3 bucket with metadata files."""
+
 import argparse
 import logging
 import os
@@ -13,6 +14,8 @@ from mypy_boto3_s3 import S3Client
 from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
+    copy_then_overwrite_core_json_files,
+    get_s3_location,
     iterate_through_top_level,
     upload_metadata_json_str_to_s3,
 )
@@ -27,12 +30,12 @@ class AindPopulateMetadataJsonJob:
     1) Crawl through an S3 bucket
     2) Look inside each prefix that adheres to data asset naming convention
     3) If the name is a data asset name, then it will look inside the prefix
-    4.0) If there is no metadata.nd.json file, then it will create one by using
-    any of the core json files it finds.
-    4.1) If the metadata_nd_overwrite option is set to False, then it will pass
-    a data asset if there is already a metadata.nd.json in that folder. If set
-    to True, then it will write a new metadata.nd.json file even if one already
-    exists.
+    4) It will create a metadata.nd.json by using any of the core json files
+    it finds. Any existing metadata.nd.json will be overwritten.
+    5.1) The contents of any existing core json files will be copied to
+    /original_metadata/{core_schema}.{date_stamp}.json.
+    5.2) The core json files will be overwritten with the new fields from
+    metadata.nd.json or deleted if they are not found in metadata.nd.json.
     """
 
     def __init__(self, job_settings: IndexJobSettings):
@@ -42,6 +45,9 @@ class AindPopulateMetadataJsonJob:
     def _process_prefix(self, prefix: str, s3_client: S3Client):
         """
         For a given prefix, build a metadata record and upload it to S3.
+        Original core json files will be first copied to a subfolder,
+        and then overwritten with the new fields from metadata.nd.json,
+        or deleted if the new field is None.
         Parameters
         ----------
         prefix : str
@@ -52,25 +58,36 @@ class AindPopulateMetadataJsonJob:
         None
 
         """
+        bucket = self.job_settings.s3_bucket
+        location = get_s3_location(bucket=bucket, prefix=prefix)
         md_record = build_metadata_record_from_prefix(
             prefix=prefix,
             s3_client=s3_client,
-            bucket=self.job_settings.s3_bucket,
-            metadata_nd_overwrite=self.job_settings.metadata_nd_overwrite,
+            bucket=bucket,
         )
         if md_record is not None:
+            copy_then_overwrite_core_json_files(
+                metadata_json=md_record,
+                bucket=bucket,
+                prefix=prefix,
+                s3_client=s3_client,
+                log_flag=True,
+                copy_original_md_subdir=(
+                    self.job_settings.copy_original_md_subdir
+                ),
+            )
+            logging.info(f"Uploading metadata record for: {location}")
             # noinspection PyTypeChecker
             response = upload_metadata_json_str_to_s3(
                 metadata_json=md_record,
-                bucket=self.job_settings.s3_bucket,
+                bucket=bucket,
                 prefix=prefix,
                 s3_client=s3_client,
             )
             logging.info(response)
         else:
             logging.warning(
-                f"Metadata record is None for "
-                f"s3://{self.job_settings.s3_bucket}/{prefix}!"
+                f"Unable to build metadata record for: {location}!"
             )
 
     def _dask_task_to_process_prefix_list(

@@ -31,7 +31,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         cls.example_md_record = example_md_record
         basic_job_configs = IndexJobSettings(
             s3_bucket="aind-ephys-data-dev-u5u0i5",
-            metadata_nd_overwrite=True,
             n_partitions=2,
         )
         cls.basic_job_configs = basic_job_configs
@@ -41,53 +40,82 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "build_metadata_record_from_prefix"
+        "upload_metadata_json_str_to_s3"
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "upload_metadata_json_str_to_s3"
+        "copy_then_overwrite_core_json_files"
+    )
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "build_metadata_record_from_prefix"
     )
     @patch("boto3.client")
+    @patch("logging.warning")
     @patch("logging.info")
     def test_process_prefix_not_none(
         self,
         mock_log_info: MagicMock,
+        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
-        mock_upload_record: MagicMock,
         mock_build_record: MagicMock,
+        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method."""
 
+        expected_bucket = "aind-ephys-data-dev-u5u0i5"
+        expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         mock_build_record.return_value = json.dumps(self.example_md_record)
         self.basic_job._process_prefix(
             s3_client=mock_s3_client,
-            prefix="ecephys_642478_2023-01-17_13-56-29",
+            prefix=expected_prefix,
         )
-
+        mock_build_record.assert_called_once_with(
+            prefix=expected_prefix,
+            s3_client=mock_s3_client,
+            bucket=expected_bucket,
+        )
+        mock_copy_then_overwrite_core_json_files.assert_called_once_with(
+            metadata_json=json.dumps(self.example_md_record),
+            bucket=expected_bucket,
+            prefix=expected_prefix,
+            s3_client=mock_s3_client,
+            log_flag=True,
+            copy_original_md_subdir="original_metadata",
+        )
         mock_upload_record.assert_called_once_with(
-            bucket="aind-ephys-data-dev-u5u0i5",
-            prefix="ecephys_642478_2023-01-17_13-56-29",
+            bucket=expected_bucket,
+            prefix=expected_prefix,
             s3_client=mock_s3_client,
             metadata_json=json.dumps(self.example_md_record),
         )
-        mock_log_info.assert_called_once()
+        mock_log_info.assert_called()
+        mock_log_warn.assert_not_called()
 
-    @patch(
-        "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "build_metadata_record_from_prefix"
-    )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
         "upload_metadata_json_str_to_s3"
     )
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "copy_then_overwrite_core_json_files"
+    )
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "build_metadata_record_from_prefix"
+    )
     @patch("boto3.client")
     @patch("logging.warning")
+    @patch("logging.info")
     def test_process_prefix_none(
         self,
+        mock_log_info: MagicMock,
         mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
-        mock_upload_record: MagicMock,
         mock_build_record: MagicMock,
+        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method when None is returned from
         build_metadata_record_from_prefix."""
@@ -97,10 +125,16 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
         )
-
+        mock_build_record.assert_called_once_with(
+            prefix="ecephys_642478_2023-01-17_13-56-29",
+            s3_client=mock_s3_client,
+            bucket="aind-ephys-data-dev-u5u0i5",
+        )
+        mock_copy_then_overwrite_core_json_files.assert_not_called()
         mock_upload_record.assert_not_called()
+        mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(
-            "Metadata record is None for "
+            "Unable to build metadata record for: "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29!"
         )

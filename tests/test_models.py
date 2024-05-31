@@ -20,7 +20,6 @@ class TestIndexJobSettings(unittest.TestCase):
         job_settings = IndexJobSettings(s3_bucket="some_bucket")
         self.assertEqual("some_bucket", job_settings.s3_bucket)
         self.assertEqual(20, job_settings.n_partitions)
-        self.assertFalse(job_settings.metadata_nd_overwrite)
         self.assertIsNone(job_settings.lookback_days)
 
     @patch("boto3.client")
@@ -33,8 +32,7 @@ class TestIndexJobSettings(unittest.TestCase):
                 "Value": (
                     '{"s3_bucket":"some_bucket",'
                     '"n_partitions":5,'
-                    '"lookback_days":10,'
-                    '"metadata_nd_overwrite":true}'
+                    '"lookback_days":10}'
                 ),
                 "Version": 1,
                 "LastModifiedDate": datetime(
@@ -64,7 +62,6 @@ class TestIndexJobSettings(unittest.TestCase):
             s3_bucket="some_bucket",
             n_partitions=5,
             lookback_days=10,
-            metadata_nd_overwrite=True,
         )
         self.assertEqual(expected_job_settings, job_settings)
 
@@ -85,7 +82,6 @@ class TestAindIndexBucketJobSettings(unittest.TestCase):
         )
         self.assertEqual("some_bucket", job_settings.s3_bucket)
         self.assertEqual(20, job_settings.n_partitions)
-        self.assertFalse(job_settings.metadata_nd_overwrite)
         self.assertIsNone(job_settings.lookback_days)
         self.assertEqual("some_docdb_host", job_settings.doc_db_host)
         self.assertEqual(12345, job_settings.doc_db_port)
@@ -190,7 +186,6 @@ class TestPopulateAindBucketsJobSettings(unittest.TestCase):
         self.assertIsNone(job_settings.s3_bucket)
         self.assertEqual(["bucket1", "bucket2"], job_settings.s3_buckets)
         self.assertEqual(20, job_settings.n_partitions)
-        self.assertFalse(job_settings.metadata_nd_overwrite)
         self.assertIsNone(job_settings.lookback_days)
 
 
@@ -211,7 +206,6 @@ class TestAindIndexBucketsJobSettings(unittest.TestCase):
         self.assertIsNone(job_settings.s3_bucket)
         self.assertEqual(["bucket1", "bucket2"], job_settings.s3_buckets)
         self.assertEqual(20, job_settings.n_partitions)
-        self.assertFalse(job_settings.metadata_nd_overwrite)
         self.assertIsNone(job_settings.lookback_days)
         self.assertEqual("some_docdb_host", job_settings.doc_db_host)
         self.assertEqual(12345, job_settings.doc_db_port)

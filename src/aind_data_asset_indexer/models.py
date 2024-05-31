@@ -22,12 +22,10 @@ class IndexJobSettings(BaseSettings):
             "set to None, then all records will be processed."
         ),
     )
-    metadata_nd_overwrite: bool = Field(
-        default=False,
+    copy_original_md_subdir: str = Field(
+        default="original_metadata",
         description=(
-            "If set to True, will ignore the metadata.nd.json file and use "
-            "the core schemas to build a new one. If set to False, then use"
-            "the metadata.nd.json file if it exists in S3."
+            "Subdirectory to copy original core schema json files to."
         ),
     )
 
