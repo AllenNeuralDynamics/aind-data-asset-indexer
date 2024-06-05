@@ -29,6 +29,7 @@ from aind_data_asset_indexer.utils import (
     get_s3_bucket_and_prefix,
     get_s3_location,
     is_dict_corrupt,
+    is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
@@ -293,14 +294,34 @@ class TestUtils(unittest.TestCase):
         self.assertEqual("s3://some_bucket/prefix1", result1)
         self.assertEqual("s3://some_bucket/prefix2", result2)
 
+    def test_is_prefix_valid(self):
+        """Tests is_prefix_valid"""
+        valid_prefixes = [
+            "prefix1_2024-01-01_01-01-01",
+            "prefix1_2024-01-01_01-01-01/",
+            "ecephys_111111_2000-01-01_04-00-00/",
+            "multiplane-ophys_111111_2024-01-01_01-01-01/",
+        ]
+        invalid_prefixes = [
+            "prefix1",
+            "prefix1/",
+            "prefix1-2024-01-01-01-01-01",
+            "prefix1_2024-01-01_01-01-01/extra",
+            "prefix1_2024-01-01_01-01-01/extra/",
+        ]
+        for prefix in valid_prefixes:
+            self.assertTrue(is_prefix_valid(prefix))
+        for prefix in invalid_prefixes:
+            self.assertFalse(is_prefix_valid(prefix))
+
     def test_is_record_location_valid_true0(self):
         """Tests is_record_location_valid returns true when expected_prefix is
         set to None"""
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "s3://some_bucket/prefix1",
+            "name": "prefix1_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
         }
         self.assertTrue(
             is_record_location_valid(
@@ -314,14 +335,14 @@ class TestUtils(unittest.TestCase):
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "s3://some_bucket/prefix1",
+            "name": "prefix1_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
         }
         self.assertTrue(
             is_record_location_valid(
                 example_record,
                 expected_bucket="some_bucket",
-                expected_prefix="prefix1",
+                expected_prefix="prefix1_2024-01-01_01-01-01",
             )
         )
 
@@ -329,7 +350,10 @@ class TestUtils(unittest.TestCase):
         """Tests is_record_location_valid returns false when no location field
         is present"""
 
-        example_record = {"_id": "abc-123", "name": "some_name"}
+        example_record = {
+            "_id": "abc-123",
+            "name": "prefix1_2024-01-01_01-01-01",
+        }
         self.assertFalse(
             is_record_location_valid(
                 example_record, expected_bucket="some_bucket"
@@ -342,8 +366,8 @@ class TestUtils(unittest.TestCase):
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "some_bucket/prefix",
+            "name": "prefix1_2024-01-01_01-01-01",
+            "location": "some_bucket/prefix1_2024-01-01_01-01-01",
         }
         self.assertFalse(
             is_record_location_valid(
@@ -357,8 +381,8 @@ class TestUtils(unittest.TestCase):
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "s3://some_bucket/prefix1/prefix2",
+            "name": "prefix2_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1/prefix2_2024-01-01_01-01-01",
         }
         self.assertFalse(
             is_record_location_valid(
@@ -372,8 +396,8 @@ class TestUtils(unittest.TestCase):
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "s3://some_bucket/prefix1",
+            "name": "prefix1_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
         }
         self.assertFalse(
             is_record_location_valid(
@@ -382,19 +406,49 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_is_record_location_valid_false4(self):
+        """Tests is_record_location_valid returns false when prefix is invalid
+        """
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "prefix1",
+            "location": "s3://some_bucket/prefix1",
+        }
+        self.assertFalse(
+            is_record_location_valid(
+                example_record, expected_bucket="some_bucket"
+            )
+        )
+
+    def test_is_record_location_valid_false5(self):
+        """Tests is_record_location_valid returns false when prefix does
+        not match name"""
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "prefix2_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
+        }
+        self.assertFalse(
+            is_record_location_valid(
+                example_record, expected_bucket="some_bucket"
+            )
+        )
+
+    def test_is_record_location_valid_false6(self):
         """Tests is_record_location_valid returns false when prefixes don't
         match"""
 
         example_record = {
             "_id": "abc-123",
-            "name": "some_name",
-            "location": "s3://some_bucket/prefix1",
+            "name": "prefix1_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
         }
         self.assertFalse(
             is_record_location_valid(
                 example_record,
                 expected_bucket="some_bucket",
-                expected_prefix="prefix",
+                expected_prefix="prefix2_2024-01-01_01-01-01",
             )
         )
 

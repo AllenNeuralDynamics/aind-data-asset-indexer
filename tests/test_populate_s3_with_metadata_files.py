@@ -141,6 +141,45 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "upload_metadata_json_str_to_s3"
+    )
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "copy_then_overwrite_core_json_files"
+    )
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
+        "build_metadata_record_from_prefix"
+    )
+    @patch("boto3.client")
+    @patch("logging.warning")
+    @patch("logging.info")
+    def test_process_prefix_invalid_prefix(
+        self,
+        mock_log_info: MagicMock,
+        mock_log_warn: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_build_record: MagicMock,
+        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_upload_record: MagicMock,
+    ):
+        """Tests _process_prefix method when the prefix is invalid."""
+
+        self.basic_job._process_prefix(
+            s3_client=mock_s3_client,
+            prefix="ecephys_642478",
+        )
+        mock_build_record.assert_not_called()
+        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_upload_record.assert_not_called()
+        mock_log_info.assert_not_called()
+        mock_log_warn.assert_called_once_with(
+            "Prefix ecephys_642478 not valid in bucket "
+            "aind-ephys-data-dev-u5u0i5! Skipping."
+        )
+
+    @patch(
+        "aind_data_asset_indexer.populate_s3_with_metadata_files."
         "AindPopulateMetadataJsonJob._process_prefix"
     )
     @patch("boto3.client")

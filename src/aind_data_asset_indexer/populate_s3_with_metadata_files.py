@@ -16,6 +16,7 @@ from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     copy_then_overwrite_core_json_files,
     get_s3_location,
+    is_prefix_valid,
     iterate_through_top_level,
     upload_metadata_json_str_to_s3,
 )
@@ -44,7 +45,8 @@ class AindPopulateMetadataJsonJob:
 
     def _process_prefix(self, prefix: str, s3_client: S3Client):
         """
-        For a given prefix, build a metadata record and upload it to S3.
+        For a given prefix, check if it is valid (adheres to data asset naming
+        convention). If valid, build a metadata record and upload it to S3.
         Original core json files will be first copied to a subfolder,
         and then overwritten with the new fields from metadata.nd.json,
         or deleted if the new field is None.
@@ -59,6 +61,11 @@ class AindPopulateMetadataJsonJob:
 
         """
         bucket = self.job_settings.s3_bucket
+        if not is_prefix_valid(prefix):
+            logging.warning(
+                f"Prefix {prefix} not valid in bucket {bucket}! Skipping."
+            )
+            return
         location = get_s3_location(bucket=bucket, prefix=prefix)
         md_record = build_metadata_record_from_prefix(
             prefix=prefix,
