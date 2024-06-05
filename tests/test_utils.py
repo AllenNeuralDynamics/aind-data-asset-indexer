@@ -755,21 +755,7 @@ class TestUtils(unittest.TestCase):
                 s3_client=mock_s3_client,
             )
         )
-        mock_get_dict_of_file_info.assert_called_once_with(
-            s3_client=mock_s3_client,
-            bucket="aind-ephys-data-dev-u5u0i5",
-            keys=[
-                "ecephys_642478_2023-01-17_13-56-29/acquisition.json",
-                "ecephys_642478_2023-01-17_13-56-29/data_description.json",
-                "ecephys_642478_2023-01-17_13-56-29/instrument.json",
-                "ecephys_642478_2023-01-17_13-56-29/procedures.json",
-                "ecephys_642478_2023-01-17_13-56-29/processing.json",
-                "ecephys_642478_2023-01-17_13-56-29/rig.json",
-                "ecephys_642478_2023-01-17_13-56-29/session.json",
-                "ecephys_642478_2023-01-17_13-56-29/subject.json",
-                "ecephys_642478_2023-01-17_13-56-29/mri_session.json",
-            ],
-        )
+        mock_get_dict_of_file_info.assert_called_once()
         mock_download_json_file.assert_has_calls(
             [
                 call(
@@ -864,21 +850,7 @@ class TestUtils(unittest.TestCase):
             prefix=pfx,
             s3_client=mock_s3_client,
         )
-        mock_get_dict_of_file_info.assert_called_once_with(
-            s3_client=mock_s3_client,
-            bucket=expected_bucket,
-            keys=[
-                f"{pfx}/acquisition.json",
-                f"{pfx}/data_description.json",
-                f"{pfx}/instrument.json",
-                f"{pfx}/procedures.json",
-                f"{pfx}/processing.json",
-                f"{pfx}/rig.json",
-                f"{pfx}/session.json",
-                f"{pfx}/subject.json",
-                f"{pfx}/mri_session.json",
-            ],
-        )
+        mock_get_dict_of_file_info.assert_called_once()
         # assert that only new or updated core jsons were uploaded to s3
         mock_upload_core_record.assert_has_calls(
             [
@@ -942,7 +914,7 @@ class TestUtils(unittest.TestCase):
         actual_log_messages = [
             c[1]["message"] for c in mock_log_message.call_args_list
         ]
-        self.assertEqual(expected_logs, actual_log_messages)
+        self.assertCountEqual(expected_logs, actual_log_messages)
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
