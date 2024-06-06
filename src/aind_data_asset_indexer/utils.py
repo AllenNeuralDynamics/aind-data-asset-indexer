@@ -3,10 +3,12 @@
 import hashlib
 import json
 import logging
+import re
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
+from aind_data_schema.core.data_description import DataRegex
 from aind_data_schema.core.metadata import Metadata
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
@@ -158,6 +160,24 @@ def create_core_schema_object_keys_map(
     return object_keys
 
 
+def is_prefix_valid(prefix: str) -> bool:
+    """
+    Check if a given prefix is valid. A valid prefix conforms to a regex
+    pattern defined in aind-data-schema.
+
+    Parameters
+    ----------
+    prefix : str
+        For example, 'ecephys_123456_2020-10-10_01-02-03'
+
+    Returns
+    -------
+    bool
+        True if the prefix is valid, otherwise False.
+    """
+    return re.match(DataRegex.DATA.value, prefix.strip("/")) is not None
+
+
 def is_record_location_valid(
     record: dict, expected_bucket: str, expected_prefix: Optional[str] = None
 ) -> bool:
@@ -180,7 +200,7 @@ def is_record_location_valid(
       like 's3://{expected_bucket}/prefix'
       Will return False if there is no s3 scheme, the bucket does not match
       the expected bucket, the prefix contains forward slashes, or the prefix
-      doesn't match the expected prefix.
+      is invalid, or doesn't match the record name or expected prefix.
 
     """
     expected_stripped_prefix = (
@@ -199,6 +219,8 @@ def is_record_location_valid(
             if (
                 stripped_prefix == ""
                 or len(stripped_prefix.split("/")) > 1
+                or not is_prefix_valid(stripped_prefix)
+                or record.get("name") != stripped_prefix
                 or (
                     expected_prefix is not None
                     and stripped_prefix != expected_stripped_prefix

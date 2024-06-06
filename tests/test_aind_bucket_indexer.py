@@ -69,11 +69,42 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.basic_job._process_docdb_record(
             docdb_client=mock_docdb_client,
             s3_client=mock_s3_client,
-            docdb_record={"_id": "abc-123", "location": "no_s3/bucket/prefix"},
+            docdb_record={
+                "_id": "abc-123",
+                "name": "prefix1_2024-01-01_01-01-01",
+                "location": "no_s3/bucket/prefix1_2024-01-01_01-01-01",
+            },
         )
         mock_log_warn.assert_called_once_with(
-            "Record location no_s3/bucket/prefix is not valid for bucket "
+            "Record location no_s3/bucket/prefix1_2024-01-01_01-01-01 or name "
+            "prefix1_2024-01-01_01-01-01 not valid for bucket "
             "aind-ephys-data-dev-u5u0i5!"
+        )
+
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.warning")
+    def test_process_docdb_record_invalid_prefix(
+        self,
+        mock_log_warn: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+    ):
+        """Tests _process_docdb_record method when the location in the record
+        has invalid prefix"""
+
+        self.basic_job._process_docdb_record(
+            docdb_client=mock_docdb_client,
+            s3_client=mock_s3_client,
+            docdb_record={
+                "_id": "abc-123",
+                "name": "prefix1",
+                "location": "s3://bucket/prefix1",
+            },
+        )
+        mock_log_warn.assert_called_once_with(
+            "Record location s3://bucket/prefix1 or name prefix1 not valid "
+            "for bucket aind-ephys-data-dev-u5u0i5!"
         )
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
@@ -364,6 +395,32 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
         self.basic_job._process_records(example_records)
         mock_dask_bag_map_parts.assert_called()
+
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.warning")
+    def test_process_prefix_invalid_prefix(
+        self,
+        mock_log_warn: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+    ):
+        """Tests _process_prefix method when the prefix is invalid."""
+
+        location_to_id_map = dict()
+        self.basic_job._process_prefix(
+            s3_prefix="ecephys_642478",
+            docdb_client=mock_docdb_client,
+            s3_client=mock_s3_client,
+            location_to_id_map=location_to_id_map,
+        )
+        mock_log_warn.assert_called_once_with(
+            "Prefix ecephys_642478 not valid in bucket "
+            f"{self.basic_job.job_settings.s3_bucket}! Skipping."
+        )
+        mock_does_s3_object_exist.assert_not_called()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -716,9 +773,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_copy_then_overwrite_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
         mock_log_warn.assert_called_once_with(
-            "Location field in record "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2020-01-10_10-10-10 does not match actual location"
+            "Location field s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2020-01-10_10-10-10 or name field "
+            "ecephys_642478_2023-01-17_13-56-29 does not match actual location"
             " of record s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29!"
         )

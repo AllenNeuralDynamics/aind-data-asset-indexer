@@ -26,6 +26,7 @@ from aind_data_asset_indexer.utils import (
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
     get_s3_location,
+    is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
@@ -40,7 +41,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class AindIndexBucketJob:
     """This job will:
-    1) Loop through the records in DocDb filtered by bucket.
+    1) Loop through the records in DocDb filtered by bucket. If the record does
+    not have valid location, it will log a warning and not process it further.
     2.0) For each record, check if the S3 location exists. If the S3 location
     does not exist, then remove the record from DocDB.
     2.1) If the S3 location exists, check if there is a metadata.nd.json file.
@@ -86,8 +88,8 @@ class AindIndexBucketJob:
         bucket = self.job_settings.s3_bucket
         if not is_record_location_valid(docdb_record, bucket):
             logging.warning(
-                f"Record location {docdb_record.get('location')} is not valid "
-                f"for bucket {bucket}!"
+                f"Record location {docdb_record.get('location')} or name "
+                f"{docdb_record.get('name')} not valid for bucket {bucket}!"
             )
         else:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
@@ -227,16 +229,18 @@ class AindIndexBucketJob:
         location_to_id_map: Dict[str, str],
     ):
         """
-        Processes a prefix in S3.
-        # If metadata record exists in S3 and DocDB, do nothing.
-        # If record is in S3 but not DocDb, then copy it to DocDb if the
-        # location in the metadata record matches the actual location and
-        # the record has an _id field. Otherwise, log a warning.
-        # If record does not exist in both DocDB and S3, build a new metadata
-        # file and save it to S3 (assume Lambda function will save to DocDB).
-        # In both cases above, we also copy the original core json files to a
-        # subfolder and ensure the top level core jsons are in sync with the
-        # metadata.nd.json in S3.
+        Processes a prefix in S3
+        1) If the prefix is not valid (does not adhere to data asset naming
+        convention), log a warning and do not process it further.
+        2) If metadata record exists in S3 and DocDB, do nothing.
+        3) If record is in S3 but not DocDb, then copy it to DocDb if the
+        location in the metadata record matches the actual location and
+        the record has an _id field. Otherwise, log a warning.
+        4) If record does not exist in both DocDB and S3, build a new metadata
+        file and save it to S3 (assume Lambda function will save to DocDB).
+        5) In both cases above, we also copy the original core json files to a
+        subfolder and ensure the top level core jsons are in sync with the
+        metadata.nd.json in S3.
 
         Parameters
         ----------
@@ -249,8 +253,13 @@ class AindIndexBucketJob:
           record already exists in DocDb for a given s3 bucket, prefix
 
         """
-        # Check if metadata record exists
         bucket = self.job_settings.s3_bucket
+        if not is_prefix_valid(s3_prefix):
+            logging.warning(
+                f"Prefix {s3_prefix} not valid in bucket {bucket}! Skipping."
+            )
+            return
+        # Check if metadata record exists
         location = get_s3_location(bucket=bucket, prefix=s3_prefix)
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
@@ -311,9 +320,9 @@ class AindIndexBucketJob:
                             )
                     else:
                         logging.warning(
-                            f"Location field in record "
-                            f"{json_contents.get('location')} does not match "
-                            f"actual location of record {location}!"
+                            f"Location field {json_contents.get('location')} "
+                            f"or name field {json_contents.get('name')} does "
+                            f"not match actual location of record {location}!"
                         )
                 else:
                     logging.warning(
