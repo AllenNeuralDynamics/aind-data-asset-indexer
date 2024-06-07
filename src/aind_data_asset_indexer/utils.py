@@ -597,7 +597,7 @@ def cond_copy_then_sync_core_json_files(
             log_flag=log_flag,
         )
     else:
-        cond_copy_core_json_files(
+        copy_core_json_files(
             bucket=bucket,
             prefix=prefix,
             s3_client=s3_client,
@@ -613,7 +613,7 @@ def cond_copy_then_sync_core_json_files(
     )
 
 
-def cond_copy_core_json_files(
+def copy_core_json_files(
     bucket: str,
     prefix: str,
     s3_client: S3Client,
