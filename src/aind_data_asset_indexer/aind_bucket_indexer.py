@@ -29,7 +29,6 @@ from aind_data_asset_indexer.utils import (
     is_record_location_valid,
     iterate_through_top_level,
     paginate_docdb,
-    sync_core_json_files,
     upload_metadata_json_str_to_s3,
 )
 
