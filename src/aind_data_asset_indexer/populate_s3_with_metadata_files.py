@@ -14,7 +14,7 @@ from mypy_boto3_s3 import S3Client
 from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
-    copy_then_overwrite_core_json_files,
+    cond_copy_then_sync_core_json_files,
     get_s3_location,
     is_prefix_valid,
     iterate_through_top_level,
@@ -73,7 +73,7 @@ class AindPopulateMetadataJsonJob:
             bucket=bucket,
         )
         if md_record is not None:
-            copy_then_overwrite_core_json_files(
+            cond_copy_then_sync_core_json_files(
                 metadata_json=md_record,
                 bucket=bucket,
                 prefix=prefix,

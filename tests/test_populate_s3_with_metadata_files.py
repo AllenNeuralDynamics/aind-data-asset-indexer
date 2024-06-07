@@ -44,7 +44,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
@@ -59,7 +59,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method."""
@@ -76,7 +76,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             bucket=expected_bucket,
         )
-        mock_copy_then_overwrite_core_json_files.assert_called_once_with(
+        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
             bucket=expected_bucket,
             prefix=expected_prefix,
@@ -99,7 +99,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
@@ -114,7 +114,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method when None is returned from
@@ -130,7 +130,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             bucket="aind-ephys-data-dev-u5u0i5",
         )
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_record.assert_not_called()
         mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(
@@ -145,7 +145,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
@@ -160,7 +160,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method when the prefix is invalid."""
@@ -170,7 +170,7 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             prefix="ecephys_642478",
         )
         mock_build_record.assert_not_called()
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_record.assert_not_called()
         mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(

@@ -6,7 +6,7 @@
       "HTTPHeaders": {
          "x-amz-id-2": "x-amz-id-2",
          "x-amz-request-id": "x-amz-request-id",
-         "date": "Thu, 23 May 2024 22:48:26 GMT",
+         "date": "Thu, 23 May 2024 21:54:26 GMT",
          "x-amz-bucket-region": "us-west-2",
          "content-type": "application/xml",
          "transfer-encoding": "chunked",
@@ -15,26 +15,10 @@
       "RetryAttempts": 0
    },
    "IsTruncated": false,
-   "Contents": [
-      {
-         "Key": "prefix/original_metadata/random_file.json",
-         "LastModified": "2024-05-23 01:17:29+00:00",
-         "ETag": "ETag1",
-         "Size": 1385,
-         "StorageClass": "STANDARD"
-      },
-      {
-         "Key": "prefix/original_metadata/random_file.txt",
-         "LastModified": "2024-05-23 01:17:29+00:00",
-         "ETag": "ETag2",
-         "Size": 1385,
-         "StorageClass": "STANDARD"
-      }
-   ],
    "Name": "bucket",
    "Prefix": "prefix/original_metadata/",
    "Delimiter": "/",
    "MaxKeys": 1000,
    "EncodingType": "url",
-   "KeyCount": 2
+   "KeyCount": 0
 }
