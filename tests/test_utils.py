@@ -348,8 +348,8 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_is_record_location_valid_false4(self):
-        """Tests is_record_location_valid returns false when prefix is invalid
-        """
+        """Tests is_record_location_valid returns false when prefix is
+        invalid"""
 
         example_record = {
             "_id": "abc-123",

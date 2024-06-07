@@ -72,9 +72,7 @@ class AindIndexBucketJobSettings(IndexJobSettings):
         parameters = response["Parameter"]["Value"]
         parameters_json = json.loads(parameters)
         if "doc_db_secret_name" not in parameters:
-            raise ValueError(
-                "doc_db_secret_name not found in parameters."
-            )
+            raise ValueError("doc_db_secret_name not found in parameters.")
         secrets_client = boto3.client("secretsmanager")
         docdb_secret = secrets_client.get_secret_value(
             SecretId=parameters_json["doc_db_secret_name"]
@@ -91,9 +89,7 @@ class AindIndexBucketJobSettings(IndexJobSettings):
 
         for secret_key, job_setting in secret_to_job_settings_map.items():
             if secret_key not in docdb_secret_json:
-                raise ValueError(
-                    f"{secret_key} not found in docdb secret."
-                )
+                raise ValueError(f"{secret_key} not found in docdb secret.")
             parameters_json[job_setting] = docdb_secret_json[secret_key]
         return cls.model_validate_json(json.dumps(parameters_json))
 
