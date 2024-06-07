@@ -193,27 +193,26 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"
     )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.sync_core_json_files")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
+    @patch("aind_data_asset_indexer.utils.cond_copy_core_json_files")
+    @patch("aind_data_asset_indexer.utils.sync_core_json_files")
+    @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
+    @patch("logging.log")
     @patch("logging.info")
     def test_process_docdb_record_diff_md5_hash_copy_exists(
         self,
         mock_log_info: MagicMock,
+        mock_log: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
-        mock_does_s3_prefix_exist: MagicMock,
+        mock_does_s3_metadata_copy_exist: MagicMock,
         mock_sync_core_json_files: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_docdb_record method when there is a metadata.nd.json
@@ -230,7 +229,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "version_id": "version_id",
             }
         }
-        mock_does_s3_prefix_exist.return_value = True
+        mock_does_s3_metadata_copy_exist.return_value = True
         mock_upload_metadata_json_str_to_s3.return_value = (
             self.example_put_object_response1
         )
@@ -240,9 +239,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
             s3_client=mock_s3_client,
             docdb_record=self.example_md_record,
         )
-        mock_does_s3_prefix_exist.assert_called_once_with(
+        mock_does_s3_metadata_copy_exist.assert_called_once_with(
             bucket=self.basic_job.job_settings.s3_bucket,
-            prefix=f"{expected_prefix}/original_metadata",
+            prefix=expected_prefix,
+            copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
         mock_sync_core_json_files.assert_called_once_with(
@@ -252,7 +252,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
             s3_client=mock_s3_client,
             log_flag=True,
         )
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_core_json_files.assert_not_called()
+        mock_log.assert_called_once_with(
+            20,
+            "Copy of original metadata already exists at s3://"
+            f"aind-ephys-data-dev-u5u0i5/{expected_prefix}/original_metadata",
+        )
         mock_log_info.assert_has_calls(
             [
                 call(
@@ -267,12 +272,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"
     )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.sync_core_json_files")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
+    @patch("aind_data_asset_indexer.utils.cond_copy_core_json_files")
+    @patch("aind_data_asset_indexer.utils.sync_core_json_files")
+    @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
@@ -285,9 +287,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
-        mock_does_s3_prefix_exist: MagicMock,
+        mock_does_s3_metadata_copy_exist: MagicMock,
         mock_sync_core_json_files: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_docdb_record method when there is a metadata.nd.json
@@ -305,7 +307,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "version_id": "version_id",
             }
         }
-        mock_does_s3_prefix_exist.return_value = False
+        mock_does_s3_metadata_copy_exist.return_value = False
         mock_upload_metadata_json_str_to_s3.return_value = (
             self.example_put_object_response1
         )
@@ -315,14 +317,20 @@ class TestAindIndexBucketJob(unittest.TestCase):
             s3_client=mock_s3_client,
             docdb_record=self.example_md_record,
         )
-        mock_does_s3_prefix_exist.assert_called_once_with(
+        mock_does_s3_metadata_copy_exist.assert_called_once_with(
             bucket=self.basic_job.job_settings.s3_bucket,
-            prefix=f"{expected_prefix}/original_metadata",
+            prefix=expected_prefix,
+            copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
-        mock_sync_core_json_files.assert_not_called()
-        mock_copy_then_overwrite_core_json_files.assert_called_once_with(
+        mock_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
+            bucket=self.basic_job.job_settings.s3_bucket,
+            prefix=expected_prefix,
+            s3_client=mock_s3_client,
+            log_flag=True,
+        )
+        mock_cond_copy_core_json_files.assert_called_once_with(
             bucket=self.basic_job.job_settings.s3_bucket,
             prefix=expected_prefix,
             s3_client=mock_s3_client,
@@ -428,7 +436,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -445,7 +453,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_build_metadata_record_from_prefix: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -467,7 +475,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             f"s3://{self.basic_job.job_settings.s3_bucket}/"
             f"ecephys_642478_2023-01-17_13-56-29!"
         )
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
     @patch(
@@ -476,7 +484,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -493,7 +501,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_build_metadata_record_from_prefix: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -525,7 +533,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 call(self.example_put_object_response1),
             ]
         )
-        mock_copy_then_overwrite_core_json_files.assert_called_once_with(
+        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
             bucket=self.basic_job.job_settings.s3_bucket,
             prefix=expected_prefix,
@@ -546,7 +554,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -563,7 +571,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_download_json_file_from_s3: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -585,7 +593,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             f" s3://{self.basic_job.job_settings.s3_bucket}/"
             f"ecephys_642478_2023-01-17_13-56-29/metadata.nd.json!"
         )
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
     @patch(
@@ -594,7 +602,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -611,7 +619,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_download_json_file_from_s3: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -653,7 +661,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "updatedExisting": False,
             }
         )
-        mock_copy_then_overwrite_core_json_files.assert_called_once_with(
+        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
             bucket=self.basic_job.job_settings.s3_bucket,
             prefix="ecephys_642478_2023-01-17_13-56-29",
@@ -669,7 +677,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -686,7 +694,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_download_json_file_from_s3: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -710,7 +718,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             location_to_id_map=location_to_id_map,
         )
         mock_collection.assert_not_called()
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
         mock_log_warn.assert_called_once_with(
             "Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
@@ -723,7 +731,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
-        "copy_then_overwrite_core_json_files"
+        "cond_copy_then_sync_core_json_files"
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -740,7 +748,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
         mock_download_json_file_from_s3: MagicMock,
-        mock_copy_then_overwrite_core_json_files: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
@@ -770,7 +778,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             location_to_id_map=location_to_id_map,
         )
         mock_collection.assert_not_called()
-        mock_copy_then_overwrite_core_json_files.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
         mock_log_warn.assert_called_once_with(
             "Location field s3://aind-ephys-data-dev-u5u0i5/"

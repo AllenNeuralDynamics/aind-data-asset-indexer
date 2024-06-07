@@ -321,37 +321,42 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
             raise e
 
 
-def does_s3_prefix_exist(
-    s3_client: S3Client, bucket: str, prefix: str
-) -> bool:
+def does_s3_metadata_copy_exist(
+    s3_client: S3Client, bucket: str, prefix: str, copy_subdir: str
+):
     """
-    Check if a prefix (folder) exists in a bucket. Uses the list_objects
-    operation with MaxKeys of 1 to check if the prefix exists.
+    For a given bucket and prefix, check if there are any original core schema
+    jsons in the copy_subdir. Uses the list_objects operation.
 
     Parameters
     ----------
     s3_client : S3Client
     bucket : str
     prefix : str
-      For example, behavior_655019_2020-10-10_01-00-23
+      For example, ecephys_123456_2020-10-10_01-02-03
+    copy_subdir : str
+      For example, original_metadata
 
     Returns
     -------
     bool
-      True if the prefix (folder) exists, otherwise False.
-
+      True if any of the core schema jsons exists in the copy_subdir,
+      otherwise False.
     """
-    # Add a trailing slash so that we do not match s3 objects
-    prefix_to_check = prefix if prefix.endswith("/") else f"{prefix}/"
+    # Use trailing slash and delimiter to get top-level objects in copy_subdir
+    copy_prefix = create_object_key(prefix, copy_subdir.strip("/") + "/")
     response = s3_client.list_objects_v2(
-        Bucket=bucket, Prefix=prefix_to_check, MaxKeys=1
+        Bucket=bucket, Prefix=copy_prefix, Delimiter="/"
     )
     if "Contents" in response:
-        if len(response["Contents"]) != 1:
-            raise ValueError("Unexpected number of objects returned")
-        return True
-    else:
-        return False
+        core_schemas = [s.rstrip(".json") for s in core_schema_file_names]
+        pattern = r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
+        for obj in response["Contents"]:
+            file_name = obj["Key"].lstrip(copy_prefix)
+            m = re.match(pattern, file_name)
+            if m is not None and m.group(1) in core_schemas:
+                return True
+    return False
 
 
 def get_dict_of_file_info(
@@ -542,7 +547,7 @@ def build_metadata_record_from_prefix(
     return metadata_dict
 
 
-def copy_then_overwrite_core_json_files(
+def cond_copy_then_sync_core_json_files(
     metadata_json: str,
     bucket: str,
     prefix: str,
@@ -551,10 +556,12 @@ def copy_then_overwrite_core_json_files(
     log_flag: bool = False,
 ) -> None:
     """
-    For a given Metadata record, copy the core schema files to a sub-directory,
-    and then overwrite the core schema file with the new core fields. If the
-    original core schema json was corrupt, then it will be deleted after its
-    original contents are copied.
+    For a given bucket and prefix
+    1) Copy the core schema files if a copy does not already exist.
+    2) Sync the core schema files with core fields from the metadata record.
+    If the original core schema json was corrupt, then it will be deleted after
+    its original contents are copied.
+
     Parameters
     ----------
     metadata_json : str
@@ -576,18 +583,68 @@ def copy_then_overwrite_core_json_files(
     None
 
     """
-    tgt_copy_subdir = copy_original_md_subdir.strip("/")
-    tgt_copy_prefix = create_object_key(prefix, tgt_copy_subdir)
-    if does_s3_prefix_exist(
-        s3_client=s3_client, bucket=bucket, prefix=tgt_copy_prefix
+    if does_s3_metadata_copy_exist(
+        s3_client=s3_client,
+        bucket=bucket,
+        prefix=prefix,
+        copy_subdir=copy_original_md_subdir,
     ):
         _log_message(
             message=(
-                f"Target copy folder s3://{bucket}/{tgt_copy_prefix} "
-                f"already exists."
+                "Copy of original metadata already exists at "
+                f"s3://{bucket}/{prefix}/{copy_original_md_subdir}"
             ),
             log_flag=log_flag,
         )
+    else:
+        cond_copy_core_json_files(
+            bucket=bucket,
+            prefix=prefix,
+            s3_client=s3_client,
+            copy_original_md_subdir=copy_original_md_subdir,
+            log_flag=log_flag,
+        )
+    sync_core_json_files(
+        metadata_json=metadata_json,
+        bucket=bucket,
+        prefix=prefix,
+        s3_client=s3_client,
+        log_flag=log_flag,
+    )
+
+
+def cond_copy_core_json_files(
+    bucket: str,
+    prefix: str,
+    s3_client: S3Client,
+    copy_original_md_subdir: str,
+    log_flag: bool = False,
+) -> None:
+    """
+    For a given bucket and prefix, copy the core schema files to a
+    sub-directory.
+
+    Parameters
+    ----------
+    bucket : str
+        The name of the S3 bucket.
+    prefix : str
+        The prefix for the S3 object keys.
+    s3_client : S3Client
+        The S3 client object.
+    log_flag: bool
+        Flag indicating whether to log operations. Default is False.
+    copy_original_md_subdir : str
+        Subdirectory to copy original core schema json files to.
+        For example, 'original_metadata'.
+
+    Returns
+    -------
+    None
+
+    """
+    tgt_copy_subdir = copy_original_md_subdir.strip("/")
+    tgt_copy_prefix = create_object_key(prefix, tgt_copy_subdir)
     core_files_keys = [
         create_object_key(prefix=prefix, filename=s)
         for s in core_schema_file_names
@@ -596,7 +653,7 @@ def copy_then_overwrite_core_json_files(
         s3_client=s3_client, bucket=bucket, keys=core_files_keys
     )
     for file_name in core_schema_file_names:
-        source= create_object_key(prefix, file_name)
+        source = create_object_key(prefix, file_name)
         source_location = get_s3_location(bucket=bucket, prefix=source)
         source_file_info = core_files_infos[source]
         if source_file_info is not None:
@@ -624,14 +681,6 @@ def copy_then_overwrite_core_json_files(
                 ),
                 log_flag=log_flag,
             )
-    # Overwrite core schema json files with new core fields
-    sync_core_json_files(
-        metadata_json=metadata_json,
-        bucket=bucket,
-        prefix=prefix,
-        s3_client=s3_client,
-        log_flag=log_flag,
-    )
 
 
 def sync_core_json_files(

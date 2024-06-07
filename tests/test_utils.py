@@ -16,12 +16,12 @@ from aind_data_asset_indexer.utils import (
     build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
-    copy_then_overwrite_core_json_files,
+    cond_copy_then_sync_core_json_files,
     create_metadata_object_key,
     create_object_key,
     does_metadata_record_exist_in_docdb,
+    does_s3_metadata_copy_exist,
     does_s3_object_exist,
-    does_s3_prefix_exist,
     download_json_file_from_s3,
     get_dict_of_file_info,
     get_record_from_docdb,
@@ -99,15 +99,15 @@ class TestUtils(unittest.TestCase):
         example_list_objects_response_false = load_json_file(
             "example_list_objects_response_false.json"
         )
-        example_list_objects_response_unexpected = load_json_file(
-            "example_list_objects_response_unexpected.json"
+        example_list_objects_response_none = load_json_file(
+            "example_list_objects_response_none.json"
         )
         cls.example_list_objects_response = example_list_objects_response
         cls.example_list_objects_response_false = (
             example_list_objects_response_false
         )
-        cls.example_list_objects_response_unexpected = (
-            example_list_objects_response_unexpected
+        cls.example_list_objects_response_none = (
+            example_list_objects_response_none
         )
 
         example_get_object_response1 = load_json_file(
@@ -437,58 +437,83 @@ class TestUtils(unittest.TestCase):
         )
 
     @patch("boto3.client")
-    def test_does_s3_prefix_exist_true(self, mock_s3_client: MagicMock):
-        """Tests does_s3_prefix_exist when true"""
-        provided_target_prefix = "prefix/original_metadata"
-        expected_target_prefix = "prefix/original_metadata/"
+    def test_does_s3_metadata_copy_exist_true(self, mock_s3_client: MagicMock):
+        """Tests does_s3_metadata_copy_exist when true"""
+        copy_subdirs = [
+            "original_metadata",
+            "original_metadata/",
+            "/original_metadata",
+        ]
+        # mock response has 1+ files matching
+        # /original_metadata/{core_schema}.{date_stamp}.json
         mock_s3_client.list_objects_v2.return_value = (
             self.example_list_objects_response
         )
-        result = does_s3_prefix_exist(
-            bucket="a_bucket",
-            prefix=provided_target_prefix,
-            s3_client=mock_s3_client,
+        for copy_subdir in copy_subdirs:
+            result = does_s3_metadata_copy_exist(
+                bucket="bucket",
+                prefix="prefix",
+                s3_client=mock_s3_client,
+                copy_subdir=copy_subdir,
+            )
+            self.assertTrue(result)
+        mock_s3_client.list_objects_v2.assert_has_calls(
+            [
+                call(
+                    Bucket="bucket",
+                    Prefix="prefix/original_metadata/",
+                    Delimiter="/",
+                ),
+                call(
+                    Bucket="bucket",
+                    Prefix="prefix/original_metadata/",
+                    Delimiter="/",
+                ),
+                call(
+                    Bucket="bucket",
+                    Prefix="prefix/original_metadata/",
+                    Delimiter="/",
+                ),
+            ]
         )
-        mock_s3_client.list_objects_v2.assert_called_once_with(
-            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
-        )
-        self.assertTrue(result)
 
     @patch("boto3.client")
-    def test_does_s3_prefix_exist_false(self, mock_s3_client: MagicMock):
-        """Tests does_s3_prefix_exist when false"""
-        provided_target_prefix = "prefix/original_metadata"
-        expected_target_prefix = "prefix/original_metadata/"
+    def test_does_s3_metadata_copy_exist_false(
+        self, mock_s3_client: MagicMock
+    ):
+        """Tests does_s3_metadata_copy_exist when false"""
+        # mock response has files but they do not match
+        # original_metadata/{core_schema}.{date_stamp}.json
         mock_s3_client.list_objects_v2.return_value = (
             self.example_list_objects_response_false
         )
-        result = does_s3_prefix_exist(
-            bucket="a_bucket",
-            prefix=provided_target_prefix,
+        result = does_s3_metadata_copy_exist(
+            bucket="bucket",
+            prefix="prefix",
+            copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
         mock_s3_client.list_objects_v2.assert_called_once_with(
-            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
+            Bucket="bucket", Prefix="prefix/original_metadata/", Delimiter="/"
         )
         self.assertFalse(result)
 
     @patch("boto3.client")
-    def test_does_s3_prefix_exist_error(self, mock_s3_client: MagicMock):
-        """Tests does_s3_prefix_exist when response is unexpected"""
-        provided_target_prefix = "prefix/original_metadata"
-        expected_target_prefix = "prefix/original_metadata/"
+    def test_does_s3_metadata_copy_exist_none(self, mock_s3_client: MagicMock):
+        """Tests does_s3_metadata_copy_exist when no files are found"""
         mock_s3_client.list_objects_v2.return_value = (
-            self.example_list_objects_response_unexpected
+            self.example_list_objects_response_none
         )
-        with self.assertRaises(ValueError):
-            does_s3_prefix_exist(
-                bucket="a_bucket",
-                prefix=provided_target_prefix,
-                s3_client=mock_s3_client,
-            )
+        result = does_s3_metadata_copy_exist(
+            bucket="bucket",
+            prefix="prefix",
+            s3_client=mock_s3_client,
+            copy_subdir="original_metadata",
+        )
         mock_s3_client.list_objects_v2.assert_called_once_with(
-            Bucket="a_bucket", Prefix=expected_target_prefix, MaxKeys=1
+            Bucket="bucket", Prefix="prefix/original_metadata/", Delimiter="/"
         )
+        self.assertFalse(result)
 
     @patch("boto3.client")
     def test_get_dict_of_file_info(self, mock_s3_client: MagicMock):
@@ -860,24 +885,24 @@ class TestUtils(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
+    @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
-    def test_copy_then_overwrite_core_json_files(
+    def test_cond_copy_then_sync_core_json_files(
         self,
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
-        mock_does_s3_prefix_exist: MagicMock,
+        mock_does_s3_metadata_copy_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
-        """Tests copy_then_overwrite_core_json_files method."""
+        """Tests cond_copy_then_sync_core_json_files method."""
         bucket = "aind-ephys-data-dev-u5u0i5"
         pfx = "ecephys_642478_2023-01-17_13-56-29"
 
         # example_md_record only has processing and subject fields
         # assume /original_metadata already exists
-        mock_does_s3_prefix_exist.return_value = True
+        mock_does_s3_metadata_copy_exist.return_value = True
         mock_get_dict_of_file_info.return_value = {
             f"{pfx}/acquisition.json": None,
             f"{pfx}/data_description.json": None,
@@ -901,44 +926,26 @@ class TestUtils(unittest.TestCase):
             },
             f"{pfx}/mri_session.json": None,
         }
-        copy_then_overwrite_core_json_files(
+        cond_copy_then_sync_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=bucket,
             prefix=pfx,
             s3_client=mock_s3_client,
         )
         # assert that an existing /original_metadata folder was detected
-        mock_does_s3_prefix_exist.assert_called_once_with(
+        mock_does_s3_metadata_copy_exist.assert_called_once_with(
             bucket=bucket,
-            prefix=f"{pfx}/original_metadata",
+            prefix=pfx,
+            copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
         self.assertEqual(
-            f"Target copy folder s3://{bucket}/{pfx}"
-            f"/original_metadata already exists.",
+            "Copy of original metadata already exists at "
+            f"s3://{bucket}/{pfx}/original_metadata",
             mock_log_message.call_args_list[0][1]["message"],
         )
-        # assert that the original core jsons were copied
-        mock_s3_client.copy_object.assert_has_calls(
-            [
-                call(
-                    Bucket=bucket,
-                    CopySource={
-                        "Bucket": bucket,
-                        "Key": f"{pfx}/processing.json",
-                    },
-                    Key=f"{pfx}/original_metadata/processing.20231104.json",
-                ),
-                call(
-                    Bucket=bucket,
-                    CopySource={
-                        "Bucket": bucket,
-                        "Key": f"{pfx}/subject.json",
-                    },
-                    Key=f"{pfx}/original_metadata/subject.20240202.json",
-                ),
-            ]
-        )
+        # assert that the original core jsons were not copied
+        mock_s3_client.copy_object.assert_not_called()
         # assert that core jsons were overwritten
         mock_upload_core_record.assert_has_calls(
             [
@@ -968,18 +975,18 @@ class TestUtils(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
+    @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
-    def test_copy_then_overwrite_core_json_files_mismatch(
+    def test_cond_copy_then_sync_core_json_files_mismatch(
         self,
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
-        mock_does_s3_prefix_exist: MagicMock,
+        mock_does_s3_metadata_copy_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
-        """Tests copy_then_overwrite_core_json_files method when an original
+        """Tests cond_copy_then_sync_core_json_files method when an original
         core json does not exist in generated metadata.nd.json."""
         bucket = "aind-ephys-data-dev-u5u0i5"
         pfx = "ecephys_642478_2023-01-17_13-56-29"
@@ -987,7 +994,7 @@ class TestUtils(unittest.TestCase):
         # example_md_record only has processing and subject fields
         # assume rig.json exists but is corrupt
         # assume /original_metadata does not exist
-        mock_does_s3_prefix_exist.return_value = False
+        mock_does_s3_metadata_copy_exist.return_value = False
         mock_get_dict_of_file_info.return_value = {
             f"{pfx}/acquisition.json": None,
             f"{pfx}/data_description.json": None,
@@ -1018,7 +1025,7 @@ class TestUtils(unittest.TestCase):
             f"{pfx}/mri_session.json": None,
         }
 
-        copy_then_overwrite_core_json_files(
+        cond_copy_then_sync_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=bucket,
             prefix=pfx,
