@@ -747,6 +747,76 @@ class TestUtils(unittest.TestCase):
         md["last_modified"] = self.example_metadata_nd["last_modified"]
         self.assertEqual(self.example_metadata_nd, md)
 
+    @patch("aind_data_asset_indexer.utils.Metadata.model_construct")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
+    @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
+    def test_build_metadata_record_from_prefix_error(
+        self,
+        mock_download_json_file: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
+        mock_s3_client: MagicMock,
+        mock_metadata_model_construct: MagicMock,
+    ):
+        """Tests build_metadata_record_from_prefix method when there is an
+        error when creating the metadata record"""
+        mock_get_dict_of_file_info.return_value = {
+            "ecephys_642478_2023-01-17_13-56-29/acquisition.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/data_description.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/processing.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"f4827f025e79bafeb6947e14c4e3b51a"',
+                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
+            },
+            "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/session.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/subject.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"92734946c64fc87408ef79e5e92937bc"',
+                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
+            },
+            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
+        }
+        mock_download_json_file.side_effect = [
+            self.example_processing,
+            self.example_subject,
+        ]
+        mock_metadata_model_construct.side_effect = ValueError(
+            "Error creating metadata record"
+        )
+        # noinspection PyTypeChecker
+        result = build_metadata_record_from_prefix(
+            bucket="aind-ephys-data-dev-u5u0i5",
+            prefix="ecephys_642478_2023-01-17_13-56-29",
+            s3_client=mock_s3_client,
+        )
+        mock_get_dict_of_file_info.assert_called_once()
+        mock_download_json_file.assert_has_calls(
+            [
+                call(
+                    s3_client=mock_s3_client,
+                    bucket="aind-ephys-data-dev-u5u0i5",
+                    object_key=(
+                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
+                    ),
+                ),
+                call(
+                    s3_client=mock_s3_client,
+                    bucket="aind-ephys-data-dev-u5u0i5",
+                    object_key=(
+                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
+                    ),
+                ),
+            ]
+        )
+        self.assertIsNone(result)
+
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("boto3.client")
