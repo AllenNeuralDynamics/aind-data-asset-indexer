@@ -17,7 +17,6 @@ from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     compute_md5_hash,
     copy_then_overwrite_core_json_files,
-    create_core_schema_object_keys_map,
     create_metadata_object_key,
     create_object_key,
     does_metadata_record_exist_in_docdb,
@@ -213,63 +212,6 @@ class TestUtils(unittest.TestCase):
         obj_key2 = create_metadata_object_key(prefix2)
         self.assertEqual("prefix1/metadata.nd.json", obj_key1)
         self.assertEqual("prefix2/metadata.nd.json", obj_key2)
-
-    @patch(
-        "aind_data_asset_indexer.utils.core_schema_file_names",
-        new=["mock_schema1.json", "mock_schema2.json", "mock_schema3.json"],
-    )
-    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("boto3.client")
-    def test_create_core_schema_object_keys_map(
-        self, mock_s3_client: MagicMock, mock_get_dict_of_file_info: MagicMock
-    ):
-        """Tests create_core_schema_object_keys_map"""
-        prefix = "prefix1/"
-        target_prefix = "prefix1/original_metadata/"
-        mock_get_dict_of_file_info.return_value = {
-            "prefix1/mock_schema1.json": None,
-            "prefix1/mock_schema2.json": {
-                "last_modified": datetime(
-                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
-                ),
-                "e_tag": '"f4827f025e79bafeb6947e14c4e3b51a"',
-                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
-            },
-            "prefix1/mock_schema3.json": {
-                "last_modified": datetime(
-                    2024, 5, 20, 5, 12, 12, tzinfo=timezone.utc
-                ),
-                "e_tag": '"92734946c64fc87408ef79e5e92937bc"',
-                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
-            },
-        }
-        expected_object_keys_map = {
-            "mock_schema1.json": {
-                "source": "prefix1/mock_schema1.json",
-                "target": (
-                    "prefix1/original_metadata/mock_schema1.unknown.json"
-                ),
-            },
-            "mock_schema2.json": {
-                "source": "prefix1/mock_schema2.json",
-                "target": (
-                    "prefix1/original_metadata/mock_schema2.20231104.json"
-                ),
-            },
-            "mock_schema3.json": {
-                "source": "prefix1/mock_schema3.json",
-                "target": (
-                    "prefix1/original_metadata/mock_schema3.20240520.json"
-                ),
-            },
-        }
-        result_object_keys_map = create_core_schema_object_keys_map(
-            s3_client=mock_s3_client,
-            bucket="some_bucket",
-            prefix=prefix,
-            target_prefix=target_prefix,
-        )
-        self.assertDictEqual(expected_object_keys_map, result_object_keys_map)
 
     def test_get_s3_bucket_and_prefix(self):
         """Tests get_s3_bucket_and_prefix"""
@@ -917,8 +859,7 @@ class TestUtils(unittest.TestCase):
         self.assertCountEqual(expected_logs, actual_log_messages)
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
-    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.utils.create_core_schema_object_keys_map")
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
@@ -927,8 +868,7 @@ class TestUtils(unittest.TestCase):
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_prefix_exist: MagicMock,
-        mock_create_core_keys_map: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
         """Tests copy_then_overwrite_core_json_files method."""
@@ -938,30 +878,29 @@ class TestUtils(unittest.TestCase):
         # example_md_record only has processing and subject fields
         # assume /original_metadata already exists
         mock_does_s3_prefix_exist.return_value = True
-        mock_object_keys_map = {
-            f"{file}.json": {
-                "source": f"{pfx}/{file}.json",
-                "target": f"{pfx}/original_metadata/{file}.unknown.json",
-            }
-            for file in self.example_core_files
+        mock_get_dict_of_file_info.return_value = {
+            f"{pfx}/acquisition.json": None,
+            f"{pfx}/data_description.json": None,
+            f"{pfx}/instrument.json": None,
+            f"{pfx}/procedures.json": None,
+            f"{pfx}/processing.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"7ebb961de9e9b00accfd1358e4561ec1"',
+                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
+            },
+            f"{pfx}/rig.json": None,
+            f"{pfx}/session.json": None,
+            f"{pfx}/subject.json": {
+                "last_modified": datetime(
+                    2024, 2, 2, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"8b8cd50a6cf1f3f667be98a69db2ad89"',
+                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
+            },
+            f"{pfx}/mri_session.json": None,
         }
-        mock_object_keys_map["processing.json"][
-            "target"
-        ] = f"{pfx}/original_metadata/processing.20231104.json"
-        mock_object_keys_map["subject.json"][
-            "target"
-        ] = f"{pfx}/original_metadata/subject.20240202.json"
-        mock_create_core_keys_map.return_value = mock_object_keys_map
-
-        def mock_source_files_exist(s3_client, bucket, key):
-            """Mock does_s3_object_exist function."""
-            mock_exist_files = [
-                f"{pfx}/processing.json",
-                f"{pfx}/subject.json",
-            ]
-            return True if key in mock_exist_files else False
-
-        mock_does_s3_object_exist.side_effect = mock_source_files_exist
         copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=bucket,
@@ -980,7 +919,6 @@ class TestUtils(unittest.TestCase):
             mock_log_message.call_args_list[0][1]["message"],
         )
         # assert that the original core jsons were copied
-        mock_does_s3_object_exist.assert_called()
         mock_s3_client.copy_object.assert_has_calls(
             [
                 call(
@@ -1020,6 +958,7 @@ class TestUtils(unittest.TestCase):
                 ),
             ]
         )
+        mock_s3_client.delete_object.assert_not_called()
         response_logs = [
             c[1]["log_level"]
             for c in mock_log_message.call_args_list
@@ -1028,8 +967,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual([], response_logs)
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
-    @patch("aind_data_asset_indexer.utils.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.utils.create_core_schema_object_keys_map")
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.does_s3_prefix_exist")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils._log_message")
@@ -1038,8 +976,7 @@ class TestUtils(unittest.TestCase):
         mock_log_message: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_prefix_exist: MagicMock,
-        mock_create_core_keys_map: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
         mock_upload_core_record: MagicMock,
     ):
         """Tests copy_then_overwrite_core_json_files method when an original
@@ -1051,34 +988,36 @@ class TestUtils(unittest.TestCase):
         # assume rig.json exists but is corrupt
         # assume /original_metadata does not exist
         mock_does_s3_prefix_exist.return_value = False
-        mock_object_keys_map = {
-            f"{file}.json": {
-                "source": f"{pfx}/{file}.json",
-                "target": f"{pfx}/original_metadata/{file}.unknown.json",
-            }
-            for file in self.example_core_files
+        mock_get_dict_of_file_info.return_value = {
+            f"{pfx}/acquisition.json": None,
+            f"{pfx}/data_description.json": None,
+            f"{pfx}/instrument.json": None,
+            f"{pfx}/procedures.json": None,
+            f"{pfx}/processing.json": {
+                "last_modified": datetime(
+                    2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"7ebb961de9e9b00accfd1358e4561ec1"',
+                "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
+            },
+            f"{pfx}/rig.json": {
+                "last_modified": datetime(
+                    2022, 5, 5, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"898210b082095f3a945f6bd07f37283e"',
+                "version_id": "y7Xtfp7pmQlBrPtaGvK2pz85RUZcMv29",
+            },
+            f"{pfx}/session.json": None,
+            f"{pfx}/subject.json": {
+                "last_modified": datetime(
+                    2024, 2, 2, 1, 13, 41, tzinfo=timezone.utc
+                ),
+                "e_tag": '"8b8cd50a6cf1f3f667be98a69db2ad89"',
+                "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
+            },
+            f"{pfx}/mri_session.json": None,
         }
-        mock_object_keys_map["processing.json"][
-            "target"
-        ] = f"{pfx}/original_metadata/processing.20231104.json"
-        mock_object_keys_map["subject.json"][
-            "target"
-        ] = f"{pfx}/original_metadata/subject.20240202.json"
-        mock_object_keys_map["rig.json"][
-            "target"
-        ] = f"{pfx}/original_metadata/rig.20220505.json"
-        mock_create_core_keys_map.return_value = mock_object_keys_map
 
-        def mock_source_files_exist(s3_client, bucket, key):
-            """Mock does_s3_object_exist function."""
-            mock_exist_files = [
-                f"{pfx}/processing.json",
-                f"{pfx}/rig.json",
-                f"{pfx}/subject.json",
-            ]
-            return True if key in mock_exist_files else False
-
-        mock_does_s3_object_exist.side_effect = mock_source_files_exist
         copy_then_overwrite_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
             bucket=bucket,
@@ -1087,7 +1026,6 @@ class TestUtils(unittest.TestCase):
         )
         # assert that the original core jsons were copied, including
         # corrupt rig.json
-        mock_does_s3_object_exist.assert_called()
         mock_s3_client.copy_object.assert_has_calls(
             [
                 call(
@@ -1139,21 +1077,12 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=bucket, Key=f"{pfx}/rig.json"
         )
-        expected_loc = f"s3://{bucket}/{pfx}/rig.json"
-        expected_warn_log = {
-            "log_flag": False,
-            "log_level": logging.WARN,
-            "message": (
-                f"rig not found in metadata.nd.json for {pfx} but "
-                f"{expected_loc} exists! Deleting."
-            ),
-        }
         response_logs = [
-            c[1]
+            c[1]["log_level"]
             for c in mock_log_message.call_args_list
             if "log_level" in c[1]
         ]
-        self.assertEqual([expected_warn_log], response_logs)
+        self.assertEqual([], response_logs)
 
     @patch("pymongo.MongoClient")
     def test_does_metadata_record_exist_in_docdb_true(

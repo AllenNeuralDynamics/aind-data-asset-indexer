@@ -101,65 +101,6 @@ def create_metadata_object_key(prefix: str) -> str:
     )
 
 
-def create_core_schema_object_keys_map(
-    s3_client: S3Client,
-    bucket: str,
-    prefix: str,
-    target_prefix: str,
-) -> Dict[str, Dict[str, str]]:
-    """
-    For a given s3 prefix, return a dictionary of { core_schema_file_name:
-    { source: source_object_key, target: target_object_key } } for all possible
-    core schema files in s3.
-    The source is the original core schema object key.
-    The target is in the target_prefix and has a date stamp appended.
-    Parameters
-    ----------
-    s3_client : S3Client
-    bucket : str
-    prefix : str
-      The source prefix. For example, ecephys_123456_2020-10-10_01-02-03
-    target_prefix : str
-      The target prefix for target files.
-      For example, ecephys_123456_2020-10-10_01-02-03/original_metadata.
-
-    Returns
-    -------
-    Dict[str, Dict[str, str]]
-      Returns a dictionary of all possible core schema file names and their
-      corresponding source and target core schema object keys.
-      For example, {
-        'subject.json': {
-            'source': 'prefix/subject.json',
-            'target': 'prefix/original_metadata/subject.20240520.json'
-        },
-        ...
-    }
-
-    """
-    source_keys = [
-        create_object_key(prefix=prefix, filename=s)
-        for s in core_schema_file_names
-    ]
-    s3_file_responses = get_dict_of_file_info(
-        s3_client=s3_client, bucket=bucket, keys=source_keys
-    )
-    object_keys = dict()
-    for source_key, file_info in s3_file_responses.items():
-        file_name = source_key.split("/")[-1]
-        source = source_key
-        if file_info is not None:
-            date_stamp = file_info["last_modified"].strftime("%Y%m%d")
-        else:
-            date_stamp = "unknown"
-        target = create_object_key(
-            prefix=target_prefix,
-            filename=file_name.replace(".json", f".{date_stamp}.json"),
-        )
-        object_keys[file_name] = {"source": source, "target": target}
-    return object_keys
-
-
 def is_prefix_valid(prefix: str) -> bool:
     """
     Check if a given prefix is valid. A valid prefix conforms to a regex
@@ -635,7 +576,6 @@ def copy_then_overwrite_core_json_files(
     None
 
     """
-    md_record_json = json.loads(metadata_json)
     tgt_copy_subdir = copy_original_md_subdir.strip("/")
     tgt_copy_prefix = create_object_key(prefix, tgt_copy_subdir)
     if does_s3_prefix_exist(
@@ -648,19 +588,23 @@ def copy_then_overwrite_core_json_files(
             ),
             log_flag=log_flag,
         )
-    object_keys = create_core_schema_object_keys_map(
-        s3_client=s3_client,
-        bucket=bucket,
-        prefix=prefix,
-        target_prefix=tgt_copy_prefix,
+    core_files_keys = [
+        create_object_key(prefix=prefix, filename=s)
+        for s in core_schema_file_names
+    ]
+    core_files_infos = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=core_files_keys
     )
-    for file_name, key_mapping in object_keys.items():
-        source = key_mapping["source"]
-        target = key_mapping["target"]
+    for file_name in core_schema_file_names:
+        source= create_object_key(prefix, file_name)
         source_location = get_s3_location(bucket=bucket, prefix=source)
-        if does_s3_object_exist(
-            s3_client=s3_client, bucket=bucket, key=source
-        ):
+        source_file_info = core_files_infos[source]
+        if source_file_info is not None:
+            date_stamp = source_file_info["last_modified"].strftime("%Y%m%d")
+            target = create_object_key(
+                prefix=tgt_copy_prefix,
+                filename=file_name.replace(".json", f".{date_stamp}.json"),
+            )
             # Copy original core json files to /original_metadata
             _log_message(
                 message=f"Copying {source} to {target} in s3://{bucket}",
@@ -672,37 +616,6 @@ def copy_then_overwrite_core_json_files(
                 Key=target,
             )
             _log_message(message=response, log_flag=log_flag)
-            # Overwrite core fields from metadata.nd.json to the s3 core jsons
-            field_name = file_name.replace(".json", "")
-            if (
-                field_name in md_record_json
-                and md_record_json[field_name] is not None
-            ):
-                field_contents = md_record_json[field_name]
-                field_contents_str = json.dumps(field_contents)
-                _log_message(
-                    message=f"Uploading new {field_name} to {source_location}",
-                    log_flag=log_flag,
-                )
-                response = upload_json_str_to_s3(
-                    bucket=bucket,
-                    object_key=source,
-                    json_str=field_contents_str,
-                    s3_client=s3_client,
-                )
-                _log_message(message=response, log_flag=log_flag)
-            else:
-                # Since a copy was made, we can delete it from the top level
-                _log_message(
-                    message=(
-                        f"{field_name} not found in metadata.nd.json for "
-                        f"{prefix} but {source_location} exists! Deleting."
-                    ),
-                    log_level=logging.WARNING,
-                    log_flag=log_flag,
-                )
-                response = s3_client.delete_object(Bucket=bucket, Key=source)
-                _log_message(message=response, log_flag=log_flag)
         else:
             _log_message(
                 message=(
@@ -711,6 +624,14 @@ def copy_then_overwrite_core_json_files(
                 ),
                 log_flag=log_flag,
             )
+    # Overwrite core schema json files with new core fields
+    sync_core_json_files(
+        metadata_json=metadata_json,
+        bucket=bucket,
+        prefix=prefix,
+        s3_client=s3_client,
+        log_flag=log_flag,
+    )
 
 
 def sync_core_json_files(
