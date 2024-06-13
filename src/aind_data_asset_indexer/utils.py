@@ -4,12 +4,11 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
-import pytz
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import Metadata
@@ -1003,7 +1002,7 @@ def get_all_processed_codeocean_asset_records(
             data_asset_name = data_asset_info["name"]
             created_timestamp = data_asset_info["created"]
             created_datetime = datetime.fromtimestamp(
-                created_timestamp, tz=pytz.UTC
+                created_timestamp, tz=timezone.utc
             )
             # Results hosted externally have a source_bucket field
             is_external = (

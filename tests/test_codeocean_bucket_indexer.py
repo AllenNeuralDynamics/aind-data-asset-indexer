@@ -2,11 +2,9 @@
 
 import os
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
-
-import pytz
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -46,7 +44,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11"
                 ),
-                "created": datetime(2024, 6, 12, 21, 21, 28, tzinfo=pytz.UTC),
+                "created": datetime(
+                    2024, 6, 12, 21, 21, 28, tzinfo=timezone.utc
+                ),
                 "external_links": {
                     "Code Ocean": "11ee1e1e-11e1-1111-1111-e11eeeee1e11"
                 },
@@ -59,7 +59,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
                 ),
-                "created": datetime(2024, 6, 12, 19, 45, 59, tzinfo=pytz.UTC),
+                "created": datetime(
+                    2024, 6, 12, 19, 45, 59, tzinfo=timezone.utc
+                ),
                 "external_links": {
                     "Code Ocean": "666666cc-66cc-6c66-666c-6c66c6666666"
                 },
