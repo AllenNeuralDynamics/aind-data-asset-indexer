@@ -1,0 +1,66 @@
+{
+   "results": [
+      {
+         "created": 1718227288,
+         "custom_metadata": {
+            "data level": "derived",
+            "experiment type": "ecephys",
+            "subject id": "712141"
+         },
+         "description": "",
+         "files": 8732,
+         "id": "11ee1e1e-11e1-1111-1111-e11eeeee1e11",
+         "last_used": 1718227621,
+         "mount": "ecephys_712141_2024-06-06_10-44-36_sorted_2024-06-12_21-21-28",
+         "name": "ecephys_712141_2024-06-06_10-44-36_sorted_2024-06-12_21-21-28",
+         "provenance": {
+            "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
+            "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "data_assets": [
+               "aaa3a3aa-a33a-3aa3-a33a-aa3aaa333a3a"
+            ],
+            "docker_image": "",
+            "run_script": "code/run"
+         },
+         "size": 19692901898,
+         "state": "ready",
+         "tags": [
+            "derived",
+            "ecephys",
+            "712141"
+         ],
+         "type": "result"
+      },
+      {
+         "created": 1718221559,
+         "custom_metadata": {
+            "data level": "derived",
+            "experiment type": "ecephys",
+            "subject id": "712815"
+         },
+         "description": "",
+         "files": 6258,
+         "id": "666666cc-66cc-6c66-666c-6c66c6666666",
+         "last_used": 1718221829,
+         "mount": "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59",
+         "name": "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59",
+         "provenance": {
+            "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
+            "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "data_assets": [
+               "d11dd111-111d-1d11-d111-d1d11111dd11"
+            ],
+            "docker_image": "",
+            "run_script": "code/run"
+         },
+         "size": 13145860340,
+         "state": "ready",
+         "tags": [
+            "derived",
+            "712815",
+            "ecephys"
+         ],
+         "type": "result"
+      }
+   ]
+}

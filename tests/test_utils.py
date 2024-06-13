@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
+import pytz
+from aind_codeocean_api.codeocean import CodeOceanClient
 from botocore.exceptions import ClientError
+from requests import Response
 
 from aind_data_asset_indexer.utils import (
     _log_message,
@@ -23,6 +26,7 @@ from aind_data_asset_indexer.utils import (
     does_s3_metadata_copy_exist,
     does_s3_object_exist,
     download_json_file_from_s3,
+    get_all_processed_codeocean_asset_records,
     get_dict_of_file_info,
     get_record_from_docdb,
     get_s3_bucket_and_prefix,
@@ -73,6 +77,9 @@ class TestUtils(unittest.TestCase):
         example_metadata_nd = load_json_file("example_metadata.nd.json")
         example_metadata_nd1 = load_json_file("example_metadata1.nd.json")
         example_metadata_nd2 = load_json_file("example_metadata2.nd.json")
+        example_co_search_data_assets = load_json_file(
+            "example_search_co_assets.json"
+        )
         cls.example_processing = example_processing
         cls.example_subject = example_subject
         cls.example_metadata_nd = example_metadata_nd
@@ -134,6 +141,7 @@ class TestUtils(unittest.TestCase):
         cls.example_put_object_response1 = load_json_file(
             "example_put_object_response1.json"
         )
+        cls.example_co_search_data_assets = example_co_search_data_assets
 
     @patch("logging.log")
     def test__log_message_true(self, mock_log: MagicMock):
@@ -747,6 +755,46 @@ class TestUtils(unittest.TestCase):
         md["last_modified"] = self.example_metadata_nd["last_modified"]
         self.assertEqual(self.example_metadata_nd, md)
 
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
+    @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
+    def test_build_metadata_record_from_prefix_with_optional_fields(
+        self,
+        mock_download_json_file: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
+        mock_s3_client: MagicMock,
+    ):
+        """Tests build_metadata_record_from_prefix method when 'created' and
+        'external_links' are provided"""
+        mock_get_dict_of_file_info.return_value = {
+            "ecephys_642478_2023-01-17_13-56-29/acquisition.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/data_description.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/processing.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/session.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/subject.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
+        }
+        # noinspection PyTypeChecker
+        md = json.loads(
+            build_metadata_record_from_prefix(
+                bucket="code-ocean-bucket",
+                prefix="abc-123",
+                s3_client=mock_s3_client,
+                optional_name="ecephys_642478_2023-01-17_13-56-29",
+                optional_created=datetime(2020, 1, 2, 3, 4, 5),
+                optional_external_links=[{"Code Ocean": "123-456"}],
+            )
+        )
+        mock_get_dict_of_file_info.assert_called_once()
+        mock_download_json_file.assert_not_called()
+        self.assertEqual("s3://code-ocean-bucket/abc-123", md["location"])
+        self.assertEqual("ecephys_642478_2023-01-17_13-56-29", md["name"])
+        self.assertEqual("2020-01-02T03:04:05", md["created"])
+        self.assertEqual([{"Code Ocean": "123-456"}], md["external_links"])
+
     @patch("aind_data_asset_indexer.utils.Metadata.model_construct")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
@@ -1311,6 +1359,96 @@ class TestUtils(unittest.TestCase):
             ),
         }
         self.assertEqual(expected_map, actual_map)
+
+    @patch(
+        "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
+    )
+    def test_get_all_processed_codeocean_asset_records(
+        self, mock_search_all_data_assets: MagicMock
+    ):
+        """Tests get_all_processed_codeocean_asset_records method"""
+        mock_response1 = Response()
+        mock_response1.status_code = 200
+        body = json.dumps(self.example_co_search_data_assets)
+        mock_response1._content = body.encode("utf-8")
+        mock_response2 = Response()
+        mock_response2.status_code = 200
+        body = json.dumps({"results": []})
+        mock_response2._content = body.encode("utf-8")
+        mock_search_all_data_assets.side_effect = [
+            mock_response1,
+            mock_response2,
+        ]
+        co_client = CodeOceanClient(domain="some_domain", token="some_token")
+        records = get_all_processed_codeocean_asset_records(
+            co_client=co_client,
+            co_data_asset_bucket="some_co_bucket",
+        )
+        expected_records = {
+            "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11": {
+                "name": (
+                    "ecephys_712141_2024-06-06_10-44-36_"
+                    "sorted_2024-06-12_21-21-28"
+                ),
+                "location": (
+                    "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11"
+                ),
+                "created": datetime(2024, 6, 12, 21, 21, 28, tzinfo=pytz.UTC),
+                "external_links": {
+                    "Code Ocean": "11ee1e1e-11e1-1111-1111-e11eeeee1e11"
+                },
+            },
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666": {
+                "name": (
+                    "ecephys_712815_2024-05-22_12-26-32_"
+                    "sorted_2024-06-12_19-45-59"
+                ),
+                "location": (
+                    "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
+                ),
+                "created": datetime(2024, 6, 12, 19, 45, 59, tzinfo=pytz.UTC),
+                "external_links": {
+                    "Code Ocean": "666666cc-66cc-6c66-666c-6c66c6666666"
+                },
+            },
+        }
+
+        self.assertEqual(expected_records, records)
+
+    @patch(
+        "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
+    )
+    @patch("logging.warning")
+    def test_get_all_processed_codeocean_asset_records_warning(
+        self, mock_log_warn: MagicMock, mock_search_all_data_assets: MagicMock
+    ):
+        """Tests get_all_processed_codeocean_asset_records method when 10,000
+        records are returned"""
+        # Fake a response with 10,000 records
+        search_result_copy = deepcopy(self.example_co_search_data_assets)
+        result0 = search_result_copy["results"][0]
+        search_result_copy["results"] = [result0 for _ in range(0, 10000)]
+        mock_response1 = Response()
+        mock_response1.status_code = 200
+        body = json.dumps(search_result_copy)
+        mock_response1._content = body.encode("utf-8")
+        mock_response2 = Response()
+        mock_response2.status_code = 200
+        body = json.dumps({"results": []})
+        mock_response2._content = body.encode("utf-8")
+        mock_search_all_data_assets.side_effect = [
+            mock_response1,
+            mock_response2,
+        ]
+        co_client = CodeOceanClient(domain="some_domain", token="some_token")
+        get_all_processed_codeocean_asset_records(
+            co_client=co_client,
+            co_data_asset_bucket="some_co_bucket",
+        )
+        mock_log_warn.assert_called_once_with(
+            "Number of records exceeds 10,000! "
+            "This can lead to possible data loss."
+        )
 
 
 if __name__ == "__main__":

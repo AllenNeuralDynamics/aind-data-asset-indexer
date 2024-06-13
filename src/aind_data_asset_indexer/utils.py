@@ -4,11 +4,14 @@ import hashlib
 import json
 import logging
 import re
+from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
-from aind_data_schema.core.data_description import DataRegex
+import pytz
+from aind_codeocean_api.codeocean import CodeOceanClient
+from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import Metadata
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
@@ -487,6 +490,8 @@ def build_metadata_record_from_prefix(
     prefix: str,
     s3_client: S3Client,
     optional_name: Optional[str] = None,
+    optional_created: Optional[datetime] = None,
+    optional_external_links: Optional[List[dict]] = None,
 ) -> Optional[str]:
     """
     For a given bucket and prefix, this method will return a JSON string
@@ -500,8 +505,12 @@ def build_metadata_record_from_prefix(
     prefix : str
     s3_client : S3Client
     optional_name : Optional[str]
-      If optional is None, then a name will be constructed from the s3_prefix.
-      Default is None.
+      If optional_name is None, then a name will be constructed from the
+      s3_prefix. Default is None.
+    optional_created: Optional[datetime]
+      User can override created datetime. Default is None.
+    optional_external_links: Optional[List[dict]]
+      User can provide external_links. Default is None.
 
     Returns
     -------
@@ -522,6 +531,10 @@ def build_metadata_record_from_prefix(
         "name": record_name,
         "location": get_s3_location(bucket=bucket, prefix=prefix),
     }
+    if optional_created is not None:
+        metadata_dict["created"] = optional_created
+    if optional_external_links is not None:
+        metadata_dict["external_links"] = optional_external_links
     for object_key, response_data in s3_file_responses.items():
         if response_data is not None:
             field_name = object_key.split("/")[-1].replace(".json", "")
@@ -939,3 +952,73 @@ def build_docdb_location_to_id_map(
     results = collection.find(filter=filter_query, projection=projection)
     location_to_id_map = {r["location"]: r["_id"] for r in results}
     return location_to_id_map
+
+
+def get_all_processed_codeocean_asset_records(
+    co_client: CodeOceanClient, co_data_asset_bucket: str
+) -> Dict[str, dict]:
+    """
+    Gets all the data asset records we're interested in indexing. The location
+    field in the output is the expected location of the data asset. It may
+    still require double-checking that the s3 location is valid.
+    Parameters
+    ----------
+    co_client : CodeOceanClient
+    co_data_asset_bucket : str
+      Name of Code Ocean's data asset bucket
+    Returns
+    -------
+    Dict[str, dict]
+      {data_asset_location:
+      {"name": data_asset_name,
+      "location": data_asset_location,
+      "created": data_asset_created,
+      "external_links": {"Code Ocean": data_asset_id}
+      }
+      }
+
+    """
+
+    # We need to break up the search query until Code Ocean fixes a bug in
+    # their search API. This may still break if the number of records in an
+    # individual response exceeds 10,000
+
+    all_responses = dict()
+
+    for tag in {DataLevel.DERIVED.value, "processed"}:
+        response = co_client.search_all_data_assets(
+            type="result", query=f"tag:{tag}"
+        )
+        # There is a bug with the codeocean api that caps the number of
+        # results in a single request to 10000.
+        if len(response.json()["results"]) >= 10000:
+            logging.warning(
+                "Number of records exceeds 10,000! This can lead to "
+                "possible data loss."
+            )
+        # Extract relevant information
+        extracted_info = dict()
+        for data_asset_info in response.json()["results"]:
+            data_asset_id = data_asset_info["id"]
+            data_asset_name = data_asset_info["name"]
+            created_timestamp = data_asset_info["created"]
+            created_datetime = datetime.fromtimestamp(
+                created_timestamp, tz=pytz.UTC
+            )
+            # Results hosted externally have a source_bucket field
+            is_external = (
+                data_asset_info.get("sourceBucket") is not None
+                or data_asset_info.get("source_bucket") is not None
+            )
+            if not is_external and data_asset_info.get("state") == "ready":
+                location = f"s3://{co_data_asset_bucket}/{data_asset_id}"
+                extracted_info[location] = {
+                    "name": data_asset_name,
+                    "location": location,
+                    "created": created_datetime,
+                    "external_links": {"Code Ocean": data_asset_id},
+                }
+        # Occasionally, there are duplicate items returned. This is one
+        # way to remove the duplicates.
+        all_responses.update(extracted_info)
+    return all_responses
