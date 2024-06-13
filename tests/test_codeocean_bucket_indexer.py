@@ -18,7 +18,7 @@ TEST_UTILS_DIR = TEST_DIR / "resources" / "utils"
 
 
 class TestCodeOceanIndexBucketJob(unittest.TestCase):
-    """Class to test methods in AindIndexBucketJob class."""
+    """Class to test methods in CodeOceanIndexBucketJob class."""
 
     @classmethod
     def setUpClass(cls) -> None:

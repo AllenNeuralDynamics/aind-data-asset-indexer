@@ -1,4 +1,4 @@
-"""Module to handle syncing changes from DocDb to S3."""
+"""Module to index Code Ocean processed results in DocDB."""
 
 import argparse
 import json
@@ -29,22 +29,15 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class CodeOceanIndexBucketJob:
     """This job will:
-    1) Loop through the records in DocDb filtered by bucket. If the record does
-    not have valid location, it will log a warning and not process it further.
-    2.0) For each record, check if the S3 location exists. If the S3 location
-    does not exist, then remove the record from DocDB.
-    2.1) If the S3 location exists, check if there is a metadata.nd.json file.
-    2.1.0) If there is no file, log a warning and remove the record from DocDb.
-    2.1.1) If there is a file, compare the md5 hashes. If they are different,
-    overwrite the record in S3 with the record from DocDb.
-    2.1.2) If they are the same, then do nothing.
-    3) Scan through each prefix in S3.
-    4) For each prefix, check if a metadata record exists in S3.
-    4.0) If a metadata record exists, check if it is in DocDB.
-    4.1) If already in DocDb, then don't do anything.
-    Otherwise, copy record to DocDB.
-    4.2) If a metadata record does not exist, then build one and save it S3.
-    Assume a lambda function will move it over to DocDb.
+    1) Download all processed results records from the Code Ocean index
+    2) Download all the records in DocDB for the Code Ocean bucket. The
+    response is project to just the {_id, location} fields.
+    3) Creates a list of locations found in Code Ocean and a list of
+    locations found in DocDB.
+    4) For locations found in Code Ocean not in DocDB, a new record will be
+    created from the aind-data-schema json files in S3.
+    5) For locations in DocDB not found in Code Ocean, the records will be
+    removed from DocDB.
     """
 
     def __init__(self, job_settings: CodeOceanIndexBucketJobSettings):
@@ -58,9 +51,10 @@ class CodeOceanIndexBucketJob:
         s3_client: S3Client,
     ):
         """
-        Processes a prefix in S3
-        1) If record exists DocDB, do nothing.
-        3) If there is no record in DocDB, create one
+        Processes a code ocean record. It's assumed that the check to verify
+        the record is not in DocDB is done upstream.
+        1) Using the s3 location in the codeocean record, build metadata file.
+        2) Save metadata record to DocDB if no issue
 
         Parameters
         ----------
@@ -105,7 +99,7 @@ class CodeOceanIndexBucketJob:
         """
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
-        50 prefixes.
+        50 code ocean records.
         Parameters
         ----------
         record_list : List[dict]
