@@ -31,7 +31,7 @@ class CodeOceanIndexBucketJob:
     """This job will:
     1) Download all processed results records from the Code Ocean index
     2) Download all the records in DocDB for the Code Ocean bucket. The
-    response is project to just the {_id, location} fields.
+    response is projected to just the {_id, location} fields.
     3) Creates a list of locations found in Code Ocean and a list of
     locations found in DocDB.
     4) For locations found in Code Ocean not in DocDB, a new record will be
