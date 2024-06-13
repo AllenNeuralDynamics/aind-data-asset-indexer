@@ -69,16 +69,16 @@ class AindIndexBucketJobSettings(IndexJobSettings):
             Name=param_store_name, WithDecryption=True
         )
         param_store_client.close()
-        parameters = response["Parameter"]["Value"]
-        parameters_json = json.loads(parameters)
-        if "doc_db_secret_name" not in parameters:
+        parameters: str = response["Parameter"]["Value"]
+        parameters_json: dict = json.loads(parameters)
+        if "doc_db_secret_name" not in parameters_json.keys():
             raise ValueError("doc_db_secret_name not found in parameters.")
         secrets_client = boto3.client("secretsmanager")
         docdb_secret = secrets_client.get_secret_value(
             SecretId=parameters_json["doc_db_secret_name"]
         )
         secrets_client.close()
-        docdb_secret_json = json.loads(docdb_secret["SecretString"])
+        docdb_secret_json: dict = json.loads(docdb_secret["SecretString"])
         del parameters_json["doc_db_secret_name"]
         secret_to_job_settings_map = {
             "host": "doc_db_host",
@@ -88,7 +88,7 @@ class AindIndexBucketJobSettings(IndexJobSettings):
         }
 
         for secret_key, job_setting in secret_to_job_settings_map.items():
-            if secret_key not in docdb_secret_json:
+            if secret_key not in docdb_secret_json.keys():
                 raise ValueError(f"{secret_key} not found in docdb secret.")
             parameters_json[job_setting] = docdb_secret_json[secret_key]
         return cls.model_validate_json(json.dumps(parameters_json))
@@ -109,3 +109,66 @@ class AindIndexBucketsJobSettings(AindIndexBucketJobSettings):
     # Set individual bucket off
     s3_bucket: type(None) = None
     s3_buckets: List[str]
+
+
+class CodeOceanIndexBucketJobSettings(IndexJobSettings):
+    """Aind Index Bucket Job Settings"""
+
+    doc_db_host: str
+    doc_db_port: int
+    doc_db_user_name: str
+    doc_db_password: SecretStr
+    doc_db_db_name: str
+    doc_db_collection_name: str
+    codeocean_domain: str
+    codeocean_token: SecretStr
+
+    @classmethod
+    def from_param_store(cls, param_store_name: str):
+        """
+        Construct class from aws param store and secrets manager
+        Parameters
+        ----------
+        param_store_name : str
+        """
+        param_store_client = boto3.client("ssm")
+        response = param_store_client.get_parameter(
+            Name=param_store_name, WithDecryption=True
+        )
+        param_store_client.close()
+        parameters: str = response["Parameter"]["Value"]
+        parameters_json: dict = json.loads(parameters)
+        if "doc_db_secret_name" not in parameters_json.keys():
+            raise ValueError("doc_db_secret_name not found in parameters.")
+        if "codeocean_secret_name" not in parameters_json.keys():
+            raise ValueError("codeocean_secret_name not found in parameters.")
+        secrets_client = boto3.client("secretsmanager")
+        docdb_secret = secrets_client.get_secret_value(
+            SecretId=parameters_json["doc_db_secret_name"]
+        )
+        codeocean_secret = secrets_client.get_secret_value(
+            SecretId=parameters_json["codeocean_secret_name"]
+        )
+        secrets_client.close()
+        docdb_secret_json: dict = json.loads(docdb_secret["SecretString"])
+        codeocean_secret_json: dict = json.loads(
+            codeocean_secret["SecretString"]
+        )
+        codeocean_domain = codeocean_secret_json["domain"]
+        codeocean_token = codeocean_secret_json["token"]
+        parameters_json["codeocean_domain"] = codeocean_domain
+        parameters_json["codeocean_token"] = codeocean_token
+        del parameters_json["doc_db_secret_name"]
+        del parameters_json["codeocean_secret_name"]
+        secret_to_job_settings_map = {
+            "host": "doc_db_host",
+            "port": "doc_db_port",
+            "username": "doc_db_user_name",
+            "password": "doc_db_password",
+        }
+
+        for secret_key, job_setting in secret_to_job_settings_map.items():
+            if secret_key not in docdb_secret_json.keys():
+                raise ValueError(f"{secret_key} not found in docdb secret.")
+            parameters_json[job_setting] = docdb_secret_json[secret_key]
+        return cls.model_validate_json(json.dumps(parameters_json))
