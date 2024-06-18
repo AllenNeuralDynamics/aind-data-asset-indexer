@@ -446,10 +446,12 @@ def is_dict_corrupt(input_dict: dict) -> bool:
     Returns
     -------
     bool
-      True if nested dictionary keys contain forbidden characters.
-      False otherwise.
+      True if input_dict is not a dict, or if nested dictionary keys contain
+      forbidden characters. False otherwise.
 
     """
+    if not isinstance(input_dict, dict):
+        return True
     for key, value in input_dict.items():
         if "$" in key or "." in key:
             return True
@@ -526,26 +528,26 @@ def build_metadata_record_from_prefix(
         s3_client=s3_client, bucket=bucket, keys=file_keys
     )
     record_name = prefix.strip("/") if optional_name is None else optional_name
-    metadata_dict = {
-        "name": record_name,
-        "location": get_s3_location(bucket=bucket, prefix=prefix),
-    }
-    if optional_created is not None:
-        metadata_dict["created"] = optional_created
-    if optional_external_links is not None:
-        metadata_dict["external_links"] = optional_external_links
-    for object_key, response_data in s3_file_responses.items():
-        if response_data is not None:
-            field_name = object_key.split("/")[-1].replace(".json", "")
-            json_contents = download_json_file_from_s3(
-                s3_client=s3_client, bucket=bucket, object_key=object_key
-            )
-            if json_contents is not None:
-                # noinspection PyTypeChecker
-                is_corrupt = is_dict_corrupt(input_dict=json_contents)
-                if not is_corrupt:
-                    metadata_dict[field_name] = json_contents
     try:
+        metadata_dict = {
+            "name": record_name,
+            "location": get_s3_location(bucket=bucket, prefix=prefix),
+        }
+        if optional_created is not None:
+            metadata_dict["created"] = optional_created
+        if optional_external_links is not None:
+            metadata_dict["external_links"] = optional_external_links
+        for object_key, response_data in s3_file_responses.items():
+            if response_data is not None:
+                field_name = object_key.split("/")[-1].replace(".json", "")
+                json_contents = download_json_file_from_s3(
+                    s3_client=s3_client, bucket=bucket, object_key=object_key
+                )
+                if json_contents is not None:
+                    # noinspection PyTypeChecker
+                    is_corrupt = is_dict_corrupt(input_dict=json_contents)
+                    if not is_corrupt:
+                        metadata_dict[field_name] = json_contents
         # TODO: We should handle constructing the Metadata file in a better way
         #  in aind-data-schema. By using model_validate, a lot of info from the
         #  original files get removed. For now, we can use model_construct
