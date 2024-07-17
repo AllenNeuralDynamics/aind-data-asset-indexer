@@ -259,14 +259,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
-        mock_log_error.assert_has_calls(
-            [
-                call(
-                    "Error processing s3://some_co_bucket/"
-                    "11ee1e1e-11e1-1111-1111-e11eeeee1e11."
-                ),
-                call("Error: Exception('Error processing record')"),
-            ]
+        mock_log_error.assert_called_once_with(
+            "Error processing s3://some_co_bucket/"
+            "11ee1e1e-11e1-1111-1111-e11eeeee1e11: "
+            "Exception('Error processing record')"
         )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()

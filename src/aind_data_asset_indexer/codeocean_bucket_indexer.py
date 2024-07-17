@@ -125,8 +125,9 @@ class CodeOceanIndexBucketJob:
                     s3_client=s3_client,
                 )
             except Exception as e:
-                logging.error(f'Error processing {record.get("location")}.')
-                logging.error(f"Error: {repr(e)}")
+                logging.error(
+                    f'Error processing {record.get("location")}: {repr(e)}'
+                )
         s3_client.close()
         doc_db_client.close()
 

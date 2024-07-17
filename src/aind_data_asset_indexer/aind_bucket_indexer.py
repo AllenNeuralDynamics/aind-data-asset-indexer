@@ -184,9 +184,8 @@ class AindIndexBucketJob:
             except Exception as e:
                 logging.error(
                     f'Error processing docdb {record.get("_id")}, '
-                    f'{record.get("location")}.'
+                    f'{record.get("location")}: {repr(e)}'
                 )
-                logging.error(f"Error: {repr(e)}")
         s3_client.close()
         doc_db_client.close()
 
@@ -398,9 +397,9 @@ class AindIndexBucketJob:
             except Exception as e:
                 logging.error(
                     f"Error processing "
-                    f"{get_s3_location(self.job_settings.s3_bucket, prefix)}."
+                    f"{get_s3_location(self.job_settings.s3_bucket, prefix)}: "
+                    f"{repr(e)}"
                 )
-                logging.error(f"Error: {repr(e)}")
         s3_client.close()
         doc_db_client.close()
 

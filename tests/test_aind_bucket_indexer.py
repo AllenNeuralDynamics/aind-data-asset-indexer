@@ -348,15 +348,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
-        expected_error = (
+        mock_log_error.assert_called_once_with(
             "Error processing docdb 5ca4a951-d374-4f4b-8279-d570a35b2286, s3:"
-            "//aind-ephys-data-dev-u5u0i5/ecephys_567890_2000-01-01_04-00-00."
-        )
-        mock_log_error.assert_has_calls(
-            [
-                call(expected_error),
-                call("Error: Exception('Error processing record')"),
-            ]
+            "//aind-ephys-data-dev-u5u0i5/ecephys_567890_2000-01-01_04-00-00: "
+            "Exception('Error processing record')"
         )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
@@ -919,14 +914,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
-        mock_log_error.assert_has_calls(
-            [
-                call(
-                    "Error processing s3://aind-ephys-data-dev-u5u0i5/"
-                    "ecephys_567890_2000-01-01_04-00-00."
-                ),
-                call("Error: Exception('Error processing prefix')"),
-            ]
+        mock_log_error.assert_called_once_with(
+            "Error processing s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_567890_2000-01-01_04-00-00: "
+            "Exception('Error processing prefix')"
         )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
