@@ -175,11 +175,18 @@ class AindIndexBucketJob:
             authSource="admin",
         )
         for record in record_list:
-            self._process_docdb_record(
-                docdb_record=record,
-                docdb_client=doc_db_client,
-                s3_client=s3_client,
-            )
+            try:
+                self._process_docdb_record(
+                    docdb_record=record,
+                    docdb_client=doc_db_client,
+                    s3_client=s3_client,
+                )
+            except Exception as e:
+                logging.error(
+                    f'Error processing docdb {record.get("_id")}, '
+                    f'{record.get("location")}.'
+                )
+                logging.error(f"Error: {repr(e)}")
         s3_client.close()
         doc_db_client.close()
 
@@ -274,6 +281,7 @@ class AindIndexBucketJob:
                             self.job_settings.doc_db_collection_name
                         ]
                         if "_id" in json_contents:
+                            # TODO: check is_dict_corrupt(json_contents)
                             response = collection.update_one(
                                 {"_id": json_contents["_id"]},
                                 {"$set": json_contents},
@@ -380,12 +388,19 @@ class AindIndexBucketJob:
             docdb_client=doc_db_client,
         )
         for prefix in prefix_list:
-            self._process_prefix(
-                s3_prefix=prefix,
-                s3_client=s3_client,
-                location_to_id_map=location_to_id_map,
-                docdb_client=doc_db_client,
-            )
+            try:
+                self._process_prefix(
+                    s3_prefix=prefix,
+                    s3_client=s3_client,
+                    location_to_id_map=location_to_id_map,
+                    docdb_client=doc_db_client,
+                )
+            except Exception as e:
+                logging.error(
+                    f"Error processing "
+                    f"{get_s3_location(self.job_settings.s3_bucket, prefix)}."
+                )
+                logging.error(f"Error: {repr(e)}")
         s3_client.close()
         doc_db_client.close()
 

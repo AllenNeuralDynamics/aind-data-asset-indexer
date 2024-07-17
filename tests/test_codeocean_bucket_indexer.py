@@ -219,6 +219,58 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
 
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._process_codeocean_record"
+    )
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.error")
+    def test_dask_task_to_process_record_list_error(
+        self,
+        mock_log_error: MagicMock,
+        mock_boto3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_codeocean_record: MagicMock,
+    ):
+        """Tests _dask_task_to_process_record_list when there is an error in 1
+        record"""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_mongo_client = MagicMock()
+        mock_docdb_client.return_value = mock_mongo_client
+        records = self.example_codeocean_records
+        mock_process_codeocean_record.side_effect = [
+            Exception("Error processing record"),
+            None,
+        ]
+        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        mock_process_codeocean_record.assert_has_calls(
+            [
+                call(
+                    codeocean_record=records[0],
+                    docdb_client=mock_mongo_client,
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    codeocean_record=records[1],
+                    docdb_client=mock_mongo_client,
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+        mock_log_error.assert_has_calls(
+            [
+                call(
+                    "Error processing s3://some_co_bucket/"
+                    "11ee1e1e-11e1-1111-1111-e11eeeee1e11."
+                ),
+                call("Error: Exception('Error processing record')"),
+            ]
+        )
+        mock_s3_client.close.assert_called_once_with()
+        mock_mongo_client.close.assert_called_once_with()
+
     @patch("dask.bag.map_partitions")
     def test_process_codeocean_records(
         self, mock_dask_bag_map_parts: MagicMock
@@ -246,6 +298,27 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             record_list=records_to_delete
         )
         mock_log_info.assert_called_once_with({"message": "success"})
+
+    @patch("logging.error")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
+    def test_dask_task_to_delete_record_list_error(
+        self, mock_docdb_client: MagicMock, mock_log_error: MagicMock
+    ):
+        """Tests _dask_task_to_delete_record_list"""
+        mock_db = MagicMock()
+        mock_docdb_client.return_value.__getitem__.return_value = mock_db
+        mock_collection = MagicMock()
+        mock_db.__getitem__.return_value = mock_collection
+        mock_collection.delete_many.side_effect = Exception(
+            "Error deleting records"
+        )
+        records_to_delete = [r["_id"] for r in self.example_docdb_records]
+        self.basic_job._dask_task_to_delete_record_list(
+            record_list=records_to_delete
+        )
+        mock_log_error.assert_called_once_with(
+            "Error deleting records: Exception('Error deleting records')"
+        )
 
     @patch("dask.bag.map_partitions")
     def test_delete_records_from_docdb(

@@ -298,6 +298,69 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
 
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_docdb_record"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.error")
+    def test_dask_task_to_process_record_list_error(
+        self,
+        mock_log_error: MagicMock,
+        mock_boto3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_docdb_record: MagicMock,
+    ):
+        """Tests _dask_task_to_process_record_list when there is an error in 1
+        record."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_mongo_client = MagicMock()
+        mock_docdb_client.return_value = mock_mongo_client
+        records = [
+            self.example_md_record,
+            self.example_md_record1,
+            self.example_md_record2,
+        ]
+        mock_process_docdb_record.side_effect = [
+            None,
+            Exception("Error processing record"),
+            None,
+        ]
+        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        mock_process_docdb_record.assert_has_calls(
+            [
+                call(
+                    docdb_record=self.example_md_record,
+                    docdb_client=mock_mongo_client,
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    docdb_record=self.example_md_record1,
+                    docdb_client=mock_mongo_client,
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    docdb_record=self.example_md_record2,
+                    docdb_client=mock_mongo_client,
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+        expected_error = (
+            "Error processing docdb 5ca4a951-d374-4f4b-8279-d570a35b2286, s3:"
+            "//aind-ephys-data-dev-u5u0i5/ecephys_567890_2000-01-01_04-00-00."
+        )
+        mock_log_error.assert_has_calls(
+            [
+                call(expected_error),
+                call("Error: Exception('Error processing record')"),
+            ]
+        )
+        mock_s3_client.close.assert_called_once_with()
+        mock_mongo_client.close.assert_called_once_with()
+
     @patch("dask.bag.map_partitions")
     def test_process_records(self, mock_dask_bag_map_parts: MagicMock):
         """Test _process_records method."""
@@ -784,6 +847,85 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     location_to_id_map=mock_location_to_id_map,
                     docdb_client=mock_mongo_client,
                 ),
+            ]
+        )
+        mock_s3_client.close.assert_called_once_with()
+        mock_mongo_client.close.assert_called_once_with()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "build_docdb_location_to_id_map"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_prefix"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    @patch("logging.error")
+    def test_dask_task_to_process_prefix_list_error(
+        self,
+        mock_log_error: MagicMock,
+        mock_boto3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_prefix: MagicMock,
+        mock_build_location_to_id_map: MagicMock,
+    ):
+        """Tests _dask_task_to_process_prefix_list when there is an error in 1
+        prefix."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_mongo_client = MagicMock()
+        mock_docdb_client.return_value = mock_mongo_client
+        prefixes = [
+            "ecephys_642478_2023-01-17_13-56-29",
+            "ecephys_567890_2000-01-01_04-00-00",
+            "ecephys_655019_2000-01-01_01-01-02",
+        ]
+        mock_location_to_id_map = {
+            "ecephys_642478_2023-01-17_13-56-29": (
+                "488bbe42-832b-4c37-8572-25eb87cc50e2"
+            ),
+            "ecephys_567890_2000-01-01_04-00-00": (
+                "5ca4a951-d374-4f4b-8279-d570a35b2286"
+            ),
+        }
+        mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        mock_process_prefix.side_effect = [
+            None,
+            Exception("Error processing prefix"),
+            None,
+        ]
+        self.basic_job._dask_task_to_process_prefix_list(prefix_list=prefixes)
+        mock_process_prefix.assert_has_calls(
+            [
+                call(
+                    s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                    location_to_id_map=mock_location_to_id_map,
+                    docdb_client=mock_mongo_client,
+                ),
+                call(
+                    s3_prefix="ecephys_567890_2000-01-01_04-00-00",
+                    s3_client=mock_s3_client,
+                    location_to_id_map=mock_location_to_id_map,
+                    docdb_client=mock_mongo_client,
+                ),
+                call(
+                    s3_prefix="ecephys_655019_2000-01-01_01-01-02",
+                    s3_client=mock_s3_client,
+                    location_to_id_map=mock_location_to_id_map,
+                    docdb_client=mock_mongo_client,
+                ),
+            ]
+        )
+        mock_log_error.assert_has_calls(
+            [
+                call(
+                    "Error processing s3://aind-ephys-data-dev-u5u0i5/"
+                    "ecephys_567890_2000-01-01_04-00-00."
+                ),
+                call("Error: Exception('Error processing prefix')"),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
