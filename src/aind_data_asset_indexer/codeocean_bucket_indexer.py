@@ -118,11 +118,16 @@ class CodeOceanIndexBucketJob:
         )
 
         for record in record_list:
-            self._process_codeocean_record(
-                codeocean_record=record,
-                docdb_client=doc_db_client,
-                s3_client=s3_client,
-            )
+            try:
+                self._process_codeocean_record(
+                    codeocean_record=record,
+                    docdb_client=doc_db_client,
+                    s3_client=s3_client,
+                )
+            except Exception as e:
+                logging.error(
+                    f'Error processing {record.get("location")}: {repr(e)}'
+                )
         s3_client.close()
         doc_db_client.close()
 
@@ -165,8 +170,13 @@ class CodeOceanIndexBucketJob:
         )
         db = docdb_client[self.job_settings.doc_db_db_name]
         collection = db[self.job_settings.doc_db_collection_name]
-        response = collection.delete_many(filter={"_id": {"$in": record_list}})
-        logging.info(response.raw_result)
+        try:
+            response = collection.delete_many(
+                filter={"_id": {"$in": record_list}}
+            )
+            logging.info(response.raw_result)
+        except Exception as e:
+            logging.error(f"Error deleting records: {repr(e)}")
         docdb_client.close()
 
     def _delete_records_from_docdb(self, record_list: List[str]):
