@@ -34,6 +34,7 @@ from aind_data_asset_indexer.utils import (
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
+    list_metadata_copies,
     paginate_docdb,
     sync_core_json_files,
     upload_json_str_to_s3,
@@ -506,6 +507,20 @@ class TestUtils(unittest.TestCase):
             Bucket="bucket", Prefix="prefix/original_metadata/", Delimiter="/"
         )
         self.assertFalse(result)
+
+    @patch("boto3.client")
+    def test_list_metadata_copies(self, mock_s3_client: MagicMock):
+        """Tests list_metadata_copies method"""
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response
+        )
+        contents = list_metadata_copies(
+            bucket="bucket",
+            prefix="prefix",
+            copy_subdir="original_metadata",
+            s3_client=mock_s3_client,
+        )
+        self.assertEqual(["subject.json"], contents)
 
     @patch("boto3.client")
     def test_does_s3_metadata_copy_exist_none(self, mock_s3_client: MagicMock):
