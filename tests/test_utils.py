@@ -26,6 +26,7 @@ from aind_data_asset_indexer.utils import (
     does_s3_object_exist,
     download_json_file_from_s3,
     get_all_processed_codeocean_asset_records,
+    get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
     get_record_from_docdb,
     get_s3_bucket_and_prefix,
@@ -34,6 +35,7 @@ from aind_data_asset_indexer.utils import (
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
+    list_metadata_copies,
     paginate_docdb,
     sync_core_json_files,
     upload_json_str_to_s3,
@@ -508,6 +510,20 @@ class TestUtils(unittest.TestCase):
         self.assertFalse(result)
 
     @patch("boto3.client")
+    def test_list_metadata_copies(self, mock_s3_client: MagicMock):
+        """Tests list_metadata_copies method"""
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response
+        )
+        contents = list_metadata_copies(
+            bucket="bucket",
+            prefix="prefix",
+            copy_subdir="original_metadata",
+            s3_client=mock_s3_client,
+        )
+        self.assertEqual(["subject.json"], contents)
+
+    @patch("boto3.client")
     def test_does_s3_metadata_copy_exist_none(self, mock_s3_client: MagicMock):
         """Tests does_s3_metadata_copy_exist when no files are found"""
         mock_s3_client.list_objects_v2.return_value = (
@@ -523,6 +539,28 @@ class TestUtils(unittest.TestCase):
             Bucket="bucket", Prefix="prefix/original_metadata/", Delimiter="/"
         )
         self.assertFalse(result)
+
+    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
+    @patch("boto3.client")
+    def test_get_dict_of_core_schema_file_info(
+        self,
+        mock_s3_client: MagicMock,
+        mock_get_dict_of_file_info: MagicMock,
+    ):
+        """Tests get_dict_of_core_schema_file_info method"""
+        # Assume the first file exists and the second does not
+        mock_get_dict_of_file_info.return_value = {
+            "prefix1/subject.json": {"e_tag": "a"},
+            "prefix1/procedures.json": {"e_tag": "b"},
+        }
+        response = get_dict_of_core_schema_file_info(
+            s3_client=mock_s3_client, bucket="some_bucket", prefix="prefix1"
+        )
+        expected_response = {
+            "subject.json": {"e_tag": "a"},
+            "procedures.json": {"e_tag": "b"},
+        }
+        self.assertEqual(expected_response, response)
 
     @patch("boto3.client")
     def test_get_dict_of_file_info(self, mock_s3_client: MagicMock):

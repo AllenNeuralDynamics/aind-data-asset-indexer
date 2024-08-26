@@ -6,11 +6,13 @@ import logging
 import os
 import sys
 import warnings
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
 from mypy_boto3_s3 import S3Client
+from mypy_boto3_s3.type_defs import CopySourceTypeDef
 from pymongo import MongoClient
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
@@ -19,16 +21,23 @@ from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     compute_md5_hash,
     cond_copy_then_sync_core_json_files,
+    core_schema_file_names,
     create_metadata_object_key,
+    create_object_key,
     does_s3_object_exist,
     download_json_file_from_s3,
+    get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
     get_s3_location,
+    is_dict_corrupt,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
+    list_metadata_copies,
+    metadata_filename,
     paginate_docdb,
+    upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
 
@@ -61,6 +70,247 @@ class AindIndexBucketJob:
         """Class constructor."""
         self.job_settings = job_settings
 
+    def _write_root_file_with_record_info(
+        self,
+        s3_client: S3Client,
+        core_schema_file_name: str,
+        core_schema_info_in_root: Optional[dict],
+        prefix: str,
+        docdb_record_contents: dict,
+    ) -> None:
+        """
+        Write a core schema file in the s3 prefix root folder using the docdb
+        record info. To avoid unnecessary s3 calls, the md5 hashes will be
+        compared first.
+        Parameters
+        ----------
+        s3_client : S3Client
+        core_schema_file_name : str
+          For example: 'subject.json', 'procedures.json', etc. Use None to
+          write to metadata_nd_json file.
+        core_schema_info_in_root : dict | None
+          For example: {'e_tag': ...}. None if no file in root folder.
+        prefix : str
+        docdb_record_contents : dict | None
+
+        Returns
+        -------
+        None
+          Logs responses of client calls.
+
+        """
+        bucket = self.job_settings.s3_bucket
+        record_info_str = json.dumps(docdb_record_contents, default=str)
+        record_info_md5_hash = compute_md5_hash(record_info_str)
+        if core_schema_info_in_root is None:
+            root_file_md5_hash = None
+        else:
+            root_file_md5_hash = core_schema_info_in_root["e_tag"].strip('"')
+        object_key = create_object_key(
+            prefix=prefix, filename=core_schema_file_name
+        )
+        if record_info_md5_hash != root_file_md5_hash:
+            logging.info(
+                f"Writing docdb record info to s3://{bucket}/{object_key}"
+            )
+            response = upload_json_str_to_s3(
+                bucket=bucket,
+                object_key=object_key,
+                json_str=record_info_str,
+                s3_client=s3_client,
+            )
+            logging.debug(f"{response}")
+        else:
+            logging.debug(
+                f"DocDB record and s3://{bucket}/{object_key} are the same. "
+                f"Skipped writing."
+            )
+
+    def _copy_file_from_root_to_subdir(
+        self,
+        s3_client: S3Client,
+        core_schema_file_name: str,
+        core_schema_info_in_root: dict,
+        prefix: str,
+    ):
+        """
+        Write a core schema file in the s3 prefix root folder using the docdb
+        record info. To avoid unnecessary s3 calls, the md5 hashes will be
+        compared first.
+        Parameters
+        ----------
+        s3_client : S3Client
+        core_schema_file_name : str
+          For example: 'subject.json', 'procedures.json', etc.
+        core_schema_info_in_root : dict
+          For example: {'e_tag': ..., 'last_modified': ...}
+        prefix : str
+
+        Returns
+        -------
+        None
+          Logs responses of client calls.
+
+        """
+        copy_subdir = self.job_settings.copy_original_md_subdir
+        bucket = self.job_settings.s3_bucket
+        date_stamp = core_schema_info_in_root["last_modified"].strftime(
+            "%Y%m%d"
+        )
+        source = create_object_key(prefix, core_schema_file_name)
+        target = create_object_key(
+            prefix=create_object_key(prefix, copy_subdir.strip("/")),
+            filename=core_schema_file_name.replace(
+                ".json", f".{date_stamp}.json"
+            ),
+        )
+        logging.info(
+            f"Copying s3://{bucket}/{source} to s3://{bucket}/{target}"
+        )
+        response = s3_client.copy_object(
+            Bucket=bucket,
+            # noinspection PyMethodParameters
+            CopySource=CopySourceTypeDef(Bucket=bucket, Key=source),
+            Key=target,
+        )
+        logging.debug(f"{response}")
+
+    def _resolve_schema_information(
+        self,
+        prefix: str,
+        s3_client: S3Client,
+        core_schema_info_in_root: dict,
+        list_of_schemas_in_copy_subdir: List[str],
+        docdb_record: dict,
+    ) -> dict:
+        """
+        Uses the DocDb record, a dictionary of information about the core
+        schema json files under the prefix folder, and a list of core schema
+        json files in the original_metadata folder to figure out what to do.
+        For each core schema, there are 8 possible scenarios based on:
+         - Is the field not null in the DocDB record?
+         - Is there a file in the root prefix?
+         - Is there a file in the original_metadata folder?
+        In the case that the DocDB field is null, there is a file in the root
+        prefix, and there is no file in the original_metadata folder, then
+        the field in the DocDB record will require updating. This method
+        will return a dictionary of updates needed to the DocDB record.
+        Parameters
+        ----------
+        prefix : str
+        s3_client : S3Client
+        core_schema_info_in_root : dict
+        list_of_schemas_in_copy_subdir : List[str]
+        docdb_record : dict
+
+        Returns
+        -------
+        dict
+          The fields in the DocDb record that will require updating.
+        """
+        docdb_record_fields_to_update = dict()
+        for core_schema_file_name in core_schema_file_names:
+            field_name = core_schema_file_name.replace(".json", "")
+            is_in_record = docdb_record.get(field_name) is not None
+            is_in_root = (
+                core_schema_info_in_root.get(core_schema_file_name) is not None
+            )
+            is_in_copy_subdir = (
+                core_schema_file_name in list_of_schemas_in_copy_subdir
+            )
+            # To avoid copying and pasting the same arguments, we'll keep it
+            # them in a dict
+            common_kwargs = {
+                "s3_client": s3_client,
+                "prefix": prefix,
+                "core_schema_file_name": core_schema_file_name,
+                "core_schema_info_in_root": core_schema_info_in_root.get(
+                    core_schema_file_name
+                ),
+            }
+            # If field is not null, a file exists in the root folder, and
+            # a file exists in copy_subdir, then overwrite root folder file
+            # with record info if they are different
+            if is_in_record and is_in_root and is_in_copy_subdir:
+                self._write_root_file_with_record_info(
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                )
+            # If field is not null, a file exists in the root folder, and
+            # no file exists in copy_subdir, then copy root folder file to
+            # copy subdir, and then overwrite root folder file with record info
+            # if they are different
+            elif is_in_record and is_in_root and not is_in_copy_subdir:
+                self._copy_file_from_root_to_subdir(**common_kwargs)
+                self._write_root_file_with_record_info(
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                )
+            # If field is not null, no file exists in the root folder, and
+            # a file exists in copy_subdir, then create a file in the root
+            # folder with the record info
+            elif is_in_record and not is_in_root and is_in_copy_subdir:
+                self._write_root_file_with_record_info(
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                )
+            # If field is not null, no file exists in the root folder, and
+            # no file exists in copy_subdir, then create a file in the root
+            # folder with the record info and then copy it to the copy subdir
+            elif is_in_record and not is_in_root and not is_in_copy_subdir:
+                self._write_root_file_with_record_info(
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                )
+                self._copy_file_from_root_to_subdir(**common_kwargs)
+            # If field is null, a file exists in the root folder, and
+            # a file exists in copy_subdir, then delete file from root folder
+            elif not is_in_record and is_in_root and is_in_copy_subdir:
+                object_key = create_object_key(
+                    prefix=prefix, filename=core_schema_file_name
+                )
+                logging.info(
+                    f"DocDb field is null. Deleting file "
+                    f"s3://{self.job_settings.s3_bucket}/{object_key}"
+                )
+                response = s3_client.delete_object(
+                    Bucket=self.job_settings.s3_bucket, Key=object_key
+                )
+                logging.debug(f"{response}")
+            # If field is null, a file exists in the root folder, and
+            # no file exists in copy_subdir, then copy file from root folder
+            # to copy subdir and update the record info with the root folder
+            # file if it is not corrupt
+            elif not is_in_record and is_in_root and not is_in_copy_subdir:
+                self._copy_file_from_root_to_subdir(**common_kwargs)
+                object_key = create_object_key(
+                    prefix=prefix, filename=core_schema_file_name
+                )
+                file_contents = download_json_file_from_s3(
+                    s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    object_key=object_key,
+                )
+                if file_contents is None:
+                    is_file_corrupt = True
+                else:
+                    is_file_corrupt = is_dict_corrupt(file_contents)
+                if not is_file_corrupt:
+                    docdb_record_fields_to_update[field_name] = file_contents
+                else:
+                    logging.warning(
+                        f"Something went wrong downloading or parsing "
+                        f"s3://{self.job_settings.s3_bucket}/{object_key}"
+                    )
+
+            # If field is null, no file exists in the root folder, and
+            # a file exists in copy_subdir, then do nothing
+            # If field is null, no file exists in the root folder, and no
+            # file exists in the copy subdir, then do nothing
+            else:
+                logging.info(
+                    f"Field is null in docdb record and no file in root "
+                    f"folder at s3://{self.job_settings.s3_bucket}/{prefix}/"
+                    f"{core_schema_file_name}"
+                )
+        return docdb_record_fields_to_update
+
     def _process_docdb_record(
         self,
         docdb_record: dict,
@@ -83,24 +333,28 @@ class AindIndexBucketJob:
         None
 
         """
-        bucket = self.job_settings.s3_bucket
-        if not is_record_location_valid(docdb_record, bucket):
+        if not is_record_location_valid(
+            docdb_record, self.job_settings.s3_bucket
+        ):
             logging.warning(
                 f"Record location {docdb_record.get('location')} or name "
-                f"{docdb_record.get('name')} not valid for bucket {bucket}!"
+                f"{docdb_record.get('name')} not valid for bucket "
+                f"{self.job_settings.s3_bucket}!"
             )
         else:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
             s3_bucket = s3_parts["bucket"]
             prefix = s3_parts["prefix"]
-            object_key = create_metadata_object_key(prefix=prefix)
+            metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
             does_file_exist_in_s3 = does_s3_object_exist(
-                s3_client=s3_client, bucket=s3_bucket, key=object_key
+                s3_client=s3_client,
+                bucket=s3_bucket,
+                key=metadata_nd_object_key,
             )
             if not does_file_exist_in_s3:
                 logging.warning(
                     f"File not found in S3 at "
-                    f"{get_s3_location(s3_bucket, object_key)}! "
+                    f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
                     f"Removing metadata record from DocDb."
                 )
                 db = docdb_client[self.job_settings.doc_db_db_name]
@@ -109,44 +363,58 @@ class AindIndexBucketJob:
                     filter={"_id": docdb_record["_id"]}
                 )
                 logging.info(response.raw_result)
-            else:  # There is a file in S3.
-                record_as_json_str = json.dumps(docdb_record, default=str)
-                record_md5_hash = compute_md5_hash(record_as_json_str)
-                s3_object_info = get_dict_of_file_info(
-                    s3_client=s3_client, bucket=s3_bucket, keys=[object_key]
-                )[object_key]
-                s3_object_hash = (
-                    None
-                    if s3_object_info is None
-                    else s3_object_info["e_tag"].strip('"')
+            else:  # There is a metadata.nd.json file in S3.
+                # Schema info in root level directory
+                s3_core_schema_info = get_dict_of_core_schema_file_info(
+                    s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    prefix=prefix,
                 )
-                if record_md5_hash != s3_object_hash:
-                    cond_copy_then_sync_core_json_files(
-                        metadata_json=record_as_json_str,
-                        bucket=s3_bucket,
-                        prefix=prefix,
-                        s3_client=s3_client,
-                        log_flag=True,
-                        copy_original_md_subdir=(
-                            self.job_settings.copy_original_md_subdir
-                        ),
-                    )
+                # List of files in original_metadata folder
+                files_in_og_folder = list_metadata_copies(
+                    s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    prefix=prefix,
+                    copy_subdir=self.job_settings.copy_original_md_subdir,
+                )
+                fields_to_update = self._resolve_schema_information(
+                    s3_client=s3_client,
+                    prefix=prefix,
+                    core_schema_info_in_root=s3_core_schema_info,
+                    list_of_schemas_in_copy_subdir=files_in_og_folder,
+                    docdb_record=docdb_record,
+                )
+                if fields_to_update:
                     logging.info(
-                        f"Uploading metadata record for: "
-                        f"{docdb_record['location']}"
+                        f"New files found in "
+                        f"s3://{self.job_settings.s3_bucket}/{prefix} but not "
+                        f"in {self.job_settings.copy_original_md_subdir}. "
+                        f"Updating DocDb record with new info."
                     )
-                    response = upload_metadata_json_str_to_s3(
-                        bucket=s3_bucket,
-                        prefix=prefix,
-                        metadata_json=record_as_json_str,
-                        s3_client=s3_client,
+                    db = docdb_client[self.job_settings.doc_db_db_name]
+                    collection = db[self.job_settings.doc_db_collection_name]
+                    fields_to_update[
+                        "last_modified"
+                    ] = datetime.utcnow().isoformat()
+                    response = collection.update_one(
+                        {"_id": docdb_record["_id"]},
+                        {"$set": fields_to_update},
+                        upsert=True,
                     )
-                    logging.info(response)
-                else:
-                    logging.info(
-                        f"Metadata records are same. Skipping saving to "
-                        f"{docdb_record['location']}."
-                    )
+                    logging.debug(response.raw_result)
+                docdb_record.update(fields_to_update)
+                metadata_nd_json_info = get_dict_of_file_info(
+                    s3_client=s3_client,
+                    bucket=s3_bucket,
+                    keys=[metadata_nd_object_key],
+                ).get(metadata_nd_object_key)
+                self._write_root_file_with_record_info(
+                    s3_client=s3_client,
+                    core_schema_file_name=metadata_filename,
+                    core_schema_info_in_root=metadata_nd_json_info,
+                    prefix=prefix,
+                    docdb_record_contents=docdb_record,
+                )
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
@@ -342,6 +610,7 @@ class AindIndexBucketJob:
                     ),
                 )
                 logging.info(f"Uploading metadata record for: {location}")
+                # noinspection PyTypeChecker
                 s3_response = upload_metadata_json_str_to_s3(
                     metadata_json=new_metadata_contents,
                     bucket=bucket,

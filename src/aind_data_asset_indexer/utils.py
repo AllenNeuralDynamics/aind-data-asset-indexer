@@ -21,11 +21,13 @@ from mypy_boto3_s3.type_defs import (
 )
 from pymongo import MongoClient
 
+metadata_filename = Metadata.default_filename()
+
 # TODO: This would be better if it was available in aind-data-schema
 core_schema_file_names = [
     s.default_filename()
     for s in SchemaWriter.get_schemas()
-    if s.default_filename() != Metadata.default_filename()
+    if s.default_filename() != metadata_filename
 ]
 
 
@@ -98,9 +100,7 @@ def create_metadata_object_key(prefix: str) -> str:
       For example, ecephys_123456_2020-10-10_01-02-03/metadata.nd.json
 
     """
-    return create_object_key(
-        prefix=prefix, filename=Metadata.default_filename()
-    )
+    return create_object_key(prefix=prefix, filename=metadata_filename)
 
 
 def is_prefix_valid(prefix: str) -> bool:
@@ -361,6 +361,48 @@ def does_s3_metadata_copy_exist(
     return False
 
 
+def list_metadata_copies(
+    s3_client: S3Client,
+    bucket: str,
+    prefix: str,
+    copy_subdir: str,
+) -> List[str]:
+    """
+    For a given bucket and prefix, return a list of the core schemas in the
+    copy_subdir.
+
+    Parameters
+    ----------
+    s3_client : S3Client
+    bucket : str
+    prefix : str
+      For example, ecephys_123456_2020-10-10_01-02-03
+    copy_subdir : str
+      For example, original_metadata
+
+    Returns
+    -------
+    List[str]
+      A list of the core schemas in the copy_subdir without timestamp, e..g,
+      ["subject.json", "procedures.json", "processing.json"]
+    """
+    # Use trailing slash and delimiter to get top-level objects in copy_subdir
+    copy_prefix = create_object_key(prefix, copy_subdir.strip("/") + "/")
+    response = s3_client.list_objects_v2(
+        Bucket=bucket, Prefix=copy_prefix, Delimiter="/"
+    )
+    files = []
+    if "Contents" in response:
+        core_schemas = [s.rstrip(".json") for s in core_schema_file_names]
+        pattern = r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
+        for obj in response["Contents"]:
+            file_name = obj["Key"].lstrip(copy_prefix)
+            m = re.match(pattern, file_name)
+            if m is not None and m.group(1) in core_schemas:
+                files.append(f"{m.group(1)}.json")
+    return files
+
+
 def get_dict_of_file_info(
     s3_client: S3Client, bucket: str, keys: List[str]
 ) -> Dict[str, Optional[dict]]:
@@ -398,6 +440,41 @@ def get_dict_of_file_info(
             else:
                 responses[key] = None
     return responses
+
+
+def get_dict_of_core_schema_file_info(
+    s3_client: S3Client, bucket: str, prefix: str
+) -> Dict[str, Optional[dict]]:
+    """
+    For a bucket and prefix get list of core schema file info.
+    Parameters
+    ----------
+    s3_client : S3Client
+    bucket : str
+    prefix : str
+
+    Returns
+    -------
+    Dict[str, Optional[dict]]
+      {"subject.json":
+         {"last_modified": datetime, "e_tag": str, "version_id": str},
+       "procedures.json":
+         {"last_modified": datetime, "e_tag": str, "version_id": str},
+       ...
+      }
+    """
+    key_map = dict(
+        [
+            (create_object_key(prefix=prefix, filename=s), s)
+            for s in core_schema_file_names
+        ]
+    )
+    file_info = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=list(key_map.keys())
+    )
+    remapped_info = dict([(key_map[k], v) for (k, v) in file_info.items()])
+
+    return remapped_info
 
 
 def iterate_through_top_level(
@@ -475,7 +552,7 @@ def download_json_file_from_s3(
 
     Returns
     -------
-    Optional[dict]
+    dict | None
 
     """
     result = s3_client.get_object(Bucket=bucket, Key=object_key)
@@ -544,7 +621,6 @@ def build_metadata_record_from_prefix(
                     s3_client=s3_client, bucket=bucket, object_key=object_key
                 )
                 if json_contents is not None:
-                    # noinspection PyTypeChecker
                     is_corrupt = is_dict_corrupt(input_dict=json_contents)
                     if not is_corrupt:
                         metadata_dict[field_name] = json_contents
