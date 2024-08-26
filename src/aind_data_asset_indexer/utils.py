@@ -464,7 +464,10 @@ def get_dict_of_core_schema_file_info(
       }
     """
     key_map = dict(
-        [(create_object_key(prefix=prefix, filename=s), s) for s in core_schema_file_names]
+        [
+            (create_object_key(prefix=prefix, filename=s), s)
+            for s in core_schema_file_names
+        ]
     )
     file_info = get_dict_of_file_info(
         s3_client=s3_client, bucket=bucket, keys=list(key_map.keys())
