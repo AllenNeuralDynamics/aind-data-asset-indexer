@@ -21,11 +21,13 @@ from mypy_boto3_s3.type_defs import (
 )
 from pymongo import MongoClient
 
+metadata_filename = Metadata.default_filename()
+
 # TODO: This would be better if it was available in aind-data-schema
 core_schema_file_names = [
     s.default_filename()
     for s in SchemaWriter.get_schemas()
-    if s.default_filename() != Metadata.default_filename()
+    if s.default_filename() != metadata_filename
 ]
 
 
@@ -98,9 +100,7 @@ def create_metadata_object_key(prefix: str) -> str:
       For example, ecephys_123456_2020-10-10_01-02-03/metadata.nd.json
 
     """
-    return create_object_key(
-        prefix=prefix, filename=Metadata.default_filename()
-    )
+    return create_object_key(prefix=prefix, filename=metadata_filename)
 
 
 def is_prefix_valid(prefix: str) -> bool:
@@ -456,18 +456,22 @@ def get_dict_of_core_schema_file_info(
     Returns
     -------
     Dict[str, Optional[dict]]
-      {"prefix/subject.json":
+      {"subject.json":
          {"last_modified": datetime, "e_tag": str, "version_id": str},
-       "prefix/procedures.json":
+       "procedures.json":
          {"last_modified": datetime, "e_tag": str, "version_id": str},
        ...
       }
     """
-    keys = [f"{prefix.rstrip('/')}/{s}" for s in core_schema_file_names]
-    file_info = get_dict_of_file_info(
-        s3_client=s3_client, bucket=bucket, keys=keys
+    key_map = dict(
+        [(f"{prefix.rstrip('/')}/{s}", s) for s in core_schema_file_names]
     )
-    return file_info
+    file_info = get_dict_of_file_info(
+        s3_client=s3_client, bucket=bucket, keys=list(key_map.keys())
+    )
+    remapped_info = dict([(key_map[k], v) for (k, v) in file_info.items()])
+
+    return remapped_info
 
 
 def iterate_through_top_level(

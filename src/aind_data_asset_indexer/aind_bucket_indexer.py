@@ -7,7 +7,7 @@ import os
 import sys
 import warnings
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
@@ -27,6 +27,7 @@ from aind_data_asset_indexer.utils import (
     does_s3_object_exist,
     download_json_file_from_s3,
     get_dict_of_core_schema_file_info,
+    get_dict_of_file_info,
     get_s3_bucket_and_prefix,
     get_s3_location,
     is_dict_corrupt,
@@ -34,6 +35,7 @@ from aind_data_asset_indexer.utils import (
     is_record_location_valid,
     iterate_through_top_level,
     list_metadata_copies,
+    metadata_filename,
     paginate_docdb,
     upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
@@ -72,9 +74,9 @@ class AindIndexBucketJob:
         self,
         s3_client: S3Client,
         core_schema_file_name: str,
-        core_schema_info_in_root: dict,
+        core_schema_info_in_root: Optional[dict],
         prefix: str,
-        docdb_record: dict,
+        docdb_record_contents: dict,
     ) -> None:
         """
         Write a core schema file in the s3 prefix root folder using the docdb
@@ -84,11 +86,12 @@ class AindIndexBucketJob:
         ----------
         s3_client : S3Client
         core_schema_file_name : str
-          For example: 'subject.json', 'procedures.json', etc.
-        core_schema_info_in_root : dict
-          For example: {'subject.json', {'e_tag': ...}}
+          For example: 'subject.json', 'procedures.json', etc. Use None to
+          write to metadata_nd_json file.
+        core_schema_info_in_root : dict | None
+          For example: {'e_tag': ...}. None if no file in root folder.
         prefix : str
-        docdb_record : dict
+        docdb_record_contents : dict | None
 
         Returns
         -------
@@ -97,15 +100,12 @@ class AindIndexBucketJob:
 
         """
         bucket = self.job_settings.s3_bucket
-        field_name = core_schema_file_name.replace(".json", "")
-        record_info_str = json.dumps(docdb_record.get(field_name))
+        record_info_str = json.dumps(docdb_record_contents, default=str)
         record_info_md5_hash = compute_md5_hash(record_info_str)
-        if core_schema_info_in_root.get(core_schema_file_name) is None:
+        if core_schema_info_in_root is None:
             root_file_md5_hash = None
         else:
-            root_file_md5_hash = core_schema_info_in_root.get(
-                core_schema_file_name
-            )["e_tag"].strip('"')
+            root_file_md5_hash = core_schema_info_in_root["e_tag"].strip('"')
         object_key = create_object_key(
             prefix=prefix, filename=core_schema_file_name
         )
@@ -143,7 +143,7 @@ class AindIndexBucketJob:
         core_schema_file_name : str
           For example: 'subject.json', 'procedures.json', etc.
         core_schema_info_in_root : dict
-          For example: {'subject.json', {'e_tag': ...}}
+          For example: {'e_tag': ..., 'last_modified': ...}
         prefix : str
 
         Returns
@@ -188,7 +188,7 @@ class AindIndexBucketJob:
         schema json files under the prefix folder, and a list of core schema
         json files in the original_metadata folder to figure out what to do.
         For each core schema, there are 8 possible scenarios based on:
-         - Is the field null in the DocDB record?
+         - Is the field not null in the DocDB record?
          - Is there a file in the root prefix?
          - Is there a file in the original_metadata folder?
         In the case that the DocDB field is null, there is a file in the root
@@ -224,14 +224,16 @@ class AindIndexBucketJob:
                 "s3_client": s3_client,
                 "prefix": prefix,
                 "core_schema_file_name": core_schema_file_name,
-                "core_schema_info_in_root": core_schema_info_in_root,
+                "core_schema_info_in_root": core_schema_info_in_root.get(
+                    core_schema_file_name
+                ),
             }
             # If field is not null, a file exists in the root folder, and
             # a file exists in copy_subdir, then overwrite root folder file
             # with record info if they are different
             if is_in_record and is_in_root and is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record, **common_kwargs
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
                 )
             # If field is not null, a file exists in the root folder, and
             # no file exists in copy_subdir, then copy root folder file to
@@ -240,21 +242,21 @@ class AindIndexBucketJob:
             elif is_in_record and is_in_root and not is_in_copy_subdir:
                 self._copy_file_from_root_to_subdir(**common_kwargs)
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record, **common_kwargs
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
                 )
             # If field is not null, no file exists in the root folder, and
             # a file exists in copy_subdir, then create a file in the root
             # folder with the record info
             elif is_in_record and not is_in_root and is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record, **common_kwargs
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
                 )
             # If field is not null, no file exists in the root folder, and
             # no file exists in copy_subdir, then create a file in the root
             # folder with the record info and then copy it to the copy subdir
             elif is_in_record and not is_in_root and not is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record, **common_kwargs
+                    docdb_record=docdb_record.get(field_name), **common_kwargs
                 )
                 self._copy_file_from_root_to_subdir(**common_kwargs)
             # If field is null, a file exists in the root folder, and
@@ -304,7 +306,8 @@ class AindIndexBucketJob:
             else:
                 logging.info(
                     f"Field is null in docdb record and no file in root "
-                    f"folder at s3://{self.job_settings.s3_bucket}/{prefix}."
+                    f"folder at s3://{self.job_settings.s3_bucket}/{prefix}/"
+                    f"{core_schema_file_name}"
                 )
         return docdb_record_fields_to_update
 
@@ -342,14 +345,16 @@ class AindIndexBucketJob:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
             s3_bucket = s3_parts["bucket"]
             prefix = s3_parts["prefix"]
-            object_key = create_metadata_object_key(prefix=prefix)
+            metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
             does_file_exist_in_s3 = does_s3_object_exist(
-                s3_client=s3_client, bucket=s3_bucket, key=object_key
+                s3_client=s3_client,
+                bucket=s3_bucket,
+                key=metadata_nd_object_key,
             )
             if not does_file_exist_in_s3:
                 logging.warning(
                     f"File not found in S3 at "
-                    f"{get_s3_location(s3_bucket, object_key)}! "
+                    f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
                     f"Removing metadata record from DocDb."
                 )
                 db = docdb_client[self.job_settings.doc_db_db_name]
@@ -381,8 +386,9 @@ class AindIndexBucketJob:
                 )
                 if fields_to_update:
                     logging.info(
-                        f"New files found in root folder but not in "
-                        f"{self.job_settings.copy_original_md_subdir}. "
+                        f"New files found in "
+                        f"s3://{self.job_settings.s3_bucket}/{prefix} but not "
+                        f"in {self.job_settings.copy_original_md_subdir}. "
                         f"Updating DocDb record with new info."
                     )
                     db = docdb_client[self.job_settings.doc_db_db_name]
@@ -396,6 +402,19 @@ class AindIndexBucketJob:
                         upsert=True,
                     )
                     logging.debug(response.raw_result)
+                docdb_record.update(fields_to_update)
+                metadata_nd_json_info = get_dict_of_file_info(
+                    s3_client=s3_client,
+                    bucket=s3_bucket,
+                    keys=[metadata_nd_object_key],
+                ).get(metadata_nd_object_key)
+                self._write_root_file_with_record_info(
+                    s3_client=s3_client,
+                    core_schema_file_name=metadata_filename,
+                    core_schema_info_in_root=metadata_nd_json_info,
+                    prefix=prefix,
+                    docdb_record_contents=docdb_record,
+                )
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
