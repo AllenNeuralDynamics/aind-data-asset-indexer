@@ -662,13 +662,17 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "subject.json"
             ),
         )
-        mock_log_debug.assert_not_called()
         mock_log_info.assert_not_called()
         mock_log_warn.assert_called_once_with(
             "Something went wrong downloading or parsing "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/subject.json"
         )
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket="aind-ephys-data-dev-u5u0i5",
+            Key="ecephys_642478_2023-01-17_13-56-29/subject.json",
+        )
+        mock_log_debug.assert_called_once()
 
     @patch("boto3.client")
     @patch("logging.debug")

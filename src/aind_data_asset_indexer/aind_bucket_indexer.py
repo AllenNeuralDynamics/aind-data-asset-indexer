@@ -313,6 +313,11 @@ class AindIndexBucketJob:
                         f"Something went wrong downloading or parsing "
                         f"s3://{self.job_settings.s3_bucket}/{object_key}"
                     )
+                    # Can delete corrupt root file since a copy was already made
+                    response = s3_client.delete_object(
+                        Bucket=self.job_settings.s3_bucket, Key=object_key
+                    )
+                    logging.debug(f"{response}")
 
             # If field is null, no file exists in the root folder, and
             # a file exists in copy_subdir, then do nothing
