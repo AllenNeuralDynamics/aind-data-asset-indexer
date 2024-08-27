@@ -521,7 +521,7 @@ class TestUtils(unittest.TestCase):
             copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
-        self.assertEqual(["subject.json"], contents)
+        self.assertEqual(["data_description.json", "subject.json"], contents)
 
     @patch("boto3.client")
     def test_does_s3_metadata_copy_exist_none(self, mock_s3_client: MagicMock):

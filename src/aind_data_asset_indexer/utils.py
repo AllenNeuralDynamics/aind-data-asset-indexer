@@ -351,11 +351,10 @@ def does_s3_metadata_copy_exist(
         Bucket=bucket, Prefix=copy_prefix, Delimiter="/"
     )
     if "Contents" in response:
-        core_schemas = [s.rstrip(".json") for s in core_schema_file_names]
-        pattern = r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
+        core_schemas = [s.replace(".json", "") for s in core_schema_file_names]
+        pattern = re.escape(copy_prefix) + r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
         for obj in response["Contents"]:
-            file_name = obj["Key"].lstrip(copy_prefix)
-            m = re.match(pattern, file_name)
+            m = re.match(pattern, obj["Key"])
             if m is not None and m.group(1) in core_schemas:
                 return True
     return False
@@ -393,11 +392,10 @@ def list_metadata_copies(
     )
     files = []
     if "Contents" in response:
-        core_schemas = [s.rstrip(".json") for s in core_schema_file_names]
-        pattern = r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
+        core_schemas = [s.replace(".json", "") for s in core_schema_file_names]
+        pattern = re.escape(copy_prefix) + r"([a-zA-Z0-9_]+)\.\d{8}\.json$"
         for obj in response["Contents"]:
-            file_name = obj["Key"].lstrip(copy_prefix)
-            m = re.match(pattern, file_name)
+            m = re.match(pattern, obj["Key"])
             if m is not None and m.group(1) in core_schemas:
                 files.append(f"{m.group(1)}.json")
     return files
