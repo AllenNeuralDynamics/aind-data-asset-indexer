@@ -233,7 +233,8 @@ class AindIndexBucketJob:
             # with record info if they are different
             if is_in_record and is_in_root and is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                    docdb_record_contents=docdb_record.get(field_name),
+                    **common_kwargs,
                 )
             # If field is not null, a file exists in the root folder, and
             # no file exists in copy_subdir, then copy root folder file to
@@ -242,21 +243,24 @@ class AindIndexBucketJob:
             elif is_in_record and is_in_root and not is_in_copy_subdir:
                 self._copy_file_from_root_to_subdir(**common_kwargs)
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                    docdb_record_contents=docdb_record.get(field_name),
+                    **common_kwargs,
                 )
             # If field is not null, no file exists in the root folder, and
             # a file exists in copy_subdir, then create a file in the root
             # folder with the record info
             elif is_in_record and not is_in_root and is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                    docdb_record_contents=docdb_record.get(field_name),
+                    **common_kwargs,
                 )
             # If field is not null, no file exists in the root folder, and
             # no file exists in copy_subdir, then create a file in the root
             # folder with the record info and then copy it to the copy subdir
             elif is_in_record and not is_in_root and not is_in_copy_subdir:
                 self._write_root_file_with_record_info(
-                    docdb_record=docdb_record.get(field_name), **common_kwargs
+                    docdb_record_contents=docdb_record.get(field_name),
+                    **common_kwargs,
                 )
                 self._copy_file_from_root_to_subdir(**common_kwargs)
             # If field is null, a file exists in the root folder, and

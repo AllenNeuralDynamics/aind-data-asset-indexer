@@ -243,7 +243,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_called_once_with(
-            docdb_record=self.example_md_record.get("subject"),
+            docdb_record_contents=self.example_md_record.get("subject"),
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             core_schema_file_name="subject.json",
@@ -316,7 +316,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
         )
         mock_write_file_with_record_info.assert_called_once_with(
-            docdb_record=self.example_md_record.get("subject"),
+            docdb_record_contents=self.example_md_record.get("subject"),
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             core_schema_file_name="subject.json",
@@ -373,7 +373,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_copy_file_to_subdir.assert_not_called()
         mock_write_file_with_record_info.assert_called_once_with(
-            docdb_record=self.example_md_record.get("subject"),
+            docdb_record_contents=self.example_md_record.get("subject"),
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             core_schema_file_name="subject.json",
@@ -429,7 +429,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_called_once_with(
-            docdb_record=self.example_md_record.get("subject"),
+            docdb_record_contents=self.example_md_record.get("subject"),
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             core_schema_file_name="subject.json",
