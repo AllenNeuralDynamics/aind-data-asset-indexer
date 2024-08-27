@@ -400,12 +400,14 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_write_root_file_with_record_info"
     )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
         ["subject.json"],
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_4(
         self,
+        mock_get_dict_of_file_info: MagicMock,
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
@@ -420,6 +422,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """
 
         core_schema_info_in_root = dict()
+        core_schema_info_in_root_after_copy = {
+            "ecephys_642478_2023-01-17_13-56-29/subject.json": {
+                "last_modified": datetime(
+                    2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
+                ),
+                "e_tag": '"7ce612b2f26be2efe806990cb4eb4266"',
+                "version_id": "version_id",
+            }
+        }
+        mock_get_dict_of_file_info.return_value = (
+            core_schema_info_in_root_after_copy
+        )
         docdb_fields_to_update = self.basic_job._resolve_schema_information(
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
@@ -437,12 +451,17 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "subject.json"
             ),
         )
+        mock_get_dict_of_file_info.assert_called_once_with(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            keys=["ecephys_642478_2023-01-17_13-56-29/subject.json"],
+        )
         mock_copy_file_to_subdir.assert_called_once_with(
             s3_client=mock_s3_client,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             core_schema_file_name="subject.json",
-            core_schema_info_in_root=core_schema_info_in_root.get(
-                "subject.json"
+            core_schema_info_in_root=core_schema_info_in_root_after_copy.get(
+                "ecephys_642478_2023-01-17_13-56-29/subject.json"
             ),
         )
         mock_download_json_file.assert_not_called()

@@ -262,6 +262,17 @@ class AindIndexBucketJob:
                     docdb_record_contents=docdb_record.get(field_name),
                     **common_kwargs,
                 )
+                # Get file info for new file in root folder
+                object_key = create_object_key(
+                    prefix=prefix, filename=core_schema_file_name
+                )
+                common_kwargs["core_schema_info_in_root"] = (
+                    get_dict_of_file_info(
+                        s3_client=s3_client,
+                        bucket=self.job_settings.s3_bucket,
+                        keys=[object_key],
+                    ).get(object_key)
+                )
                 self._copy_file_from_root_to_subdir(**common_kwargs)
             # If field is null, a file exists in the root folder, and
             # a file exists in copy_subdir, then delete file from root folder
