@@ -313,7 +313,7 @@ class AindIndexBucketJob:
                         f"Something went wrong downloading or parsing "
                         f"s3://{self.job_settings.s3_bucket}/{object_key}"
                     )
-                    # Can delete corrupt root file since a copy was already made
+                    # Can delete corrupt root file since a copy has been made
                     response = s3_client.delete_object(
                         Bucket=self.job_settings.s3_bucket, Key=object_key
                     )
