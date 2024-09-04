@@ -567,7 +567,7 @@ def build_metadata_record_from_prefix(
     s3_client: S3Client,
     optional_name: Optional[str] = None,
     optional_created: Optional[datetime] = None,
-    optional_external_links: Optional[dict[str, List[str]]] = None,
+    optional_external_links: Optional[Dict[str, List[str]]] = None,
 ) -> Optional[str]:
     """
     For a given bucket and prefix, this method will return a JSON string
@@ -585,7 +585,7 @@ def build_metadata_record_from_prefix(
       s3_prefix. Default is None.
     optional_created: Optional[datetime]
       User can override created datetime. Default is None.
-    optional_external_links: Optional[dict[str, List[str]]]
+    optional_external_links: Optional[Dict[str, List[str]]]
       User can provide external_links. Default is None.
 
     Returns
