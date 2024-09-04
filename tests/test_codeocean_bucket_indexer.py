@@ -73,10 +73,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
             "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
             "ecephys_642478_2023-01-17_13-56-29/processing.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
             "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
             "ecephys_642478_2023-01-17_13-56-29/session.json": None,
             "ecephys_642478_2023-01-17_13-56-29/subject.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
         }
         cls.example_docdb_records = [
             {

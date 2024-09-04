@@ -64,10 +64,10 @@ class TestUtils(unittest.TestCase):
             "instrument",
             "procedures",
             "processing",
+            "quality_control",
             "rig",
             "session",
             "subject",
-            "mri_session",
         ]
         cls.example_core_files = example_core_files
         example_pages = load_json_file("example_pages_response.json")
@@ -187,7 +187,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("e6dd2b7ab819f7a0fc21dba512a4071b", md5_hash)
+        self.assertEqual("275d922d2a1e547f2e0f35b5cc54f493", md5_hash)
 
     def test_is_dict_corrupt(self):
         """Tests is_dict_corrupt method"""
@@ -746,6 +746,7 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"f4827f025e79bafeb6947e14c4e3b51a"',
                 "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
             },
+            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
             "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
             "ecephys_642478_2023-01-17_13-56-29/session.json": None,
             "ecephys_642478_2023-01-17_13-56-29/subject.json": {
@@ -755,7 +756,6 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"92734946c64fc87408ef79e5e92937bc"',
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
-            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
         }
         mock_download_json_file.side_effect = [
             self.example_processing,
@@ -811,10 +811,10 @@ class TestUtils(unittest.TestCase):
             "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
             "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
             "ecephys_642478_2023-01-17_13-56-29/processing.json": None,
+            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
             "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
             "ecephys_642478_2023-01-17_13-56-29/session.json": None,
             "ecephys_642478_2023-01-17_13-56-29/subject.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
         }
         # noinspection PyTypeChecker
         md = json.loads(
@@ -859,6 +859,7 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"f4827f025e79bafeb6947e14c4e3b51a"',
                 "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
             },
+            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
             "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
             "ecephys_642478_2023-01-17_13-56-29/session.json": None,
             "ecephys_642478_2023-01-17_13-56-29/subject.json": {
@@ -868,7 +869,6 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"92734946c64fc87408ef79e5e92937bc"',
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
-            "ecephys_642478_2023-01-17_13-56-29/mri_session.json": None,
         }
         mock_download_json_file.side_effect = [
             self.example_processing,
@@ -949,6 +949,7 @@ class TestUtils(unittest.TestCase):
                 "e_tag": f'"{md5_hash_processing_unchanged}"',
                 "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
             },
+            f"{pfx}/quality_control.json": None,
             f"{pfx}/rig.json": {
                 "last_modified": datetime(
                     2023, 11, 4, 1, 13, 41, tzinfo=timezone.utc
@@ -964,7 +965,6 @@ class TestUtils(unittest.TestCase):
                 "e_tag": f'"{md5_hash_subject_unchanged}"',
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
-            f"{pfx}/mri_session.json": None,
         }
         mock_upload_core_record.return_value = "mock_upload_response"
         mock_s3_client.delete_object.return_value = "mock_delete_response"
@@ -1021,6 +1021,10 @@ class TestUtils(unittest.TestCase):
                 "Skipping."
             ),
             (
+                f"quality_control not found in metadata.nd.json for {pfx} nor "
+                f"in {s3_loc}/quality_control.json! Skipping."
+            ),
+            (
                 f"rig not found in metadata.nd.json for {pfx} but {s3_loc}/"
                 "rig.json exists! Deleting."
             ),
@@ -1030,10 +1034,6 @@ class TestUtils(unittest.TestCase):
                 f"{s3_loc}/session.json! Skipping."
             ),
             f"subject is up-to-date in {s3_loc}/subject.json. Skipping.",
-            (
-                f"mri_session not found in metadata.nd.json for {pfx} nor in "
-                f"{s3_loc}/mri_session.json! Skipping."
-            ),
         ]
         actual_log_messages = [
             c[1]["message"] for c in mock_log_message.call_args_list
@@ -1072,6 +1072,7 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"7ebb961de9e9b00accfd1358e4561ec1"',
                 "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
             },
+            f"{pfx}/quality_control.json": None,
             f"{pfx}/rig.json": None,
             f"{pfx}/session.json": None,
             f"{pfx}/subject.json": {
@@ -1081,7 +1082,6 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"8b8cd50a6cf1f3f667be98a69db2ad89"',
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
-            f"{pfx}/mri_session.json": None,
         }
         cond_copy_then_sync_core_json_files(
             metadata_json=json.dumps(self.example_metadata_nd),
@@ -1164,6 +1164,7 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"7ebb961de9e9b00accfd1358e4561ec1"',
                 "version_id": "jWWT0Xrb8_nE9t5C.nTlLElpYJoURbv_",
             },
+            f"{pfx}/quality_control.json": None,
             f"{pfx}/rig.json": {
                 "last_modified": datetime(
                     2022, 5, 5, 1, 13, 41, tzinfo=timezone.utc
@@ -1179,7 +1180,6 @@ class TestUtils(unittest.TestCase):
                 "e_tag": '"8b8cd50a6cf1f3f667be98a69db2ad89"',
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
-            f"{pfx}/mri_session.json": None,
         }
 
         cond_copy_then_sync_core_json_files(

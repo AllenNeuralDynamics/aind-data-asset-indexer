@@ -95,8 +95,9 @@
       "pipeline_version": null,
       "schema_version": "0.2.5"
    },
+   "quality_control": null,
    "rig": null,
-   "schema_version": "0.2.7",
+   "schema_version": "1.0.0",
    "session": null,
    "subject": {
       "background_strain": null,
