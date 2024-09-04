@@ -65,7 +65,7 @@ class CodeOceanIndexBucketJob:
         """
         location = codeocean_record["location"]
         created = codeocean_record["created"]
-        external_links = [codeocean_record["external_links"]]
+        external_links = codeocean_record["external_links"]
         name = codeocean_record["name"]
         url_parts = get_s3_bucket_and_prefix(location)
         bucket = url_parts["bucket"]

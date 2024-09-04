@@ -48,7 +48,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                     2024, 6, 12, 21, 21, 28, tzinfo=timezone.utc
                 ),
                 "external_links": {
-                    "Code Ocean": "11ee1e1e-11e1-1111-1111-e11eeeee1e11"
+                    "Code Ocean": ["11ee1e1e-11e1-1111-1111-e11eeeee1e11"]
                 },
             },
             {
@@ -63,7 +63,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                     2024, 6, 12, 19, 45, 59, tzinfo=timezone.utc
                 ),
                 "external_links": {
-                    "Code Ocean": "666666cc-66cc-6c66-666c-6c66c6666666"
+                    "Code Ocean": ["666666cc-66cc-6c66-666c-6c66c6666666"]
                 },
             },
         ]

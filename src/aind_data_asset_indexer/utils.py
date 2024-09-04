@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.data_description import DataLevel, DataRegex
-from aind_data_schema.core.metadata import Metadata
+from aind_data_schema.core.metadata import ExternalPlatforms, Metadata
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
@@ -567,7 +567,7 @@ def build_metadata_record_from_prefix(
     s3_client: S3Client,
     optional_name: Optional[str] = None,
     optional_created: Optional[datetime] = None,
-    optional_external_links: Optional[List[dict]] = None,
+    optional_external_links: Optional[dict[str, List[str]]] = None,
 ) -> Optional[str]:
     """
     For a given bucket and prefix, this method will return a JSON string
@@ -585,7 +585,7 @@ def build_metadata_record_from_prefix(
       s3_prefix. Default is None.
     optional_created: Optional[datetime]
       User can override created datetime. Default is None.
-    optional_external_links: Optional[List[dict]]
+    optional_external_links: Optional[dict[str, List[str]]]
       User can provide external_links. Default is None.
 
     Returns
@@ -1048,7 +1048,7 @@ def get_all_processed_codeocean_asset_records(
       {"name": data_asset_name,
       "location": data_asset_location,
       "created": data_asset_created,
-      "external_links": {"Code Ocean": data_asset_id}
+      "external_links": {"Code Ocean": [data_asset_id]}
       }
       }
 
@@ -1091,7 +1091,9 @@ def get_all_processed_codeocean_asset_records(
                     "name": data_asset_name,
                     "location": location,
                     "created": created_datetime,
-                    "external_links": {"Code Ocean": data_asset_id},
+                    "external_links": {
+                        ExternalPlatforms.CODEOCEAN.value: [data_asset_id]
+                    },
                 }
         # Occasionally, there are duplicate items returned. This is one
         # way to remove the duplicates.

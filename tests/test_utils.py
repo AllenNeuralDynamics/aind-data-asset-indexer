@@ -824,7 +824,7 @@ class TestUtils(unittest.TestCase):
                 s3_client=mock_s3_client,
                 optional_name="ecephys_642478_2023-01-17_13-56-29",
                 optional_created=datetime(2020, 1, 2, 3, 4, 5),
-                optional_external_links=[{"Code Ocean": "123-456"}],
+                optional_external_links={"Code Ocean": ["123-456"]},
             )
         )
         mock_get_dict_of_file_info.assert_called_once()
@@ -832,7 +832,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual("s3://code-ocean-bucket/abc-123", md["location"])
         self.assertEqual("ecephys_642478_2023-01-17_13-56-29", md["name"])
         self.assertEqual("2020-01-02T03:04:05", md["created"])
-        self.assertEqual([{"Code Ocean": "123-456"}], md["external_links"])
+        self.assertEqual({"Code Ocean": ["123-456"]}, md["external_links"])
 
     @patch("aind_data_asset_indexer.utils.Metadata.model_construct")
     @patch("boto3.client")
@@ -1436,7 +1436,7 @@ class TestUtils(unittest.TestCase):
                     2024, 6, 12, 21, 21, 28, tzinfo=timezone.utc
                 ),
                 "external_links": {
-                    "Code Ocean": "11ee1e1e-11e1-1111-1111-e11eeeee1e11"
+                    "Code Ocean": ["11ee1e1e-11e1-1111-1111-e11eeeee1e11"]
                 },
             },
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666": {
@@ -1451,7 +1451,7 @@ class TestUtils(unittest.TestCase):
                     2024, 6, 12, 19, 45, 59, tzinfo=timezone.utc
                 ),
                 "external_links": {
-                    "Code Ocean": "666666cc-66cc-6c66-666c-6c66c6666666"
+                    "Code Ocean": ["666666cc-66cc-6c66-666c-6c66c6666666"]
                 },
             },
         }
