@@ -1,10 +1,14 @@
 """Tests methods in codeocean_bucket_indexer module"""
 
+import json
 import os
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
+
+from pymongo.operations import UpdateOne
+from requests import Response
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -32,6 +36,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             doc_db_collection_name="some_docdb_collection_name",
             codeocean_domain="some_co_domain",
             codeocean_token="some_co_token",
+            temp_codeocean_endpoint="http://some_url:8080/created_after/0",
         )
         cls.basic_job_configs = basic_job_configs
         cls.basic_job = CodeOceanIndexBucketJob(job_settings=basic_job_configs)
@@ -94,6 +99,199 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 "_id": "efg-456",
             },
         ]
+
+        cls.example_temp_endpoint_response = [
+            {"id": "abc-123", "location": "s3://bucket/prefix1"},
+            {"id": "def-456", "location": "s3://bucket/prefix1"},
+            {"id": "ghi-789", "location": "s3://bucket/prefix2"},
+        ]
+
+    @patch("requests.get")
+    def test_get_external_data_asset_records(self, mock_get: MagicMock):
+        """Tests the _get_external_data_asset_records method"""
+        example_response = self.example_temp_endpoint_response
+        mock_get_response = Response()
+        mock_get_response.status_code = 200
+        mock_get_response._content = json.dumps(example_response).encode(
+            "utf-8"
+        )
+        mock_get.return_value = mock_get_response
+        response = self.basic_job._get_external_data_asset_records()
+        self.assertEqual(example_response, response)
+
+    @patch("requests.get")
+    def test_get_external_data_asset_records_error(self, mock_get: MagicMock):
+        """Tests the _get_external_data_asset_records method when an error
+        response is returned"""
+        mock_get_response = Response()
+        mock_get_response.status_code = 500
+        mock_get.return_value = mock_get_response
+        response = self.basic_job._get_external_data_asset_records()
+        self.assertIsNone(response)
+
+    def test_map_external_list_to_dict(self):
+        """Tests _map_external_list_to_dict method"""
+        mapped_response = self.basic_job._map_external_list_to_dict(
+            self.example_temp_endpoint_response
+        )
+        expected_response = {
+            "s3://bucket/prefix1": {"abc-123", "def-456"},
+            "s3://bucket/prefix2": {"ghi-789"},
+        }
+        self.assertEqual(expected_response, mapped_response)
+
+    def test_get_co_links_from_record(self):
+        """Tests _get_co_links_from_record method"""
+        docdb_record = {
+            "_id": "12345",
+            "location": "s3://bucket/prefix",
+            "external_links": {"Code Ocean": ["abc-123", "def-456"]},
+        }
+        output = self.basic_job._get_co_links_from_record(
+            docdb_record=docdb_record
+        )
+        self.assertEqual(["abc-123", "def-456"], output)
+
+    def test_get_co_links_from_record_legacy(self):
+        """Tests _get_co_links_from_record method with legacy format"""
+        docdb_record = {
+            "_id": "12345",
+            "location": "s3://bucket/prefix",
+            "external_links": [
+                {"Code Ocean": "abc-123"},
+                {"Code Ocean": "def-456"},
+            ],
+        }
+        output = self.basic_job._get_co_links_from_record(
+            docdb_record=docdb_record
+        )
+        self.assertEqual(["abc-123", "def-456"], output)
+
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
+    @patch("requests.get")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
+    @patch("logging.info")
+    @patch("logging.debug")
+    @patch("logging.error")
+    def test_update_external_links_in_docdb(
+        self,
+        mock_error: MagicMock,
+        mock_debug: MagicMock,
+        mock_info: MagicMock,
+        mock_paginate: MagicMock,
+        mock_get: MagicMock,
+        mock_docdb_client: MagicMock,
+    ):
+        """Tests _update_external_links_in_docdb method."""
+        # Mock requests get response
+        example_response = self.example_temp_endpoint_response
+        mock_get_response = Response()
+        mock_get_response.status_code = 200
+        mock_get_response._content = json.dumps(example_response).encode(
+            "utf-8"
+        )
+        mock_get.return_value = mock_get_response
+
+        # Mock bulk_write
+        mock_db = MagicMock()
+        mock_docdb_client.__getitem__.return_value = mock_db
+        mock_collection = MagicMock()
+        mock_db.__getitem__.return_value = mock_collection
+        mock_collection.bulk_write.return_value = {"message": "success"}
+
+        # Mock paginate
+        mock_paginate.return_value = [
+            [
+                {
+                    "_id": "0000",
+                    "location": "s3://bucket/prefix1",
+                    "external_links": {"Code Ocean": ["abc-123"]},
+                },
+                {
+                    "_id": "0001",
+                    "location": "s3://bucket/prefix2",
+                    "external_links": {"Code Ocean": ["ghi-789"]},
+                },
+                {
+                    "_id": "0002",
+                    "location": "s3://bucket2/prefix3",
+                    "external_links": [{"Code Ocean": "xyz-789"}],
+                },
+            ]
+        ]
+
+        self.basic_job._update_external_links_in_docdb(
+            docdb_client=mock_docdb_client
+        )
+        expected_bulk_write_calls = [
+            call(
+                requests=[
+                    UpdateOne(
+                        {"_id": "0000"},
+                        {
+                            "$set": {
+                                "external_links": {
+                                    "Code Ocean": ["abc-123", "def-456"]
+                                }
+                            }
+                        },
+                        True,
+                        None,
+                        None,
+                        None,
+                    ),
+                    UpdateOne(
+                        {"_id": "0002"},
+                        {"$set": {"external_links": {"Code Ocean": []}}},
+                        True,
+                        None,
+                        None,
+                        None,
+                    ),
+                ]
+            )
+        ]
+
+        mock_error.assert_not_called()
+        mock_info.assert_called_once_with("Updating 2 records")
+        mock_debug.assert_called_once_with({"message": "success"})
+        mock_collection.bulk_write.assert_has_calls(expected_bulk_write_calls)
+
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
+    @patch("requests.get")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
+    @patch("logging.info")
+    @patch("logging.debug")
+    @patch("logging.error")
+    def test_update_external_links_in_docdb_error(
+        self,
+        mock_error: MagicMock,
+        mock_debug: MagicMock,
+        mock_info: MagicMock,
+        mock_paginate: MagicMock,
+        mock_get: MagicMock,
+        mock_docdb_client: MagicMock,
+    ):
+        """Tests _update_external_links_in_docdb method when there is an
+        error retrieving info from the temp endpoint."""
+        # Mock requests get response
+        mock_get_response = Response()
+        mock_get_response.status_code = 500
+        mock_get.return_value = mock_get_response
+
+        mock_db = MagicMock()
+        mock_docdb_client.__getitem__.return_value = mock_db
+
+        self.basic_job._update_external_links_in_docdb(
+            docdb_client=mock_docdb_client
+        )
+
+        mock_error.assert_called_once_with(
+            "There was an error retrieving external links!"
+        )
+        mock_info.assert_not_called()
+        mock_debug.assert_not_called()
+        mock_paginate.assert_not_called()
 
     @patch("logging.info")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
@@ -329,6 +527,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._update_external_links_in_docdb"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
         "CodeOceanIndexBucketJob._delete_records_from_docdb"
     )
     @patch(
@@ -350,6 +552,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_paginate_docdb: MagicMock,
         mock_process_codeocean_records: MagicMock,
         mock_delete_records_from_docdb: MagicMock,
+        mock_update_external_links_in_docdb: MagicMock,
     ):
         """Tests run_job method. Given the example responses, should ignore
         one record, add one record, and delete one record."""
@@ -360,6 +563,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         )
         mock_paginate_docdb.return_value = [self.example_docdb_records]
         self.basic_job.run_job()
+
+        mock_update_external_links_in_docdb.assert_called_once_with(
+            docdb_client=mock_mongo_client
+        )
         mock_process_codeocean_records.assert_called_once_with(
             records=[self.example_codeocean_records[0]]
         )
@@ -371,6 +578,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 call("Starting to scan through CodeOcean."),
                 call("Finished scanning through CodeOcean."),
                 call("Starting to scan through DocDb."),
+                call("Adding links to records."),
+                call("Finished adding links to records"),
                 call("Finished scanning through DocDB."),
                 call("Starting to add records to DocDB."),
                 call("Finished adding records to DocDB."),

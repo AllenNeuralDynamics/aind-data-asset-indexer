@@ -6,13 +6,16 @@ import logging
 import os
 import sys
 import warnings
-from typing import List
+from typing import List, Optional, Union
 
 import boto3
 import dask.bag as dask_bag
+import requests
 from aind_codeocean_api.codeocean import CodeOceanClient
+from aind_data_schema.core.metadata import ExternalPlatforms
 from mypy_boto3_s3 import S3Client
 from pymongo import MongoClient
+from pymongo.operations import UpdateOne
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -43,6 +46,169 @@ class CodeOceanIndexBucketJob:
     def __init__(self, job_settings: CodeOceanIndexBucketJobSettings):
         """Class constructor."""
         self.job_settings = job_settings
+
+    def _get_external_data_asset_records(self) -> Optional[List[dict]]:
+        """
+        Retrieves list of code ocean ids and locations for external data
+        assets. The timeout is set to 600 seconds.
+        Returns
+        -------
+        List[dict] | None
+          List items have shape {"id": str, "location": str}. If error occurs,
+          return None.
+        """
+        response = requests.get(
+            self.job_settings.temp_codeocean_endpoint,
+            timeout=600,
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+
+    @staticmethod
+    def _map_external_list_to_dict(external_recs: List[dict]) -> dict:
+        """
+        Maps the response received from Code Ocean into a dict. For example,
+        [{"id": "abc", "location": "s3://bucket/prefix},
+        {"id": "def", "location": "s3://bucket/prefix"}]
+        will be mapped to {"s3://bucket/prefix": ["abc", "def"]}
+        Parameters
+        ----------
+        external_recs : List[dict]
+
+        Returns
+        -------
+        dict
+
+        """
+        new_records = dict()
+        for r in external_recs:
+            location = r["location"]
+            rec_id = r["id"]
+            if new_records.get(location) is not None:
+                old_id_set = new_records.get(location)
+                old_id_set.add(rec_id)
+                new_records[location] = old_id_set
+            else:
+                new_records[location] = {rec_id}
+        return new_records
+
+    @staticmethod
+    def _get_co_links_from_record(
+        docdb_record: Union[dict, list]
+    ) -> List[str]:
+        """
+        Small utility to parse the external_links field of the docdb record.
+        Supports the legacy type.
+        Parameters
+        ----------
+        docdb_record : dict | list
+          The legacy type was a list, while the current version is a dict.
+
+        Returns
+        -------
+        List[str]
+
+        """
+        external_links = docdb_record.get("external_links", [])
+
+        # Hopefully, ExternalPlatforms.CODEOCEAN doesn't change
+        if isinstance(external_links, dict):
+            external_links = external_links.get(
+                ExternalPlatforms.CODEOCEAN.value, []
+            )
+        else:
+            external_links = [
+                r.get(ExternalPlatforms.CODEOCEAN.value)
+                for r in external_links
+            ]
+        return external_links
+
+    def _update_external_links_in_docdb(
+        self, docdb_client: MongoClient
+    ) -> None:
+        """
+        This method will:
+        1) Retrieve a list of codeocean data asset ids and locations from CO
+        2) Paginate through the docdb records where the location doesn't match
+        the internal co bucket.
+        3) Add or remove the external_links from the docdb record if needed.
+        Parameters
+        ----------
+        docdb_client : MongoClient
+
+        Returns
+        -------
+        None
+
+        """
+        # Should return a list like [{"id": co_id, "location": "s3://..."},]
+        list_of_co_ids_and_locations = self._get_external_data_asset_records()
+        db = docdb_client[self.job_settings.doc_db_db_name]
+        collection = db[self.job_settings.doc_db_collection_name]
+        if list_of_co_ids_and_locations is not None:
+            co_loc_to_id_map = self._map_external_list_to_dict(
+                list_of_co_ids_and_locations
+            )
+            pages = paginate_docdb(
+                docdb_client=docdb_client,
+                db_name=self.job_settings.doc_db_db_name,
+                collection_name=self.job_settings.doc_db_collection_name,
+                filter_query={
+                    "location": {
+                        "$not": {
+                            "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                        }
+                    }
+                },
+                projection={"_id": 1, "location": 1, "external_links": 1},
+                page_size=500,
+            )
+            for page in pages:
+                records_to_update = []
+                for record in page:
+                    location = record.get("location")
+                    external_links = self._get_co_links_from_record(record)
+                    code_ocean_ids = (
+                        None
+                        if location is None
+                        else co_loc_to_id_map.get(location)
+                    )
+                    docdb_rec_id = record["_id"]
+                    if (
+                        external_links is not None
+                        and code_ocean_ids is not None
+                        and code_ocean_ids != set(external_links)
+                    ):
+                        new_external_links = code_ocean_ids
+                    elif external_links is not None and not code_ocean_ids:
+                        new_external_links = dict()
+                    else:
+                        new_external_links = None
+                    if new_external_links is not None:
+                        record_links = {
+                            ExternalPlatforms.CODEOCEAN.value: sorted(
+                                list(new_external_links)
+                            )
+                        }
+                        records_to_update.append(
+                            UpdateOne(
+                                filter={"_id": docdb_rec_id},
+                                update={
+                                    "$set": {"external_links": record_links}
+                                },
+                                upsert=True,
+                            )
+                        )
+                if len(records_to_update) > 0:
+                    logging.info(f"Updating {len(records_to_update)} records")
+                    write_response = collection.bulk_write(
+                        requests=records_to_update
+                    )
+                    logging.debug(write_response)
+        else:
+            logging.error("There was an error retrieving external links!")
 
     def _process_codeocean_record(
         self,
@@ -220,6 +386,12 @@ class CodeOceanIndexBucketJob:
             password=self.job_settings.doc_db_password.get_secret_value(),
             authSource="admin",
         )
+        # Use existing client to add external links to fields
+        logging.info("Adding links to records.")
+        self._update_external_links_in_docdb(
+            docdb_client=iterator_docdb_client
+        )
+        logging.info("Finished adding links to records")
         all_docdb_records = dict()
         docdb_pages = paginate_docdb(
             db_name=self.job_settings.doc_db_db_name,
