@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import warnings
+from datetime import datetime
 from typing import List, Optional, Union
 
 import boto3
@@ -16,6 +17,7 @@ from aind_data_schema.core.metadata import ExternalPlatforms
 from mypy_boto3_s3 import S3Client
 from pymongo import MongoClient
 from pymongo.operations import UpdateOne
+from requests.exceptions import ReadTimeout
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -57,13 +59,20 @@ class CodeOceanIndexBucketJob:
           List items have shape {"id": str, "location": str}. If error occurs,
           return None.
         """
-        response = requests.get(
-            self.job_settings.temp_codeocean_endpoint,
-            timeout=600,
-        )
-        if response.status_code == 200:
-            return response.json()
-        else:
+        try:
+            response = requests.get(
+                self.job_settings.temp_codeocean_endpoint,
+                timeout=600,
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return None
+        except ReadTimeout:
+            logging.error(
+                f"Read timed out at "
+                f"{self.job_settings.temp_codeocean_endpoint}"
+            )
             return None
 
     @staticmethod
@@ -183,6 +192,10 @@ class CodeOceanIndexBucketJob:
                     ):
                         new_external_links = code_ocean_ids
                     elif external_links is not None and not code_ocean_ids:
+                        logging.info(
+                            f"No code ocean data asset ids found for "
+                            f"{location}. Removing external links from record."
+                        )
                         new_external_links = dict()
                     else:
                         new_external_links = None
@@ -192,13 +205,17 @@ class CodeOceanIndexBucketJob:
                                 list(new_external_links)
                             )
                         }
+                        last_modified = datetime.utcnow().isoformat()
                         records_to_update.append(
                             UpdateOne(
                                 filter={"_id": docdb_rec_id},
                                 update={
-                                    "$set": {"external_links": record_links}
+                                    "$set": {
+                                        "external_links": record_links,
+                                        "last_modified": last_modified,
+                                    }
                                 },
-                                upsert=True,
+                                upsert=False,
                             )
                         )
                 if len(records_to_update) > 0:

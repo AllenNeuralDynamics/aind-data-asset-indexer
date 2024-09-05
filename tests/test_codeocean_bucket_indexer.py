@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 from pymongo.operations import UpdateOne
 from requests import Response
+from requests.exceptions import ReadTimeout
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -129,6 +130,20 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         response = self.basic_job._get_external_data_asset_records()
         self.assertIsNone(response)
 
+    @patch("requests.get")
+    @patch("logging.error")
+    def test_get_external_data_asset_records_read_timeout(
+        self, mock_error: MagicMock, mock_get: MagicMock
+    ):
+        """Tests the _get_external_data_asset_records method when the read
+        times out."""
+        mock_get.side_effect = ReadTimeout()
+        response = self.basic_job._get_external_data_asset_records()
+        self.assertIsNone(response)
+        mock_error.assert_called_once_with(
+            "Read timed out at http://some_url:8080/created_after/0"
+        )
+
     def test_map_external_list_to_dict(self):
         """Tests _map_external_list_to_dict method"""
         mapped_response = self.basic_job._map_external_list_to_dict(
@@ -173,8 +188,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
     @patch("logging.info")
     @patch("logging.debug")
     @patch("logging.error")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.datetime")
     def test_update_external_links_in_docdb(
         self,
+        mock_datetime: MagicMock,
         mock_error: MagicMock,
         mock_debug: MagicMock,
         mock_info: MagicMock,
@@ -183,6 +200,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
     ):
         """Tests _update_external_links_in_docdb method."""
+        mock_datetime.utcnow.return_value = datetime(2024, 9, 5)
+
         # Mock requests get response
         example_response = self.example_temp_endpoint_response
         mock_get_response = Response()
@@ -232,18 +251,24 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                             "$set": {
                                 "external_links": {
                                     "Code Ocean": ["abc-123", "def-456"]
-                                }
+                                },
+                                "last_modified": "2024-09-05T00:00:00",
                             }
                         },
-                        True,
+                        False,
                         None,
                         None,
                         None,
                     ),
                     UpdateOne(
                         {"_id": "0002"},
-                        {"$set": {"external_links": {"Code Ocean": []}}},
-                        True,
+                        {
+                            "$set": {
+                                "external_links": {"Code Ocean": []},
+                                "last_modified": "2024-09-05T00:00:00",
+                            }
+                        },
+                        False,
                         None,
                         None,
                         None,
@@ -253,7 +278,16 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         ]
 
         mock_error.assert_not_called()
-        mock_info.assert_called_once_with("Updating 2 records")
+        mock_info.assert_has_calls(
+            [
+                call(
+                    "No code ocean data asset ids found for "
+                    "s3://bucket2/prefix3. "
+                    "Removing external links from record."
+                ),
+                call("Updating 2 records"),
+            ]
+        )
         mock_debug.assert_called_once_with({"message": "success"})
         mock_collection.bulk_write.assert_has_calls(expected_bulk_write_calls)
 
