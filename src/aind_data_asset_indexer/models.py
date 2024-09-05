@@ -122,6 +122,12 @@ class CodeOceanIndexBucketJobSettings(IndexJobSettings):
     doc_db_collection_name: str
     codeocean_domain: str
     codeocean_token: SecretStr
+    temp_codeocean_endpoint: str = Field(
+        description=(
+            "Temp proxy to access code ocean information from their analytics "
+            "databases."
+        )
+    )
 
     @classmethod
     def from_param_store(cls, param_store_name: str):

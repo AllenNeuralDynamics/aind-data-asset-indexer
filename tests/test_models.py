@@ -236,6 +236,7 @@ class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
             doc_db_collection_name="some_docdb_collection_name",
             codeocean_domain="some_co_domain",
             codeocean_token="some_co_token",
+            temp_codeocean_endpoint="http://some_url:8080/created_after/0",
         )
         self.assertEqual("some_bucket", job_settings.s3_bucket)
         self.assertEqual(20, job_settings.n_partitions)
@@ -255,6 +256,10 @@ class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
         self.assertEqual(
             "some_co_token", job_settings.codeocean_token.get_secret_value()
         )
+        self.assertEqual(
+            "http://some_url:8080/created_after/0",
+            job_settings.temp_codeocean_endpoint,
+        )
 
     @patch("boto3.client")
     def test_from_from_param_store(self, mock_boto3_client):
@@ -268,6 +273,8 @@ class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
                     '"codeocean_secret_name": "some_codeocean_secret_name",'
                     '"doc_db_db_name":"some_docdb_dbname",'
                     '"doc_db_collection_name":"some_docdb_collection_name",'
+                    '"temp_codeocean_endpoint":'
+                    '"http://some_url:8080/created_after/0",'
                     '"s3_bucket":"some_bucket"}'
                 ),
                 "Version": 1,
@@ -363,6 +370,7 @@ class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
             doc_db_collection_name="some_docdb_collection_name",
             codeocean_domain="some_co_domain",
             codeocean_token="some_co_token",
+            temp_codeocean_endpoint="http://some_url:8080/created_after/0",
         )
         self.assertEqual(expected_job_settings, job_settings)
 
