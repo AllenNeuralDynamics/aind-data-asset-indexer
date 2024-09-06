@@ -93,7 +93,7 @@ class CodeOceanIndexBucketJob:
         """
         new_records = dict()
         for r in external_recs:
-            location = r["location"]
+            location = r["source"]
             rec_id = r["id"]
             if new_records.get(location) is not None:
                 old_id_set = new_records.get(location)
