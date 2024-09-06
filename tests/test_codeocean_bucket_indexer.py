@@ -102,9 +102,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         ]
 
         cls.example_temp_endpoint_response = [
-            {"id": "abc-123", "location": "s3://bucket/prefix1"},
-            {"id": "def-456", "location": "s3://bucket/prefix1"},
-            {"id": "ghi-789", "location": "s3://bucket/prefix2"},
+            {"id": "abc-123", "source": "s3://bucket/prefix1"},
+            {"id": "def-456", "source": "s3://bucket/prefix1"},
+            {"id": "ghi-789", "source": "s3://bucket/prefix2"},
         ]
 
     @patch("requests.get")
