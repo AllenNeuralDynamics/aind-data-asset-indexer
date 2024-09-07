@@ -20,7 +20,7 @@ dependencies = [
     "boto3",
     "boto3-stubs[s3]",
     "pydantic-settings>=2.0",
-    "pydantic>=2.7",
+    "pydantic>=2.7,<2.9",
     "pymongo==4.3.3",
     "dask==2023.5.0",
     "aind-data-schema==1.0.0",
