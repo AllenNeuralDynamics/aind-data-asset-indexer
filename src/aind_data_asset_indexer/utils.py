@@ -67,6 +67,7 @@ def create_object_key(prefix: str, filename: str) -> str:
     """
     For a given s3 prefix and filename, create the expected
     object key for the file.
+
     Parameters
     ----------
     prefix : str
@@ -89,6 +90,7 @@ def create_metadata_object_key(prefix: str) -> str:
     """
     For a given s3 prefix, create the expected object key for the
     metadata.nd.json file.
+
     Parameters
     ----------
     prefix : str
@@ -126,6 +128,7 @@ def is_record_location_valid(
 ) -> bool:
     """
     Check if a given record has a valid location url.
+
     Parameters
     ----------
     record : dict
@@ -179,6 +182,7 @@ def get_s3_bucket_and_prefix(s3_location: str) -> Dict[str, str]:
     For a location url like s3://bucket/prefix, it will return the bucket
     and prefix. It doesn't check the scheme is s3. It will strip the leading
     and trailing forward slashes from the prefix.
+
     Parameters
     ----------
     s3_location : str
@@ -199,6 +203,7 @@ def get_s3_location(bucket: str, prefix: str) -> str:
     """
     For a given bucket and prefix, return a location url in format
     s3://{bucket}/{prefix}
+
     Parameters
     ----------
     bucket : str
@@ -218,6 +223,7 @@ def compute_md5_hash(json_contents: str) -> str:
     """
     Computes the md5 hash of the object as it would be stored in S3. Useful
     for comparing against the S3 object e-tag to check if they are the same.
+
     Parameters
     ----------
     json_contents : str
@@ -240,6 +246,7 @@ def upload_json_str_to_s3(
 ) -> PutObjectOutputTypeDef:
     """
     Upload JSON string contents to a location in S3.
+
     Parameters
     ----------
     bucket : str
@@ -274,6 +281,7 @@ def upload_metadata_json_str_to_s3(
     """
     Upload JSON string representation of the contents of the metadata.nd.json
     file to a location in S3.
+
     Parameters
     ----------
     bucket : str
@@ -301,6 +309,7 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
     """
     Check that a file exists inside a bucket. Uses the head_object operation,
     which is cheaper compared to the list_objects operation.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -407,6 +416,7 @@ def get_dict_of_file_info(
     """
     For a list of object keys, returns a list of metadata info for each object
     that exists in the bucket.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -445,6 +455,7 @@ def get_dict_of_core_schema_file_info(
 ) -> Dict[str, Optional[dict]]:
     """
     For a bucket and prefix get list of core schema file info.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -455,10 +466,10 @@ def get_dict_of_core_schema_file_info(
     -------
     Dict[str, Optional[dict]]
       {"subject.json":
-         {"last_modified": datetime, "e_tag": str, "version_id": str},
-       "procedures.json":
-         {"last_modified": datetime, "e_tag": str, "version_id": str},
-       ...
+      {"last_modified": datetime, "e_tag": str, "version_id": str},
+      "procedures.json":
+      {"last_modified": datetime, "e_tag": str, "version_id": str},
+      ...
       }
     """
     key_map = dict(
@@ -482,6 +493,7 @@ def iterate_through_top_level(
     Returns an iterator of s3 responses. If prefix is None, then will return
     an iterator of top-level prefixes of a bucket. Otherwise, will return an
     iterator of the top level items under a prefix.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -514,6 +526,7 @@ def iterate_through_top_level(
 def is_dict_corrupt(input_dict: dict) -> bool:
     """
     Checks that all the keys, included nested keys, don't contain '$' or '.'
+
     Parameters
     ----------
     input_dict : dict
@@ -542,6 +555,7 @@ def download_json_file_from_s3(
     """
     Downloads json file contents from S3. Will return None if object is not
     a valid json file.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -575,6 +589,7 @@ def build_metadata_record_from_prefix(
     constructed from any non-corrupt core schema json files found under the
     prefix. If there are issues with Metadata construction, then it will
     return None.
+
     Parameters
     ----------
     bucket : str
@@ -895,6 +910,7 @@ def does_metadata_record_exist_in_docdb(
 ) -> bool:
     """
     For a given bucket and prefix, check if there is already a record in DocDb
+
     Parameters
     ----------
     docdb_client : MongoClient
@@ -930,6 +946,7 @@ def get_record_from_docdb(
 ) -> Optional[dict]:
     """
     Download a record from docdb using the record _id.
+
     Parameters
     ----------
     docdb_client : MongoClient
@@ -963,6 +980,7 @@ def paginate_docdb(
 ) -> Iterator[List[dict]]:
     """
     Paginate through records in DocDb.
+
     Parameters
     ----------
     db_name : str
@@ -1006,6 +1024,7 @@ def build_docdb_location_to_id_map(
     like {'s3://bucket/prefix': 'abc-1234'} where the value is the id of the
     record in DocDb. If the record does not exist, then there will be no key
     in the dictionary.
+
     Parameters
     ----------
     db_name : str
@@ -1036,6 +1055,7 @@ def get_all_processed_codeocean_asset_records(
     Gets all the data asset records we're interested in indexing. The location
     field in the output is the expected location of the data asset. It may
     still require double-checking that the s3 location is valid.
+
     Parameters
     ----------
     co_client : CodeOceanClient

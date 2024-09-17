@@ -82,6 +82,7 @@ class AindIndexBucketJob:
         Write a core schema file in the s3 prefix root folder using the docdb
         record info. To avoid unnecessary s3 calls, the md5 hashes will be
         compared first.
+
         Parameters
         ----------
         s3_client : S3Client
@@ -137,6 +138,7 @@ class AindIndexBucketJob:
         Write a core schema file in the s3 prefix root folder using the docdb
         record info. To avoid unnecessary s3 calls, the md5 hashes will be
         compared first.
+
         Parameters
         ----------
         s3_client : S3Client
@@ -195,6 +197,7 @@ class AindIndexBucketJob:
         prefix, and there is no file in the original_metadata folder, then
         the field in the DocDB record will require updating. This method
         will return a dictionary of updates needed to the DocDB record.
+
         Parameters
         ----------
         prefix : str
@@ -344,6 +347,7 @@ class AindIndexBucketJob:
         1. Check if it needs to be deleted (no s3 object found)
         2. If there is an s3 object, then overwrite the s3 object if the docdb
         is different.
+
         Parameters
         ----------
         docdb_record : dict
@@ -415,9 +419,9 @@ class AindIndexBucketJob:
                     )
                     db = docdb_client[self.job_settings.doc_db_db_name]
                     collection = db[self.job_settings.doc_db_collection_name]
-                    fields_to_update[
-                        "last_modified"
-                    ] = datetime.utcnow().isoformat()
+                    fields_to_update["last_modified"] = (
+                        datetime.utcnow().isoformat()
+                    )
                     response = collection.update_one(
                         {"_id": docdb_record["_id"]},
                         {"$set": fields_to_update},
@@ -445,6 +449,7 @@ class AindIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer record list had length 1000, then this should process
         50 records.
+
         Parameters
         ----------
         record_list : List[dict]
@@ -483,6 +488,7 @@ class AindIndexBucketJob:
         """
         For a list of records (up to a 1000 in the list), divvy up the list
         across n_partitions. Process the set of records in each partition.
+
         Parameters
         ----------
         records : List[dict]
@@ -652,6 +658,7 @@ class AindIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 prefixes.
+
         Parameters
         ----------
         prefix_list : List[str]
@@ -698,6 +705,7 @@ class AindIndexBucketJob:
         """
         For a list of prefixes (up to a 1000 in the list), divvy up the list
         across n_partitions. Process the set of prefixes in each partition.
+
         Parameters
         ----------
         prefixes : List[str]

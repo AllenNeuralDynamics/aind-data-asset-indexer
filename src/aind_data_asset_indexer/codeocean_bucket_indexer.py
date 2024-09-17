@@ -82,6 +82,7 @@ class CodeOceanIndexBucketJob:
         [{"id": "abc", "location": "s3://bucket/prefix},
         {"id": "def", "location": "s3://bucket/prefix"}]
         will be mapped to {"s3://bucket/prefix": ["abc", "def"]}
+
         Parameters
         ----------
         external_recs : List[dict]
@@ -110,6 +111,7 @@ class CodeOceanIndexBucketJob:
         """
         Small utility to parse the external_links field of the docdb record.
         Supports the legacy type.
+
         Parameters
         ----------
         docdb_record : dict | list
@@ -143,6 +145,7 @@ class CodeOceanIndexBucketJob:
         2) Paginate through the docdb records where the location doesn't match
         the internal co bucket.
         3) Add or remove the external_links from the docdb record if needed.
+
         Parameters
         ----------
         docdb_client : MongoClient
@@ -283,6 +286,7 @@ class CodeOceanIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 code ocean records.
+
         Parameters
         ----------
         record_list : List[dict]
@@ -318,6 +322,7 @@ class CodeOceanIndexBucketJob:
         """
         For a list of codeocean records, divvy up the list across
         n_partitions. Process the set of records in each partition.
+
         Parameters
         ----------
         records : List[dict]
@@ -336,6 +341,7 @@ class CodeOceanIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 ids.
+
         Parameters
         ----------
         record_list : List[str]
