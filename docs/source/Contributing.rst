@@ -21,7 +21,7 @@ report or feature request first:
 
 We will do our best to monitor and maintain the backlog of issues.
 
-Local Installation for Development
+Local Installation and Development
 ----------------------------------
 
 For development,
@@ -41,6 +41,56 @@ From the root directory, run:
    pip install -e .[dev]
 
 to install the relevant code for development.
+
+.. _running-indexer-jobs-locally:
+
+Running indexer jobs locally
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+The jobs are intended to be run as scheduled AWS ECS tasks in the same VPC
+as the DocDB instance. The job settings are stored in AWS Parameter Store.
+
+If you wish to run the jobs locally, follow these steps:
+
+1. In a new terminal, start ssh session. Credentials can be found in AWS
+   Secrets Manager.
+
+.. code:: bash
+
+   ssh -L 27017:{docdb_host}:27017 {ssh_username}@{ssh_host} -N -v
+
+2. For the `IndexAindBucketsJob`, you will need to set the ``INDEXER_PARAM_NAME``.
+   Then, run the following:
+
+.. code:: python
+
+   from aind_data_asset_indexer.index_aind_buckets import IndexAindBucketsJob
+   from aind_data_asset_indexer.models import AindIndexBucketsJobSettings
+
+   if __name__ == "__main__":
+      main_job_settings = AindIndexBucketsJobSettings.from_param_store(param_store_name=INDEXER_PARAM_NAME)
+      main_job_settings.doc_db_host = "localhost"
+      main_job = IndexAindBucketsJob(job_settings=main_job_settings)
+      main_job.run_job()
+
+3. For the `CodeOceanIndexBucketJob`, you will need to set the ``CO_INDEXER_PARAM_NAME``
+   and ``DEVELOPER_CODEOCEAN_ENDPOINT``. Then, run the following:
+
+.. code:: python
+
+   from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
+   from aind_data_asset_indexer.codeocean_bucket_indexer import CodeOceanIndexBucketJob
+
+   if __name__ == "__main__":
+      main_job_settings = CodeOceanIndexBucketJobSettings.from_param_store(param_store_name=CO_INDEXER_PARAM_NAME)
+      main_job_settings.doc_db_host = "localhost"
+      main_job_settings.temp_codeocean_endpoint=DEVELOPER_CODEOCEAN_ENDPOINT
+      main_job = CodeOceanIndexBucketJob(job_settings=main_job_settings)
+      main_job.run_job()
+
+4. Close the ssh session when you are done.
+
 
 Branches and Pull Requests
 --------------------------

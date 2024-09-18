@@ -96,6 +96,16 @@ The workflow is generally as follows:
 Please refer to the job's docstrings for more details on the implementation.
 
 
+Running Indexer Jobs Locally
+----------------------------
+
+The jobs are intended to be run as scheduled AWS ECS tasks in the same VPC
+as the DocDB instance. The job settings are stored in AWS Parameter Store.
+
+If you wish to run the jobs locally, please refer to this section in the
+Contributor Guidelines: :ref:`running-indexer-jobs-locally`.
+   
+
 Reporting bugs or making feature requests
 -----------------------------------------
 
