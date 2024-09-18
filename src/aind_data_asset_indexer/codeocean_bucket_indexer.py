@@ -1,4 +1,5 @@
-"""Module to index Code Ocean processed results in DocDB."""
+"""Module to index Code Ocean processed results and update external links in
+DocDB."""
 
 import argparse
 import json
@@ -34,14 +35,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class CodeOceanIndexBucketJob:
     """This job will:
-    1) Download all processed results records from the Code Ocean index
-    2) Download all the records in DocDB for the Code Ocean bucket. The
+    1) For records in AIND buckets, update the external links with Code
+    Ocean data asset ids if needed.
+    2) Download all processed results records from the Code Ocean index
+    3) Download all the records in DocDB for the Code Ocean bucket. The
     response is projected to just the {_id, location} fields.
-    3) Creates a list of locations found in Code Ocean and a list of
+    4) Creates a list of locations found in Code Ocean and a list of
     locations found in DocDB.
-    4) For locations found in Code Ocean not in DocDB, a new record will be
+    5) For locations found in Code Ocean not in DocDB, a new record will be
     created from the aind-data-schema json files in S3.
-    5) For locations in DocDB not found in Code Ocean, the records will be
+    6) For locations in DocDB not found in Code Ocean, the records will be
     removed from DocDB.
     """
 
