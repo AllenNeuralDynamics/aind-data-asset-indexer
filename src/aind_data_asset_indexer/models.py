@@ -33,6 +33,7 @@ class IndexJobSettings(BaseSettings):
     def from_param_store(cls, param_store_name: str):
         """
         Construct class from aws param store
+
         Parameters
         ----------
         param_store_name : str
@@ -60,6 +61,7 @@ class AindIndexBucketJobSettings(IndexJobSettings):
     def from_param_store(cls, param_store_name: str):
         """
         Construct class from aws param store and secrets manager
+
         Parameters
         ----------
         param_store_name : str
@@ -133,6 +135,7 @@ class CodeOceanIndexBucketJobSettings(IndexJobSettings):
     def from_param_store(cls, param_store_name: str):
         """
         Construct class from aws param store and secrets manager
+
         Parameters
         ----------
         param_store_name : str

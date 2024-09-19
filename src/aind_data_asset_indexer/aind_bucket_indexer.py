@@ -54,16 +54,19 @@ class AindIndexBucketJob:
     does not exist, then remove the record from DocDB.
     2.1) If the S3 location exists, check if there is a metadata.nd.json file.
     2.1.0) If there is no file, log a warning and remove the record from DocDb.
-    2.1.1) If there is a file, compare the md5 hashes. If they are different,
-    overwrite the record in S3 with the record from DocDb.
-    2.1.2) If they are the same, then do nothing.
+    2.1.1) If there is a file, resolve the core schema json files in the root
+    folder and the original_metadata folder to ensure they are in sync.
+    2.1.2) Then compare the md5 hashes. If they are different, overwrite the
+    record in S3 with the record from DocDb. Otherwise, do nothing.
     3) Scan through each prefix in S3.
     4) For each prefix, check if a metadata record exists in S3.
     4.0) If a metadata record exists, check if it is in DocDB.
     4.1) If already in DocDb, then don't do anything.
     Otherwise, copy record to DocDB.
-    4.2) If a metadata record does not exist, then build one and save it S3.
+    4.2) If a metadata record does not exist, then build one and save it to S3.
     Assume a lambda function will move it over to DocDb.
+    4.3) In both cases above, ensure the original metadata folder and core
+    files are in sync with the metadata.nd.json file.
     """
 
     def __init__(self, job_settings: AindIndexBucketJobSettings):
@@ -82,6 +85,7 @@ class AindIndexBucketJob:
         Write a core schema file in the s3 prefix root folder using the docdb
         record info. To avoid unnecessary s3 calls, the md5 hashes will be
         compared first.
+
         Parameters
         ----------
         s3_client : S3Client
@@ -137,6 +141,7 @@ class AindIndexBucketJob:
         Write a core schema file in the s3 prefix root folder using the docdb
         record info. To avoid unnecessary s3 calls, the md5 hashes will be
         compared first.
+
         Parameters
         ----------
         s3_client : S3Client
@@ -195,6 +200,7 @@ class AindIndexBucketJob:
         prefix, and there is no file in the original_metadata folder, then
         the field in the DocDB record will require updating. This method
         will return a dictionary of updates needed to the DocDB record.
+
         Parameters
         ----------
         prefix : str
@@ -266,14 +272,12 @@ class AindIndexBucketJob:
                 object_key = create_object_key(
                     prefix=prefix, filename=core_schema_file_name
                 )
-                common_kwargs[
-                    "core_schema_info_in_root"
-                ] = get_dict_of_file_info(
-                    s3_client=s3_client,
-                    bucket=self.job_settings.s3_bucket,
-                    keys=[object_key],
-                ).get(
-                    object_key
+                common_kwargs["core_schema_info_in_root"] = (
+                    get_dict_of_file_info(
+                        s3_client=s3_client,
+                        bucket=self.job_settings.s3_bucket,
+                        keys=[object_key],
+                    ).get(object_key)
                 )
                 self._copy_file_from_root_to_subdir(**common_kwargs)
             # If field is null, a file exists in the root folder, and
@@ -341,9 +345,12 @@ class AindIndexBucketJob:
     ):
         """
         For a given record,
-        1. Check if it needs to be deleted (no s3 object found)
-        2. If there is an s3 object, then overwrite the s3 object if the docdb
-        is different.
+        1. Check if its location field is valid. If not, log a warning.
+        2. Check if it needs to be deleted (no s3 object found)
+        3. If there is an s3 object, then overwrite the s3 object if the docdb
+        is different. Also resolves the core schema json files in the root
+        folder and the original_metadata folder to ensure they are in sync.
+
         Parameters
         ----------
         docdb_record : dict
@@ -415,9 +422,9 @@ class AindIndexBucketJob:
                     )
                     db = docdb_client[self.job_settings.doc_db_db_name]
                     collection = db[self.job_settings.doc_db_collection_name]
-                    fields_to_update[
-                        "last_modified"
-                    ] = datetime.utcnow().isoformat()
+                    fields_to_update["last_modified"] = (
+                        datetime.utcnow().isoformat()
+                    )
                     response = collection.update_one(
                         {"_id": docdb_record["_id"]},
                         {"$set": fields_to_update},
@@ -445,6 +452,7 @@ class AindIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer record list had length 1000, then this should process
         50 records.
+
         Parameters
         ----------
         record_list : List[dict]
@@ -483,6 +491,7 @@ class AindIndexBucketJob:
         """
         For a list of records (up to a 1000 in the list), divvy up the list
         across n_partitions. Process the set of records in each partition.
+
         Parameters
         ----------
         records : List[dict]
@@ -652,6 +661,7 @@ class AindIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 prefixes.
+
         Parameters
         ----------
         prefix_list : List[str]
@@ -698,6 +708,7 @@ class AindIndexBucketJob:
         """
         For a list of prefixes (up to a 1000 in the list), divvy up the list
         across n_partitions. Process the set of prefixes in each partition.
+
         Parameters
         ----------
         prefixes : List[str]
