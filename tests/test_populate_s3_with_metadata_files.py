@@ -81,7 +81,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             bucket=expected_bucket,
             prefix=expected_prefix,
             s3_client=mock_s3_client,
-            log_flag=True,
             copy_original_md_subdir="original_metadata",
         )
         mock_upload_record.assert_called_once_with(

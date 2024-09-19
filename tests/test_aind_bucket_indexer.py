@@ -1224,7 +1224,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             bucket=self.basic_job.job_settings.s3_bucket,
             prefix=expected_prefix,
             s3_client=mock_s3_client,
-            log_flag=True,
             copy_original_md_subdir="original_metadata",
         )
         mock_upload_metadata_json_str_to_s3.assert_called_once_with(
@@ -1352,7 +1351,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             bucket=self.basic_job.job_settings.s3_bucket,
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
-            log_flag=True,
             copy_original_md_subdir="original_metadata",
         )
         mock_upload_metadata_json_str_to_s3.assert_not_called()
