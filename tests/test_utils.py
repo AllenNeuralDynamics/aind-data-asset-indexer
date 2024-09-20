@@ -1149,29 +1149,29 @@ class TestUtils(unittest.TestCase):
                 s3_client=mock_s3_client,
             )
         expected_log_messages = [
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/data_description.json does not exist. "
             f"Skipping copy.",
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/acquisition.json does not exist. "
             f"Skipping copy.",
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/instrument.json does not exist. "
             f"Skipping copy.",
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/procedures.json does not exist. "
             f"Skipping copy.",
             f"INFO:root:Copying {pfx}/processing.json to "
             f"{pfx}/original_metadata/processing.20231104.json in "
             f"s3://{bucket}",
             "DEBUG:root:Copy object",
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/quality_control.json does not exist. "
             f"Skipping copy.",
             f"INFO:root:Copying {pfx}/rig.json to "
             f"{pfx}/original_metadata/rig.20220505.json in s3://{bucket}",
             "DEBUG:root:Copy object",
-            f"WARNING:root:Source file "
+            f"INFO:root:Source file "
             f"s3://{bucket}/{pfx}/session.json does not exist. Skipping copy.",
             f"INFO:root:Copying {pfx}/subject.json to "
             f"{pfx}/original_metadata/subject.20240202.json in s3://{bucket}",

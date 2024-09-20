@@ -731,7 +731,7 @@ def copy_core_json_files(
             )
             logging.debug(response)
         else:
-            logging.warning(
+            logging.info(
                 f"Source file {source_location} does not exist. "
                 f"Skipping copy."
             )
