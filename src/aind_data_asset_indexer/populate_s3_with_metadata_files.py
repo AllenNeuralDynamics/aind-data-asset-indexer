@@ -91,7 +91,7 @@ class AindPopulateMetadataJsonJob:
                 prefix=prefix,
                 s3_client=s3_client,
             )
-            logging.info(response)
+            logging.debug(response)
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"

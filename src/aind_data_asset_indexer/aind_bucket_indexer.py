@@ -393,7 +393,7 @@ class AindIndexBucketJob:
                 response = collection.delete_one(
                     filter={"_id": docdb_record["_id"]}
                 )
-                logging.info(response.raw_result)
+                logging.debug(response.raw_result)
             else:  # There is a metadata.nd.json file in S3.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -582,12 +582,15 @@ class AindIndexBucketJob:
                         ]
                         if "_id" in json_contents:
                             # TODO: check is_dict_corrupt(json_contents)
+                            logging.info(
+                                f"Adding record to docdb for: {location}"
+                            )
                             response = collection.update_one(
                                 {"_id": json_contents["_id"]},
                                 {"$set": json_contents},
                                 upsert=True,
                             )
-                            logging.info(response.raw_result)
+                            logging.debug(response.raw_result)
                             cond_copy_then_sync_core_json_files(
                                 metadata_json=json.dumps(
                                     json_contents, default=str
@@ -648,7 +651,7 @@ class AindIndexBucketJob:
                     prefix=s3_prefix,
                     s3_client=s3_client,
                 )
-                logging.info(s3_response)
+                logging.debug(s3_response)
                 # Assume Lambda function will move it to DocDb. If it doesn't,
                 # then next index job will pick it up.
             else:

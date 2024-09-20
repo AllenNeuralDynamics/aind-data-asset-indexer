@@ -55,96 +55,97 @@ class TestAindIndexBucketJob(unittest.TestCase):
         cls.basic_job = AindIndexBucketJob(job_settings=basic_job_configs)
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.upload_json_str_to_s3")
     def test_write_root_file_with_record_info_same_hash(
         self,
         mock_upload_json_str_to_s3: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _write_root_file_with_record_info method with same hashes."""
-        self.basic_job._write_root_file_with_record_info(
-            s3_client=mock_s3_client,
-            core_schema_file_name="metadata.nd.json",
-            core_schema_info_in_root={
-                "last_modified": datetime(
-                    2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
-                ),
-                "e_tag": '"275d922d2a1e547f2e0f35b5cc54f493"',
-                "version_id": "version_id",
-            },
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_record_contents=self.example_md_record,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._write_root_file_with_record_info(
+                s3_client=mock_s3_client,
+                core_schema_file_name="metadata.nd.json",
+                core_schema_info_in_root={
+                    "last_modified": datetime(
+                        2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
+                    ),
+                    "e_tag": '"275d922d2a1e547f2e0f35b5cc54f493"',
+                    "version_id": "version_id",
+                },
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_record_contents=self.example_md_record,
+            )
+        expected_log_messages = [
+            "DEBUG:root:DocDB record and "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json are the same."
+            " Skipped writing."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_upload_json_str_to_s3.assert_not_called()
-        mock_log_info.assert_not_called()
-        mock_log_debug.assert_called_once_with(
-            "DocDB record and s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json are the "
-            "same. Skipped writing."
-        )
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.upload_json_str_to_s3")
     def test_write_root_file_with_record_info_diff_hash(
         self,
         mock_upload_json_str_to_s3: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _write_root_file_with_record_info method with diff hash."""
         mock_upload_json_str_to_s3.return_value = "Uploaded a file"
-        self.basic_job._write_root_file_with_record_info(
-            s3_client=mock_s3_client,
-            core_schema_file_name="metadata.nd.json",
-            core_schema_info_in_root={
-                "last_modified": datetime(
-                    2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
-                ),
-                "e_tag": '"e6dd2b7ab819f7a0fc21dba512a4071c"',  # Changed this
-                "version_id": "version_id",
-            },
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_record_contents=self.example_md_record,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._write_root_file_with_record_info(
+                s3_client=mock_s3_client,
+                core_schema_file_name="metadata.nd.json",
+                core_schema_info_in_root={
+                    "last_modified": datetime(
+                        2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
+                    ),
+                    "e_tag": '"e6dd2b7ab819f7a0fc21dba512a4071c"',  # Changed
+                    "version_id": "version_id",
+                },
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_record_contents=self.example_md_record,
+            )
+        expected_log_messages = [
+            "INFO:root:Writing docdb record info to "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json",
+            "DEBUG:root:Uploaded a file",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_upload_json_str_to_s3.assert_called_once_with(
             bucket="aind-ephys-data-dev-u5u0i5",
             object_key="ecephys_642478_2023-01-17_13-56-29/metadata.nd.json",
             json_str=json.dumps(self.example_md_record, default=str),
             s3_client=mock_s3_client,
         )
-        mock_log_debug.assert_called_once_with("Uploaded a file")
-        mock_log_info.assert_called_once_with(
-            "Writing docdb record info to s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json"
-        )
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.upload_json_str_to_s3")
     def test_write_root_file_with_record_info_none(
         self,
         mock_upload_json_str_to_s3: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _write_root_file_with_record_info method with no s3 info."""
         mock_upload_json_str_to_s3.return_value = "Uploaded a file"
-        self.basic_job._write_root_file_with_record_info(
-            s3_client=mock_s3_client,
-            core_schema_file_name="subject.json",
-            core_schema_info_in_root=None,
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_record_contents=self.example_md_record.get("subject"),
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._write_root_file_with_record_info(
+                s3_client=mock_s3_client,
+                core_schema_file_name="subject.json",
+                core_schema_info_in_root=None,
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_record_contents=self.example_md_record.get("subject"),
+            )
+        expected_log_messages = [
+            "INFO:root:Writing docdb record info to "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/subject.json",
+            "DEBUG:root:Uploaded a file",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_upload_json_str_to_s3.assert_called_once_with(
             bucket="aind-ephys-data-dev-u5u0i5",
             object_key="ecephys_642478_2023-01-17_13-56-29/subject.json",
@@ -153,47 +154,39 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
             s3_client=mock_s3_client,
         )
-        mock_log_debug.assert_called_once_with("Uploaded a file")
-        mock_log_info.assert_called_once_with(
-            "Writing docdb record info to s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/subject.json"
-        )
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     def test_copy_file_from_root_to_subdir(
         self,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _copy_file_from_root_to_subdir method."""
         mock_s3_client.copy_object.return_value = "Copied an object"
-        self.basic_job._copy_file_from_root_to_subdir(
-            s3_client=mock_s3_client,
-            core_schema_file_name="subject.json",
-            core_schema_info_in_root={
-                "last_modified": datetime(
-                    2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
-                ),
-                "e_tag": '"7ce612b2f26be2efe806990cb4eb4266"',
-                "version_id": "version_id",
-            },
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-        )
-        mock_log_debug.assert_called_once_with("Copied an object")
-        mock_log_info.assert_called_once_with(
-            "Copying s3://aind-ephys-data-dev-u5u0i5/"
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._copy_file_from_root_to_subdir(
+                s3_client=mock_s3_client,
+                core_schema_file_name="subject.json",
+                core_schema_info_in_root={
+                    "last_modified": datetime(
+                        2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
+                    ),
+                    "e_tag": '"7ce612b2f26be2efe806990cb4eb4266"',
+                    "version_id": "version_id",
+                },
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+            )
+        expected_log_messages = [
+            "INFO:root:Copying "
+            "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/subject.json to "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/original_metadata/"
-            "subject.20240515.json"
-        )
+            "subject.20240515.json",
+            "DEBUG:root:Copied an object",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -215,8 +208,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 1:
@@ -253,12 +244,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         mock_copy_file_to_subdir.assert_not_called()
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_not_called()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -280,8 +267,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 2:
@@ -325,12 +310,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
         )
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_not_called()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -352,8 +333,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 3:
@@ -382,12 +361,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
         )
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_not_called()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -411,8 +386,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 4:
@@ -465,12 +438,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
         )
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_not_called()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -492,8 +461,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 5:
@@ -512,27 +479,29 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "version_id": "version_id",
             }
         }
-        docdb_fields_to_update = self.basic_job._resolve_schema_information(
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
-            docdb_record=dict(),
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            docdb_fields_to_update = (
+                self.basic_job._resolve_schema_information(
+                    prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                    core_schema_info_in_root=core_schema_info_in_root,
+                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    docdb_record=dict(),
+                )
+            )
+        expected_log_messages = [
+            "INFO:root:DocDb field is null. Deleting file "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/subject.json",
+            "DEBUG:root:Deleting an object",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_not_called()
         mock_copy_file_to_subdir.assert_not_called()
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_called_once_with("Deleting an object")
-        mock_log_info.assert_called_once_with(
-            "DocDb field is null. Deleting file "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/subject.json"
-        )
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -554,8 +523,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 6:
@@ -596,13 +563,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "subject.json"
             ),
         )
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_not_called()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
-    @patch("logging.warning")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -624,9 +586,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_warn: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 6 with corrupt download:
@@ -636,6 +595,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """
 
         mock_download_json_file.return_value = None
+        mock_s3_client.delete_object.return_value = "Delete object"
         core_schema_info_in_root = {
             "subject.json": {
                 "last_modified": datetime(
@@ -645,13 +605,23 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "version_id": "version_id",
             }
         }
-        docdb_fields_to_update = self.basic_job._resolve_schema_information(
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=[],
-            docdb_record=dict(),
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            docdb_fields_to_update = (
+                self.basic_job._resolve_schema_information(
+                    prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                    core_schema_info_in_root=core_schema_info_in_root,
+                    list_of_schemas_in_copy_subdir=[],
+                    docdb_record=dict(),
+                )
+            )
+        expected_log_messages = [
+            "WARNING:root:Something went wrong downloading or parsing "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/subject.json",
+            "DEBUG:root:Delete object",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_not_called()
         mock_copy_file_to_subdir.assert_called_once_with(
@@ -662,21 +632,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "subject.json"
             ),
         )
-        mock_log_info.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Something went wrong downloading or parsing "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/subject.json"
-        )
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket="aind-ephys-data-dev-u5u0i5",
             Key="ecephys_642478_2023-01-17_13-56-29/subject.json",
         )
-        mock_log_debug.assert_called_once()
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -698,8 +659,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 7:
@@ -709,27 +668,28 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """
 
         core_schema_info_in_root = dict()
-        docdb_fields_to_update = self.basic_job._resolve_schema_information(
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
-            docdb_record=dict(),
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            docdb_fields_to_update = (
+                self.basic_job._resolve_schema_information(
+                    prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                    core_schema_info_in_root=core_schema_info_in_root,
+                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    docdb_record=dict(),
+                )
+            )
+        expected_log_messages = [
+            "INFO:root:Field is null in docdb record and no file in root "
+            "folder at s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/subject.json"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_not_called()
         mock_copy_file_to_subdir.assert_not_called()
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_called_once_with(
-            "Field is null in docdb record and no file in root folder at "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/subject.json"
-        )
 
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "download_json_file_from_s3"
@@ -751,8 +711,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_write_file_with_record_info: MagicMock,
         mock_copy_file_to_subdir: MagicMock,
         mock_download_json_file: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
     ):
         """Tests _resolve_schema_information. Case 8:
@@ -762,86 +720,86 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """
 
         core_schema_info_in_root = dict()
-        docdb_fields_to_update = self.basic_job._resolve_schema_information(
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=[],
-            docdb_record=dict(),
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            docdb_fields_to_update = (
+                self.basic_job._resolve_schema_information(
+                    prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                    core_schema_info_in_root=core_schema_info_in_root,
+                    list_of_schemas_in_copy_subdir=[],
+                    docdb_record=dict(),
+                )
+            )
+        expected_log_messages = [
+            "INFO:root:Field is null in docdb record and no file in root "
+            "folder at s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/subject.json"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         self.assertEqual(dict(), docdb_fields_to_update)
         mock_write_file_with_record_info.assert_not_called()
         mock_copy_file_to_subdir.assert_not_called()
         mock_download_json_file.assert_not_called()
-        mock_log_debug.assert_not_called()
-        mock_log_info.assert_called_once_with(
-            "Field is null in docdb record and no file in root folder at "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/subject.json"
-        )
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_docdb_record_invalid_location(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
     ):
         """Tests _process_docdb_record method when the location in the record
         is not a valid s3 url"""
 
-        self.basic_job._process_docdb_record(
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            docdb_record={
-                "_id": "abc-123",
-                "name": "prefix1_2024-01-01_01-01-01",
-                "location": "no_s3/bucket/prefix1_2024-01-01_01-01-01",
-            },
-        )
-        mock_log_warn.assert_called_once_with(
-            "Record location no_s3/bucket/prefix1_2024-01-01_01-01-01 or name "
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_docdb_record(
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                docdb_record={
+                    "_id": "abc-123",
+                    "name": "prefix1_2024-01-01_01-01-01",
+                    "location": "no_s3/bucket/prefix1_2024-01-01_01-01-01",
+                },
+            )
+        expected_log_messages = [
+            "WARNING:root:Record location "
+            "no_s3/bucket/prefix1_2024-01-01_01-01-01 or name "
             "prefix1_2024-01-01_01-01-01 not valid for bucket "
             "aind-ephys-data-dev-u5u0i5!"
-        )
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_docdb_record_invalid_prefix(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
     ):
         """Tests _process_docdb_record method when the location in the record
         has invalid prefix"""
 
-        self.basic_job._process_docdb_record(
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            docdb_record={
-                "_id": "abc-123",
-                "name": "prefix1",
-                "location": "s3://bucket/prefix1",
-            },
-        )
-        mock_log_warn.assert_called_once_with(
-            "Record location s3://bucket/prefix1 or name prefix1 not valid "
-            "for bucket aind-ephys-data-dev-u5u0i5!"
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_docdb_record(
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                docdb_record={
+                    "_id": "abc-123",
+                    "name": "prefix1",
+                    "location": "s3://bucket/prefix1",
+                },
+            )
+        expected_log_messages = [
+            "WARNING:root:Record location s3://bucket/prefix1 or name prefix1 "
+            "not valid for bucket aind-ephys-data-dev-u5u0i5!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
-    @patch("logging.info")
     def test_process_docdb_record_s3_file_missing(
         self,
-        mock_log_info: MagicMock,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -862,20 +820,21 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
 
         mock_does_s3_object_exist.return_value = False
-        self.basic_job._process_docdb_record(
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            docdb_record=self.example_md_record,
-        )
-        mock_log_warn.assert_called_once_with(
-            "File not found in S3 at "
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_docdb_record(
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                docdb_record=self.example_md_record,
+            )
+        expected_log_messages = [
+            "WARNING:root:File not found in S3 at "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json! "
-            "Removing metadata record from DocDb."
-        )
-        mock_log_info.assert_called_once_with(
-            {"n": 1, "ok": 1.0, "operationTime": Timestamp(1715812466, 1)}
-        )
+            "Removing metadata record from DocDb.",
+            "DEBUG:root:"
+            "{'n': 1, 'ok': 1.0, 'operationTime': Timestamp(1715812466, 1)}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -894,14 +853,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.debug")
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.datetime")
     def test_process_docdb_record_valid_metadata_nd_json_file(
         self,
         mock_datetime: MagicMock,
-        mock_log_info: MagicMock,
-        mock_log_debug: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -950,16 +905,20 @@ class TestAindIndexBucketJob(unittest.TestCase):
         # Assume the subject is null in docdb
         mock_docdb_record["subject"] = None
 
-        self.basic_job._process_docdb_record(
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            docdb_record=mock_docdb_record,
-        )
-        mock_log_info.assert_called_once_with(
-            "New files found in s3://aind-ephys-data-dev-u5u0i5/"
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_docdb_record(
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                docdb_record=mock_docdb_record,
+            )
+        expected_log_messages = [
+            "INFO:root:New files found in "
+            "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29 but not in original_metadata. "
-            "Updating DocDb record with new info."
-        )
+            "Updating DocDb record with new info.",
+            "DEBUG:root:Updated docdb",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         expected_docdb_record_to_write = deepcopy(mock_docdb_record)
         expected_docdb_record_to_write[
             "last_modified"
@@ -974,7 +933,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             docdb_record_contents=expected_docdb_record_to_write,
         )
-        mock_log_debug.assert_called_once_with("Updated docdb")
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -1027,10 +985,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.error")
     def test_dask_task_to_process_record_list_error(
         self,
-        mock_log_error: MagicMock,
         mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_process_docdb_record: MagicMock,
@@ -1051,7 +1007,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
             Exception("Error processing record"),
             None,
         ]
-        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "ERROR:root:Error processing docdb "
+            "5ca4a951-d374-4f4b-8279-d570a35b2286, "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_567890_2000-01-01_04-00-00: "
+            "Exception('Error processing record')"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
             [
                 call(
@@ -1071,11 +1038,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
-        mock_log_error.assert_called_once_with(
-            "Error processing docdb 5ca4a951-d374-4f4b-8279-d570a35b2286, s3:"
-            "//aind-ephys-data-dev-u5u0i5/ecephys_567890_2000-01-01_04-00-00: "
-            "Exception('Error processing record')"
-        )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
 
@@ -1093,10 +1055,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_prefix_invalid_prefix(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1104,16 +1064,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _process_prefix method when the prefix is invalid."""
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_warn.assert_called_once_with(
-            "Prefix ecephys_642478 not valid in bucket "
-            f"{self.basic_job.job_settings.s3_bucket}! Skipping."
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Prefix ecephys_642478 not valid in bucket "
+            "aind-ephys-data-dev-u5u0i5! Skipping."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_does_s3_object_exist.assert_not_called()
 
     @patch(
@@ -1131,10 +1093,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_prefix_no_record_no_file_build_no(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1150,17 +1110,19 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_build_metadata_record_from_prefix.return_value = None
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_warn.assert_called_once_with(
-            "Unable to build metadata record for: "
-            f"s3://{self.basic_job.job_settings.s3_bucket}/"
-            f"ecephys_642478_2023-01-17_13-56-29!"
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Unable to build metadata record for: "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
@@ -1179,10 +1141,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.info")
     def test_process_prefix_no_record_no_file_build_yes(
         self,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1204,21 +1164,19 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix=expected_prefix,
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call(
-                    "Uploading metadata record for: "
-                    f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}"
-                ),
-                call(self.example_put_object_response1),
-            ]
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix=expected_prefix,
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            f"INFO:root:Uploading metadata record for: "
+            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}",
+            f"DEBUG:root:{self.example_put_object_response1}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
             bucket=self.basic_job.job_settings.s3_bucket,
@@ -1248,10 +1206,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_prefix_no_record_yes_file_bad_file(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1267,17 +1223,19 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_download_json_file_from_s3.return_value = None
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_warn.assert_called_once_with(
-            f"Unable to download file from S3 for:"
-            f" s3://{self.basic_job.job_settings.s3_bucket}/"
-            f"ecephys_642478_2023-01-17_13-56-29/metadata.nd.json!"
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Unable to download file from S3 for: "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
@@ -1296,10 +1254,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.info")
     def test_process_prefix_no_record_yes_file_good_file(
         self,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1330,22 +1286,26 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_download_json_file_from_s3.return_value = self.example_md_record
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_info.assert_called_once_with(
-            {
-                "n": 1,
-                "nModified": 0,
-                "upserted": "488bbe42-832b-4c37-8572-25eb87cc50e2",
-                "ok": 1.0,
-                "operationTime": Timestamp(1715819252, 1),
-                "updatedExisting": False,
-            }
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "INFO:root:Adding record to docdb for: "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29",
+            "DEBUG:root:"
+            "{'n': 1, "
+            "'nModified': 0, "
+            "'upserted': '488bbe42-832b-4c37-8572-25eb87cc50e2', "
+            "'ok': 1.0, "
+            "'operationTime': Timestamp(1715819252, 1), "
+            "'updatedExisting': False}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
             metadata_json=json.dumps(self.example_md_record),
             bucket=self.basic_job.job_settings.s3_bucket,
@@ -1370,10 +1330,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_prefix_no_record_yes_file_good_file_no__id(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1395,19 +1353,21 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_download_json_file_from_s3.return_value = mocked_downloaded_record
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29 does not have an _id field!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_collection.assert_not_called()
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29 does not have an _id field!"
-        )
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1424,10 +1384,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.warning")
     def test_process_prefix_no_record_yes_file_good_file_bad_location(
         self,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1455,30 +1413,30 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_download_json_file_from_s3.return_value = mocked_downloaded_record
 
         location_to_id_map = dict()
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Location field s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2020-01-10_10-10-10 or name field "
+            "ecephys_642478_2023-01-17_13-56-29 does not match actual "
+            "location of record s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_collection.assert_not_called()
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Location field s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2020-01-10_10-10-10 or name field "
-            "ecephys_642478_2023-01-17_13-56-29 does not match actual location"
-            " of record s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29!"
-        )
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.info")
     def test_process_prefix_yes_record_yes_file(
         self,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -1494,17 +1452,19 @@ class TestAindIndexBucketJob(unittest.TestCase):
         location_to_id_map = {
             location_key: "488bbe42-832b-4c37-8572-25eb87cc50e2"
         }
-        self.basic_job._process_prefix(
-            s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-            location_to_id_map=location_to_id_map,
-        )
-        mock_log_info.assert_called_once_with(
-            f"Metadata record for s3://{expected_bucket}/"
-            f"ecephys_642478_2023-01-17_13-56-29/metadata.nd.json already "
-            f"exists in DocDb. Skipping."
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "INFO:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json already "
+            "exists in DocDb. Skipping."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1578,10 +1538,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.error")
     def test_dask_task_to_process_prefix_list_error(
         self,
-        mock_log_error: MagicMock,
         mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_process_prefix: MagicMock,
@@ -1612,7 +1570,16 @@ class TestAindIndexBucketJob(unittest.TestCase):
             Exception("Error processing prefix"),
             None,
         ]
-        self.basic_job._dask_task_to_process_prefix_list(prefix_list=prefixes)
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_prefix_list(
+                prefix_list=prefixes
+            )
+        expected_log_messages = [
+            "ERROR:root:Error processing s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_567890_2000-01-01_04-00-00: "
+            "Exception('Error processing prefix')"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_process_prefix.assert_has_calls(
             [
                 call(
@@ -1634,11 +1601,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     docdb_client=mock_mongo_client,
                 ),
             ]
-        )
-        mock_log_error.assert_called_once_with(
-            "Error processing s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_567890_2000-01-01_04-00-00: "
-            "Exception('Error processing prefix')"
         )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
@@ -1666,7 +1628,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_records"
     )
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
     @patch("boto3.client")
@@ -1675,7 +1636,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_boto3_client: MagicMock,
         mock_paginate: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_log_info: MagicMock,
         mock_process_records: MagicMock,
         mock_iterate_prefixes: MagicMock,
         mock_process_prefixes: MagicMock,
@@ -1704,19 +1664,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ]
             ]
         )
-
-        self.basic_job.run_job()
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job.run_job()
+        expected_log_messages = [
+            "INFO:root:Starting to scan through DocDb.",
+            "INFO:root:Finished scanning through DocDb.",
+            "INFO:root:Starting to scan through S3.",
+            "INFO:root:Finished scanning through S3.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
         mock_mongo_client.close.assert_called_once()
         mock_s3_client.close.assert_called_once()
-        mock_log_info.assert_has_calls(
-            [
-                call("Starting to scan through DocDb."),
-                call("Finished scanning through DocDb."),
-                call("Starting to scan through S3."),
-                call("Finished scanning through S3."),
-            ]
-        )
         mock_process_records.assert_called_once_with(
             records=[
                 self.example_md_record,

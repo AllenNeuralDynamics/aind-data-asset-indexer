@@ -278,7 +278,7 @@ class CodeOceanIndexBucketJob:
                 {"$set": json_contents},
                 upsert=True,
             )
-            logging.info(x.raw_result)
+            logging.debug(x.raw_result)
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"
@@ -363,10 +363,11 @@ class CodeOceanIndexBucketJob:
         db = docdb_client[self.job_settings.doc_db_db_name]
         collection = db[self.job_settings.doc_db_collection_name]
         try:
+            logging.info(f"Removing {len(record_list)} records")
             response = collection.delete_many(
                 filter={"_id": {"$in": record_list}}
             )
-            logging.info(response.raw_result)
+            logging.debug(response.raw_result)
         except Exception as e:
             logging.error(f"Error deleting records: {repr(e)}")
         docdb_client.close()

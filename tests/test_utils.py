@@ -160,6 +160,7 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(is_dict_corrupt(bad_contents2))
         self.assertTrue(is_dict_corrupt(bad_contents3))
         self.assertTrue(is_dict_corrupt(bad_contents4))
+        # noinspection PyTypeChecker
         self.assertTrue(is_dict_corrupt(bad_contents5))
 
     def test_create_object_key(self):
@@ -865,14 +866,8 @@ class TestUtils(unittest.TestCase):
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("boto3.client")
-    @patch("logging.info")
-    @patch("logging.debug")
-    @patch("logging.warning")
     def test_sync_core_json_files(
         self,
-        mock_log_warn: MagicMock,
-        mock_log_debug: MagicMock,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_upload_core_record: MagicMock,
@@ -930,12 +925,37 @@ class TestUtils(unittest.TestCase):
         }
         mock_upload_core_record.return_value = "mock_upload_response"
         mock_s3_client.delete_object.return_value = "mock_delete_response"
-        sync_core_json_files(
-            metadata_json=json.dumps(md_json_from_docdb),
-            bucket=expected_bucket,
-            prefix=pfx,
-            s3_client=mock_s3_client,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            sync_core_json_files(
+                metadata_json=json.dumps(md_json_from_docdb),
+                bucket=expected_bucket,
+                prefix=pfx,
+                s3_client=mock_s3_client,
+            )
+        expected_log_messages = [
+            f"INFO:root:Uploading new data_description to "
+            f"{s3_loc}/data_description.json",
+            "DEBUG:root:mock_upload_response",
+            f"INFO:root:acquisition not found in metadata.nd.json for "
+            f"{pfx} nor in {s3_loc}/acquisition.json! Skipping.",
+            f"INFO:root:instrument not found in metadata.nd.json for "
+            f"{pfx} nor in {s3_loc}/instrument.json! Skipping.",
+            f"INFO:root:Uploading updated procedures to "
+            f"{s3_loc}/procedures.json",
+            "DEBUG:root:mock_upload_response",
+            f"INFO:root:processing is up-to-date in "
+            f"{s3_loc}/processing.json. Skipping.",
+            f"INFO:root:quality_control not found in metadata.nd.json for "
+            f"{pfx} nor in {s3_loc}/quality_control.json! Skipping.",
+            f"INFO:root:rig not found in metadata.nd.json for {pfx} but "
+            f"{s3_loc}/rig.json exists! Deleting.",
+            "DEBUG:root:mock_delete_response",
+            f"INFO:root:session not found in metadata.nd.json for "
+            f"{pfx} nor in {s3_loc}/session.json! Skipping.",
+            f"INFO:root:subject is up-to-date in "
+            f"{s3_loc}/subject.json. Skipping.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_get_dict_of_file_info.assert_called_once()
         # assert that only new or updated core jsons were uploaded to s3
         mock_upload_core_record.assert_has_calls(
@@ -961,75 +981,13 @@ class TestUtils(unittest.TestCase):
             Bucket=expected_bucket,
             Key=f"{pfx}/rig.json",
         )
-        # assert correct logs for all actions
-        mock_log_debug.assert_has_calls(
-            [
-                call("mock_upload_response"),
-                call("mock_upload_response"),
-                call("mock_delete_response"),
-            ]
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call(
-                    "Uploading new data_description to "
-                    f"{s3_loc}/data_description.json"
-                ),
-                call(
-                    "acquisition not found in metadata.nd.json for "
-                    f"{pfx} nor in {s3_loc}/acquisition.json! "
-                    "Skipping."
-                ),
-                call(
-                    "instrument not found in metadata.nd.json for "
-                    f"{pfx} nor in {s3_loc}/instrument.json! "
-                    "Skipping."
-                ),
-                call(
-                    "Uploading updated procedures to "
-                    f"{s3_loc}/procedures.json"
-                ),
-                call(
-                    "processing is up-to-date in "
-                    f"{s3_loc}/processing.json. "
-                    "Skipping."
-                ),
-                call(
-                    "quality_control not found in metadata.nd.json for "
-                    f"{pfx} nor in {s3_loc}/quality_control.json! "
-                    "Skipping."
-                ),
-                call(
-                    "rig not found in metadata.nd.json for "
-                    f"{pfx} but {s3_loc}/rig.json exists! "
-                    "Deleting."
-                ),
-                call(
-                    "session not found in metadata.nd.json for "
-                    f"{pfx} nor in {s3_loc}/session.json! "
-                    "Skipping."
-                ),
-                call(
-                    "subject is up-to-date in "
-                    f"{s3_loc}/subject.json. "
-                    "Skipping."
-                ),
-            ]
-        )
-        mock_log_warn.assert_not_called()
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("boto3.client")
-    @patch("logging.info")
-    @patch("logging.debug")
-    @patch("logging.warning")
     def test_cond_copy_then_sync_core_json_files(
         self,
-        mock_log_warn: MagicMock,
-        mock_log_debug: MagicMock,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_metadata_copy_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
@@ -1066,12 +1024,40 @@ class TestUtils(unittest.TestCase):
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
         }
-        cond_copy_then_sync_core_json_files(
-            metadata_json=json.dumps(self.example_metadata_nd),
-            bucket=bucket,
-            prefix=pfx,
-            s3_client=mock_s3_client,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            cond_copy_then_sync_core_json_files(
+                metadata_json=json.dumps(self.example_metadata_nd),
+                bucket=bucket,
+                prefix=pfx,
+                s3_client=mock_s3_client,
+            )
+        expected_output_messages = [
+            f"WARNING:root:Copy of original metadata already exists at "
+            f"s3://{bucket}/{pfx}/original_metadata",
+            f"INFO:root:data_description not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/data_description.json! "
+            f"Skipping.",
+            f"INFO:root:acquisition not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/acquisition.json! Skipping.",
+            f"INFO:root:instrument not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/instrument.json! Skipping.",
+            f"INFO:root:procedures not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/procedures.json! Skipping.",
+            f"INFO:root:Uploading updated processing to "
+            f"s3://{bucket}/{pfx}/processing.json",
+            "DEBUG:root:Some Message",
+            f"INFO:root:quality_control not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/quality_control.json! "
+            f"Skipping.",
+            f"INFO:root:rig not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/rig.json! Skipping.",
+            f"INFO:root:session not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/session.json! Skipping.",
+            f"INFO:root:Uploading updated subject to "
+            f"s3://{bucket}/{pfx}/subject.json",
+            "DEBUG:root:Some Message",
+        ]
+        self.assertEqual(expected_output_messages, captured.output)
         # assert that an existing /original_metadata folder was detected
         mock_does_s3_metadata_copy_exist.assert_called_once_with(
             bucket=bucket,
@@ -1101,71 +1087,13 @@ class TestUtils(unittest.TestCase):
             ]
         )
         mock_s3_client.delete_object.assert_not_called()
-        mock_log_debug.assert_has_calls(
-            [call("Some Message"), call("Some Message")]
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call(
-                    f"data_description not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/data_description.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"acquisition not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/acquisition.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"instrument not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/instrument.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"procedures not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/procedures.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"Uploading updated processing to "
-                    f"s3://{bucket}/{pfx}/processing.json"
-                ),
-                call(
-                    f"quality_control not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/quality_control.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"rig not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/rig.json! Skipping."
-                ),
-                call(
-                    f"session not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/session.json! Skipping."
-                ),
-                call(
-                    f"Uploading updated subject to "
-                    f"s3://{bucket}/{pfx}/subject.json"
-                ),
-            ]
-        )
-        mock_log_warn.assert_called_once_with(
-            f"Copy of original metadata already exists at "
-            f"s3://{bucket}/{pfx}/original_metadata"
-        )
 
     @patch("aind_data_asset_indexer.utils.upload_json_str_to_s3")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.does_s3_metadata_copy_exist")
     @patch("boto3.client")
-    @patch("logging.info")
-    @patch("logging.debug")
-    @patch("logging.warning")
     def test_cond_copy_then_sync_core_json_files_mismatch(
         self,
-        mock_log_warn: MagicMock,
-        mock_log_debug: MagicMock,
-        mock_log_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_does_s3_metadata_copy_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
@@ -1213,13 +1141,66 @@ class TestUtils(unittest.TestCase):
                 "version_id": "XS0p7m6wWNTHG_F3P76D7AUXtE23BakR",
             },
         }
-
-        cond_copy_then_sync_core_json_files(
-            metadata_json=json.dumps(self.example_metadata_nd),
-            bucket=bucket,
-            prefix=pfx,
-            s3_client=mock_s3_client,
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            cond_copy_then_sync_core_json_files(
+                metadata_json=json.dumps(self.example_metadata_nd),
+                bucket=bucket,
+                prefix=pfx,
+                s3_client=mock_s3_client,
+            )
+        expected_log_messages = [
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/data_description.json does not exist. "
+            f"Skipping copy.",
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/acquisition.json does not exist. "
+            f"Skipping copy.",
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/instrument.json does not exist. "
+            f"Skipping copy.",
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/procedures.json does not exist. "
+            f"Skipping copy.",
+            f"INFO:root:Copying {pfx}/processing.json to "
+            f"{pfx}/original_metadata/processing.20231104.json in "
+            f"s3://{bucket}",
+            "DEBUG:root:Copy object",
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/quality_control.json does not exist. "
+            f"Skipping copy.",
+            f"INFO:root:Copying {pfx}/rig.json to "
+            f"{pfx}/original_metadata/rig.20220505.json in s3://{bucket}",
+            "DEBUG:root:Copy object",
+            f"WARNING:root:Source file "
+            f"s3://{bucket}/{pfx}/session.json does not exist. Skipping copy.",
+            f"INFO:root:Copying {pfx}/subject.json to "
+            f"{pfx}/original_metadata/subject.20240202.json in s3://{bucket}",
+            "DEBUG:root:Copy object",
+            f"INFO:root:data_description not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/data_description.json! "
+            f"Skipping.",
+            f"INFO:root:acquisition not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/acquisition.json! Skipping.",
+            f"INFO:root:instrument not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/instrument.json! Skipping.",
+            f"INFO:root:procedures not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/procedures.json! Skipping.",
+            f"INFO:root:Uploading updated processing to "
+            f"s3://{bucket}/{pfx}/processing.json",
+            "DEBUG:root:Uploaded json",
+            f"INFO:root:quality_control not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/quality_control.json! "
+            f"Skipping.",
+            f"INFO:root:rig not found in metadata.nd.json for {pfx} but "
+            f"s3://{bucket}/{pfx}/rig.json exists! Deleting.",
+            "DEBUG:root:Delete object",
+            f"INFO:root:session not found in metadata.nd.json for "
+            f"{pfx} nor in s3://{bucket}/{pfx}/session.json! Skipping.",
+            f"INFO:root:Uploading updated subject to "
+            f"s3://{bucket}/{pfx}/subject.json",
+            "DEBUG:root:Uploaded json",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         # assert that the original core jsons were copied, including
         # corrupt rig.json
         mock_s3_client.copy_object.assert_has_calls(
@@ -1272,108 +1253,6 @@ class TestUtils(unittest.TestCase):
         # assert the corrupt core json was deleted
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=bucket, Key=f"{pfx}/rig.json"
-        )
-        mock_log_debug.assert_has_calls(
-            [
-                call("Copy object"),
-                call("Copy object"),
-                call("Copy object"),
-                call("Uploaded json"),
-                call("Delete object"),
-                call("Uploaded json"),
-            ]
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call(
-                    f"Copying {pfx}/processing.json to "
-                    f"{pfx}/original_metadata/processing.20231104.json in "
-                    f"s3://{bucket}"
-                ),
-                call(
-                    f"Copying {pfx}/rig.json to "
-                    f"{pfx}/original_metadata/rig.20220505.json in "
-                    f"s3://{bucket}"
-                ),
-                call(
-                    f"Copying {pfx}/subject.json to "
-                    f"{pfx}/original_metadata/subject.20240202.json in "
-                    f"s3://{bucket}"
-                ),
-                call(
-                    f"data_description not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/data_description.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"acquisition not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/acquisition.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"instrument not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/instrument.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"procedures not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/procedures.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"Uploading updated processing to "
-                    f"s3://{bucket}/{pfx}/processing.json"
-                ),
-                call(
-                    f"quality_control not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/quality_control.json! "
-                    f"Skipping."
-                ),
-                call(
-                    f"rig not found in metadata.nd.json for "
-                    f"{pfx} but s3://{bucket}/{pfx}/rig.json exists! Deleting."
-                ),
-                call(
-                    f"session not found in metadata.nd.json for "
-                    f"{pfx} nor in s3://{bucket}/{pfx}/session.json! Skipping."
-                ),
-                call(
-                    f"Uploading updated subject to "
-                    f"s3://{bucket}/{pfx}/subject.json"
-                ),
-            ]
-        )
-        mock_log_warn.assert_has_calls(
-            [
-                call(
-                    f"Source file "
-                    f"s3://{bucket}/{pfx}/data_description.json does not "
-                    f"exist. Skipping copy."
-                ),
-                call(
-                    f"Source file "
-                    f"s3://{bucket}/{pfx}/acquisition.json does not exist. "
-                    f"Skipping copy."
-                ),
-                call(
-                    f"Source file "
-                    f"s3://{bucket}/{pfx}/instrument.json does not exist. "
-                    f"Skipping copy."
-                ),
-                call(
-                    f"Source file "
-                    f"s3://{bucket}/{pfx}/procedures.json does not exist. "
-                    f"Skipping copy."
-                ),
-                call(
-                    f"Source file s3://{bucket}/{pfx}/quality_control.json "
-                    f"does not exist. Skipping copy."
-                ),
-                call(
-                    f"Source file s3://{bucket}/{pfx}/session.json does not "
-                    f"exist. Skipping copy."
-                ),
-            ]
         )
 
     @patch("pymongo.MongoClient")
@@ -1589,9 +1468,8 @@ class TestUtils(unittest.TestCase):
     @patch(
         "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
     )
-    @patch("logging.warning")
     def test_get_all_processed_codeocean_asset_records_warning(
-        self, mock_log_warn: MagicMock, mock_search_all_data_assets: MagicMock
+        self, mock_search_all_data_assets: MagicMock
     ):
         """Tests get_all_processed_codeocean_asset_records method when 10,000
         records are returned"""
@@ -1612,14 +1490,16 @@ class TestUtils(unittest.TestCase):
             mock_response2,
         ]
         co_client = CodeOceanClient(domain="some_domain", token="some_token")
-        get_all_processed_codeocean_asset_records(
-            co_client=co_client,
-            co_data_asset_bucket="some_co_bucket",
-        )
-        mock_log_warn.assert_called_once_with(
-            "Number of records exceeds 10,000! "
+        with self.assertLogs(level="DEBUG") as captured:
+            get_all_processed_codeocean_asset_records(
+                co_client=co_client,
+                co_data_asset_bucket="some_co_bucket",
+            )
+        expected_log_messages = [
+            "WARNING:root:Number of records exceeds 10,000! "
             "This can lead to possible data loss."
-        )
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
 
 if __name__ == "__main__":

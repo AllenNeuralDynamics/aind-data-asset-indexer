@@ -131,18 +131,19 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.assertIsNone(response)
 
     @patch("requests.get")
-    @patch("logging.error")
     def test_get_external_data_asset_records_read_timeout(
-        self, mock_error: MagicMock, mock_get: MagicMock
+        self, mock_get: MagicMock
     ):
         """Tests the _get_external_data_asset_records method when the read
         times out."""
         mock_get.side_effect = ReadTimeout()
-        response = self.basic_job._get_external_data_asset_records()
+        with self.assertLogs(level="DEBUG") as captured:
+            response = self.basic_job._get_external_data_asset_records()
+        expected_log_messages = [
+            "ERROR:root:Read timed out at http://some_url:8080/created_after/0"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         self.assertIsNone(response)
-        mock_error.assert_called_once_with(
-            "Read timed out at http://some_url:8080/created_after/0"
-        )
 
     def test_map_external_list_to_dict(self):
         """Tests _map_external_list_to_dict method"""
@@ -185,16 +186,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("requests.get")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
-    @patch("logging.info")
-    @patch("logging.debug")
-    @patch("logging.error")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.datetime")
     def test_update_external_links_in_docdb(
         self,
         mock_datetime: MagicMock,
-        mock_error: MagicMock,
-        mock_debug: MagicMock,
-        mock_info: MagicMock,
         mock_paginate: MagicMock,
         mock_get: MagicMock,
         mock_docdb_client: MagicMock,
@@ -239,9 +234,17 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             ]
         ]
 
-        self.basic_job._update_external_links_in_docdb(
-            docdb_client=mock_docdb_client
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._update_external_links_in_docdb(
+                docdb_client=mock_docdb_client
+            )
+        expected_log_messages = [
+            "INFO:root:No code ocean data asset ids found for "
+            "s3://bucket2/prefix3. Removing external links from record.",
+            "INFO:root:Updating 2 records",
+            "DEBUG:root:{'message': 'success'}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         expected_bulk_write_calls = [
             call(
                 requests=[
@@ -277,31 +280,13 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             )
         ]
 
-        mock_error.assert_not_called()
-        mock_info.assert_has_calls(
-            [
-                call(
-                    "No code ocean data asset ids found for "
-                    "s3://bucket2/prefix3. "
-                    "Removing external links from record."
-                ),
-                call("Updating 2 records"),
-            ]
-        )
-        mock_debug.assert_called_once_with({"message": "success"})
         mock_collection.bulk_write.assert_has_calls(expected_bulk_write_calls)
 
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("requests.get")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
-    @patch("logging.info")
-    @patch("logging.debug")
-    @patch("logging.error")
     def test_update_external_links_in_docdb_error(
         self,
-        mock_error: MagicMock,
-        mock_debug: MagicMock,
-        mock_info: MagicMock,
         mock_paginate: MagicMock,
         mock_get: MagicMock,
         mock_docdb_client: MagicMock,
@@ -315,19 +300,16 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
 
         mock_db = MagicMock()
         mock_docdb_client.__getitem__.return_value = mock_db
-
-        self.basic_job._update_external_links_in_docdb(
-            docdb_client=mock_docdb_client
-        )
-
-        mock_error.assert_called_once_with(
-            "There was an error retrieving external links!"
-        )
-        mock_info.assert_not_called()
-        mock_debug.assert_not_called()
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._update_external_links_in_docdb(
+                docdb_client=mock_docdb_client
+            )
+        expected_log_messages = [
+            "ERROR:root:There was an error retrieving external links!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_paginate.assert_not_called()
 
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
@@ -338,7 +320,6 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_log_info: MagicMock,
     ):
         """Tests _process_codeocean_record method"""
         # Assume user didn't attach any metadata files
@@ -353,20 +334,18 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "message": "success"
         }
 
-        self.basic_job._process_codeocean_record(
-            codeocean_record=self.example_codeocean_records[1],
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call(
-                    "Uploading metadata record for: "
-                    "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
-                ),
-                call({"message": "success"}),
-            ]
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_codeocean_record(
+                codeocean_record=self.example_codeocean_records[1],
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+            )
+        expected_messages = [
+            "INFO:root:Uploading metadata record for: "
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
+            "DEBUG:root:{'message': 'success'}",
+        ]
+        self.assertEqual(expected_messages, captured.output)
         mock_download_json_file.assert_not_called()
         self.assertEqual(
             "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59",
@@ -380,7 +359,6 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         )
 
     @patch("aind_data_schema.core.metadata.Metadata.model_construct")
-    @patch("logging.warning")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
@@ -391,7 +369,6 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_log_warn: MagicMock,
         mock_model_construct: MagicMock,
     ):
         """Tests _process_codeocean_record when there is an issue building the
@@ -404,16 +381,18 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         # Suppose there is an error using model_construct
         mock_model_construct.side_effect = Exception("Something went wrong")
 
-        self.basic_job._process_codeocean_record(
-            codeocean_record=self.example_codeocean_records[1],
-            docdb_client=mock_docdb_client,
-            s3_client=mock_s3_client,
-        )
-        mock_download_json_file.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Unable to build metadata record for: "
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_codeocean_record(
+                codeocean_record=self.example_codeocean_records[1],
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+            )
+        expected_log_messages = [
+            "WARNING:root:Unable to build metadata record for: "
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666!"
-        )
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        mock_download_json_file.assert_not_called()
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
@@ -457,10 +436,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("boto3.client")
-    @patch("logging.error")
     def test_dask_task_to_process_record_list_error(
         self,
-        mock_log_error: MagicMock,
         mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_process_codeocean_record: MagicMock,
@@ -476,7 +453,16 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             Exception("Error processing record"),
             None,
         ]
-        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "ERROR:root:Error processing "
+            "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11: "
+            "Exception('Error processing record')"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_process_codeocean_record.assert_has_calls(
             [
                 call(
@@ -491,11 +477,6 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
-        mock_log_error.assert_called_once_with(
-            "Error processing s3://some_co_bucket/"
-            "11ee1e1e-11e1-1111-1111-e11eeeee1e11: "
-            "Exception('Error processing record')"
-        )
         mock_s3_client.close.assert_called_once_with()
         mock_mongo_client.close.assert_called_once_with()
 
@@ -508,10 +489,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.basic_job._process_codeocean_records(example_records)
         mock_dask_bag_map_parts.assert_called()
 
-    @patch("logging.info")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     def test_dask_task_to_delete_record_list(
-        self, mock_docdb_client: MagicMock, mock_log_info: MagicMock
+        self, mock_docdb_client: MagicMock
     ):
         """Tests _dask_task_to_delete_record_list"""
         mock_db = MagicMock()
@@ -522,15 +502,19 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "message": "success"
         }
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
-        self.basic_job._dask_task_to_delete_record_list(
-            record_list=records_to_delete
-        )
-        mock_log_info.assert_called_once_with({"message": "success"})
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_delete_record_list(
+                record_list=records_to_delete
+            )
+        expected_log_messages = [
+            "INFO:root:Removing 2 records",
+            "DEBUG:root:{'message': 'success'}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
-    @patch("logging.error")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     def test_dask_task_to_delete_record_list_error(
-        self, mock_docdb_client: MagicMock, mock_log_error: MagicMock
+        self, mock_docdb_client: MagicMock
     ):
         """Tests _dask_task_to_delete_record_list"""
         mock_db = MagicMock()
@@ -541,12 +525,16 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "Error deleting records"
         )
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
-        self.basic_job._dask_task_to_delete_record_list(
-            record_list=records_to_delete
-        )
-        mock_log_error.assert_called_once_with(
-            "Error deleting records: Exception('Error deleting records')"
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_delete_record_list(
+                record_list=records_to_delete
+            )
+        expected_log_messages = [
+            "INFO:root:Removing 2 records",
+            "ERROR:root:Error deleting records: "
+            "Exception('Error deleting records')",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
     @patch("dask.bag.map_partitions")
     def test_delete_records_from_docdb(
@@ -577,10 +565,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.codeocean_bucket_indexer."
         "get_all_processed_codeocean_asset_records"
     )
-    @patch("logging.info")
     def test_run_job(
         self,
-        mock_log_info: MagicMock,
         mock_get_all_co_records: MagicMock,
         mock_docdb_client: MagicMock,
         mock_paginate_docdb: MagicMock,
@@ -596,7 +582,21 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             [(r["location"], r) for r in self.example_codeocean_records]
         )
         mock_paginate_docdb.return_value = [self.example_docdb_records]
-        self.basic_job.run_job()
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job.run_job()
+        expected_log_messages = [
+            "INFO:root:Starting to scan through CodeOcean.",
+            "INFO:root:Finished scanning through CodeOcean.",
+            "INFO:root:Starting to scan through DocDb.",
+            "INFO:root:Adding links to records.",
+            "INFO:root:Finished adding links to records",
+            "INFO:root:Finished scanning through DocDB.",
+            "INFO:root:Starting to add records to DocDB.",
+            "INFO:root:Finished adding records to DocDB.",
+            "INFO:root:Starting to delete records from DocDB.",
+            "INFO:root:Finished deleting records from DocDB.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
 
         mock_update_external_links_in_docdb.assert_called_once_with(
             docdb_client=mock_mongo_client
@@ -606,20 +606,6 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         )
         mock_delete_records_from_docdb.assert_called_once_with(
             record_list=["efg-456"]
-        )
-        mock_log_info.assert_has_calls(
-            [
-                call("Starting to scan through CodeOcean."),
-                call("Finished scanning through CodeOcean."),
-                call("Starting to scan through DocDb."),
-                call("Adding links to records."),
-                call("Finished adding links to records"),
-                call("Finished scanning through DocDB."),
-                call("Starting to add records to DocDB."),
-                call("Finished adding records to DocDB."),
-                call("Starting to delete records from DocDB."),
-                call("Finished deleting records from DocDB."),
-            ]
         )
         mock_mongo_client.close.assert_called_once()
 

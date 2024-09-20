@@ -51,12 +51,8 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         "build_metadata_record_from_prefix"
     )
     @patch("boto3.client")
-    @patch("logging.warning")
-    @patch("logging.info")
     def test_process_prefix_not_none(
         self,
-        mock_log_info: MagicMock,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
@@ -67,10 +63,18 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         expected_bucket = "aind-ephys-data-dev-u5u0i5"
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         mock_build_record.return_value = json.dumps(self.example_md_record)
-        self.basic_job._process_prefix(
-            s3_client=mock_s3_client,
-            prefix=expected_prefix,
-        )
+        mock_upload_record.return_value = "Uploaded record"
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_client=mock_s3_client,
+                prefix=expected_prefix,
+            )
+        expected_log_messages = [
+            f"INFO:root:Uploading metadata record for: "
+            f"s3://{expected_bucket}/{expected_prefix}",
+            "DEBUG:root:Uploaded record",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_build_record.assert_called_once_with(
             prefix=expected_prefix,
             s3_client=mock_s3_client,
@@ -89,8 +93,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
             s3_client=mock_s3_client,
             metadata_json=json.dumps(self.example_md_record),
         )
-        mock_log_info.assert_called()
-        mock_log_warn.assert_not_called()
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
@@ -105,12 +107,8 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         "build_metadata_record_from_prefix"
     )
     @patch("boto3.client")
-    @patch("logging.warning")
-    @patch("logging.info")
     def test_process_prefix_none(
         self,
-        mock_log_info: MagicMock,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
@@ -120,10 +118,17 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         build_metadata_record_from_prefix."""
 
         mock_build_record.return_value = None
-        self.basic_job._process_prefix(
-            s3_client=mock_s3_client,
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_client=mock_s3_client,
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+            )
+        expected_log_messages = [
+            "WARNING:root:Unable to build metadata record for: "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_build_record.assert_called_once_with(
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
@@ -131,12 +136,6 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         )
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_record.assert_not_called()
-        mock_log_info.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Unable to build metadata record for: "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29!"
-        )
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
@@ -151,31 +150,27 @@ class TestAindPopulateMetadataJsonJob(unittest.TestCase):
         "build_metadata_record_from_prefix"
     )
     @patch("boto3.client")
-    @patch("logging.warning")
-    @patch("logging.info")
     def test_process_prefix_invalid_prefix(
         self,
-        mock_log_info: MagicMock,
-        mock_log_warn: MagicMock,
         mock_s3_client: MagicMock,
         mock_build_record: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_record: MagicMock,
     ):
         """Tests _process_prefix method when the prefix is invalid."""
-
-        self.basic_job._process_prefix(
-            s3_client=mock_s3_client,
-            prefix="ecephys_642478",
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_client=mock_s3_client,
+                prefix="ecephys_642478",
+            )
+        expected_log_messages = [
+            "WARNING:root:Prefix ecephys_642478 not valid in bucket "
+            "aind-ephys-data-dev-u5u0i5! Skipping."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_build_record.assert_not_called()
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_record.assert_not_called()
-        mock_log_info.assert_not_called()
-        mock_log_warn.assert_called_once_with(
-            "Prefix ecephys_642478 not valid in bucket "
-            "aind-ephys-data-dev-u5u0i5! Skipping."
-        )
 
     @patch(
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
