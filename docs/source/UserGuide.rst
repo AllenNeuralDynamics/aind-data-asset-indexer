@@ -14,7 +14,7 @@ kept in sync:
 1. **S3 buckets** store raw metadata files. Each data asset folder
    (prefix) contains:
 
-   -  ``core_schema}.json``: core schema files, e.g.,
+   -  ``{core_schema}.json``: core schema files, e.g.,
       ``acquisition.json``, ``subject.json``.
    -  ``metadata.nd.json``: top-level metadata file, containing
       all core schema fields.
