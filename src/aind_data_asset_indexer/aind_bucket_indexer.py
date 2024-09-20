@@ -272,12 +272,14 @@ class AindIndexBucketJob:
                 object_key = create_object_key(
                     prefix=prefix, filename=core_schema_file_name
                 )
-                common_kwargs["core_schema_info_in_root"] = (
-                    get_dict_of_file_info(
-                        s3_client=s3_client,
-                        bucket=self.job_settings.s3_bucket,
-                        keys=[object_key],
-                    ).get(object_key)
+                common_kwargs[
+                    "core_schema_info_in_root"
+                ] = get_dict_of_file_info(
+                    s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    keys=[object_key],
+                ).get(
+                    object_key
                 )
                 self._copy_file_from_root_to_subdir(**common_kwargs)
             # If field is null, a file exists in the root folder, and
@@ -391,7 +393,7 @@ class AindIndexBucketJob:
                 response = collection.delete_one(
                     filter={"_id": docdb_record["_id"]}
                 )
-                logging.info(response.raw_result)
+                logging.debug(response.raw_result)
             else:  # There is a metadata.nd.json file in S3.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -422,9 +424,9 @@ class AindIndexBucketJob:
                     )
                     db = docdb_client[self.job_settings.doc_db_db_name]
                     collection = db[self.job_settings.doc_db_collection_name]
-                    fields_to_update["last_modified"] = (
-                        datetime.utcnow().isoformat()
-                    )
+                    fields_to_update[
+                        "last_modified"
+                    ] = datetime.utcnow().isoformat()
                     response = collection.update_one(
                         {"_id": docdb_record["_id"]},
                         {"$set": fields_to_update},
@@ -580,12 +582,15 @@ class AindIndexBucketJob:
                         ]
                         if "_id" in json_contents:
                             # TODO: check is_dict_corrupt(json_contents)
+                            logging.info(
+                                f"Adding record to docdb for: {location}"
+                            )
                             response = collection.update_one(
                                 {"_id": json_contents["_id"]},
                                 {"$set": json_contents},
                                 upsert=True,
                             )
-                            logging.info(response.raw_result)
+                            logging.debug(response.raw_result)
                             cond_copy_then_sync_core_json_files(
                                 metadata_json=json.dumps(
                                     json_contents, default=str
@@ -593,7 +598,6 @@ class AindIndexBucketJob:
                                 bucket=bucket,
                                 prefix=s3_prefix,
                                 s3_client=s3_client,
-                                log_flag=True,
                                 copy_original_md_subdir=(
                                     self.job_settings.copy_original_md_subdir
                                 ),
@@ -635,7 +639,6 @@ class AindIndexBucketJob:
                     bucket=bucket,
                     prefix=s3_prefix,
                     s3_client=s3_client,
-                    log_flag=True,
                     copy_original_md_subdir=(
                         self.job_settings.copy_original_md_subdir
                     ),
@@ -648,7 +651,7 @@ class AindIndexBucketJob:
                     prefix=s3_prefix,
                     s3_client=s3_client,
                 )
-                logging.info(s3_response)
+                logging.debug(s3_response)
                 # Assume Lambda function will move it to DocDb. If it doesn't,
                 # then next index job will pick it up.
             else:

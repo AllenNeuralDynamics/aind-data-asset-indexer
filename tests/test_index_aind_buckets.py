@@ -14,10 +14,7 @@ class TestIndexAindBucketsJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "run_job"
     )
-    @patch("logging.info")
-    def test_run_job(
-        self, mock_log_info: MagicMock, mock_sub_run_job: MagicMock
-    ):
+    def test_run_job(self, mock_sub_run_job: MagicMock):
         """Tests run_job method."""
 
         job_settings = AindIndexBucketsJobSettings(
@@ -30,15 +27,16 @@ class TestIndexAindBucketsJob(unittest.TestCase):
             doc_db_collection_name="some_docdb_collection_name",
         )
         job = IndexAindBucketsJob(job_settings=job_settings)
-        job.run_job()
-        mock_log_info.assert_has_calls(
-            [
-                call("Processing bucket1"),
-                call("Finished processing bucket1"),
-                call("Processing bucket2"),
-                call("Finished processing bucket2"),
-            ]
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            job.run_job()
+        expected_log_messages = [
+            "INFO:root:Processing bucket1",
+            "INFO:root:Finished processing bucket1",
+            "INFO:root:Processing bucket2",
+            "INFO:root:Finished processing bucket2",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
         mock_sub_run_job.assert_has_calls([call(), call()])
 
 

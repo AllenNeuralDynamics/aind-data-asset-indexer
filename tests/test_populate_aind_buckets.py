@@ -16,25 +16,22 @@ class TestPopulateAindBucketsJob(unittest.TestCase):
         "aind_data_asset_indexer.populate_s3_with_metadata_files."
         "AindPopulateMetadataJsonJob.run_job"
     )
-    @patch("logging.info")
-    def test_run_job(
-        self, mock_log_info: MagicMock, mock_sub_run_job: MagicMock
-    ):
+    def test_run_job(self, mock_sub_run_job: MagicMock):
         """Tests run_job method."""
 
         job_settings = PopulateAindBucketsJobSettings(
             s3_buckets=["bucket1", "bucket2"]
         )
         job = PopulateAindBucketsJob(job_settings=job_settings)
-        job.run_job()
-        mock_log_info.assert_has_calls(
-            [
-                call("Processing bucket1"),
-                call("Finished processing bucket1"),
-                call("Processing bucket2"),
-                call("Finished processing bucket2"),
-            ]
-        )
+        with self.assertLogs(level="DEBUG") as captured:
+            job.run_job()
+        expected_log_messages = [
+            "INFO:root:Processing bucket1",
+            "INFO:root:Finished processing bucket1",
+            "INFO:root:Processing bucket2",
+            "INFO:root:Finished processing bucket2",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_sub_run_job.assert_has_calls([call(), call()])
 
 
