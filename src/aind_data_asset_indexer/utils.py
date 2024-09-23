@@ -31,42 +31,11 @@ core_schema_file_names = [
 ]
 
 
-def _log_message(
-    message: str, log_level: int = logging.INFO, log_flag: bool = True
-) -> None:
-    """
-    Log a message using the given log level. If log_flag is False,
-    then it will not log anything.
-
-    Parameters
-    ----------
-    message : str
-    log_level : int
-        Default is logging.INFO
-    log_flag : bool
-        Default is True
-
-    Returns
-    -------
-    None
-    """
-    if not log_flag:
-        return
-    if log_level not in [
-        logging.DEBUG,
-        logging.INFO,
-        logging.WARNING,
-        logging.ERROR,
-        logging.CRITICAL,
-    ]:
-        raise ValueError("Invalid log level")
-    logging.log(log_level, message)
-
-
 def create_object_key(prefix: str, filename: str) -> str:
     """
     For a given s3 prefix and filename, create the expected
     object key for the file.
+
     Parameters
     ----------
     prefix : str
@@ -89,6 +58,7 @@ def create_metadata_object_key(prefix: str) -> str:
     """
     For a given s3 prefix, create the expected object key for the
     metadata.nd.json file.
+
     Parameters
     ----------
     prefix : str
@@ -126,6 +96,7 @@ def is_record_location_valid(
 ) -> bool:
     """
     Check if a given record has a valid location url.
+
     Parameters
     ----------
     record : dict
@@ -179,6 +150,7 @@ def get_s3_bucket_and_prefix(s3_location: str) -> Dict[str, str]:
     For a location url like s3://bucket/prefix, it will return the bucket
     and prefix. It doesn't check the scheme is s3. It will strip the leading
     and trailing forward slashes from the prefix.
+
     Parameters
     ----------
     s3_location : str
@@ -199,6 +171,7 @@ def get_s3_location(bucket: str, prefix: str) -> str:
     """
     For a given bucket and prefix, return a location url in format
     s3://{bucket}/{prefix}
+
     Parameters
     ----------
     bucket : str
@@ -218,6 +191,7 @@ def compute_md5_hash(json_contents: str) -> str:
     """
     Computes the md5 hash of the object as it would be stored in S3. Useful
     for comparing against the S3 object e-tag to check if they are the same.
+
     Parameters
     ----------
     json_contents : str
@@ -240,6 +214,7 @@ def upload_json_str_to_s3(
 ) -> PutObjectOutputTypeDef:
     """
     Upload JSON string contents to a location in S3.
+
     Parameters
     ----------
     bucket : str
@@ -274,6 +249,7 @@ def upload_metadata_json_str_to_s3(
     """
     Upload JSON string representation of the contents of the metadata.nd.json
     file to a location in S3.
+
     Parameters
     ----------
     bucket : str
@@ -301,6 +277,7 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
     """
     Check that a file exists inside a bucket. Uses the head_object operation,
     which is cheaper compared to the list_objects operation.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -407,6 +384,7 @@ def get_dict_of_file_info(
     """
     For a list of object keys, returns a list of metadata info for each object
     that exists in the bucket.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -445,6 +423,7 @@ def get_dict_of_core_schema_file_info(
 ) -> Dict[str, Optional[dict]]:
     """
     For a bucket and prefix get list of core schema file info.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -455,10 +434,10 @@ def get_dict_of_core_schema_file_info(
     -------
     Dict[str, Optional[dict]]
       {"subject.json":
-         {"last_modified": datetime, "e_tag": str, "version_id": str},
-       "procedures.json":
-         {"last_modified": datetime, "e_tag": str, "version_id": str},
-       ...
+      {"last_modified": datetime, "e_tag": str, "version_id": str},
+      "procedures.json":
+      {"last_modified": datetime, "e_tag": str, "version_id": str},
+      ...
       }
     """
     key_map = dict(
@@ -482,6 +461,7 @@ def iterate_through_top_level(
     Returns an iterator of s3 responses. If prefix is None, then will return
     an iterator of top-level prefixes of a bucket. Otherwise, will return an
     iterator of the top level items under a prefix.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -514,6 +494,7 @@ def iterate_through_top_level(
 def is_dict_corrupt(input_dict: dict) -> bool:
     """
     Checks that all the keys, included nested keys, don't contain '$' or '.'
+
     Parameters
     ----------
     input_dict : dict
@@ -542,6 +523,7 @@ def download_json_file_from_s3(
     """
     Downloads json file contents from S3. Will return None if object is not
     a valid json file.
+
     Parameters
     ----------
     s3_client : S3Client
@@ -575,6 +557,7 @@ def build_metadata_record_from_prefix(
     constructed from any non-corrupt core schema json files found under the
     prefix. If there are issues with Metadata construction, then it will
     return None.
+
     Parameters
     ----------
     bucket : str
@@ -641,7 +624,6 @@ def cond_copy_then_sync_core_json_files(
     prefix: str,
     s3_client: S3Client,
     copy_original_md_subdir: str = "original_metadata",
-    log_flag: bool = False,
 ) -> None:
     """
     For a given bucket and prefix
@@ -660,8 +642,6 @@ def cond_copy_then_sync_core_json_files(
         The prefix for the S3 object keys.
     s3_client : S3Client
         The S3 client object.
-    log_flag: bool
-        Flag indicating whether to log operations. Default is False.
     copy_original_md_subdir : str
         Subdirectory to copy original core schema json files to.
         Default is 'original_metadata'.
@@ -677,12 +657,9 @@ def cond_copy_then_sync_core_json_files(
         prefix=prefix,
         copy_subdir=copy_original_md_subdir,
     ):
-        _log_message(
-            message=(
-                "Copy of original metadata already exists at "
-                f"s3://{bucket}/{prefix}/{copy_original_md_subdir}"
-            ),
-            log_flag=log_flag,
+        logging.warning(
+            "Copy of original metadata already exists at "
+            f"s3://{bucket}/{prefix}/{copy_original_md_subdir}"
         )
     else:
         copy_core_json_files(
@@ -690,14 +667,12 @@ def cond_copy_then_sync_core_json_files(
             prefix=prefix,
             s3_client=s3_client,
             copy_original_md_subdir=copy_original_md_subdir,
-            log_flag=log_flag,
         )
     sync_core_json_files(
         metadata_json=metadata_json,
         bucket=bucket,
         prefix=prefix,
         s3_client=s3_client,
-        log_flag=log_flag,
     )
 
 
@@ -706,7 +681,6 @@ def copy_core_json_files(
     prefix: str,
     s3_client: S3Client,
     copy_original_md_subdir: str,
-    log_flag: bool = False,
 ) -> None:
     """
     For a given bucket and prefix, copy the core schema files to a
@@ -720,8 +694,6 @@ def copy_core_json_files(
         The prefix for the S3 object keys.
     s3_client : S3Client
         The S3 client object.
-    log_flag: bool
-        Flag indicating whether to log operations. Default is False.
     copy_original_md_subdir : str
         Subdirectory to copy original core schema json files to.
         For example, 'original_metadata'.
@@ -751,23 +723,17 @@ def copy_core_json_files(
                 filename=file_name.replace(".json", f".{date_stamp}.json"),
             )
             # Copy original core json files to /original_metadata
-            _log_message(
-                message=f"Copying {source} to {target} in s3://{bucket}",
-                log_flag=log_flag,
-            )
+            logging.info(f"Copying {source} to {target} in s3://{bucket}")
             response = s3_client.copy_object(
                 Bucket=bucket,
                 CopySource={"Bucket": bucket, "Key": source},
                 Key=target,
             )
-            _log_message(message=response, log_flag=log_flag)
+            logging.debug(response)
         else:
-            _log_message(
-                message=(
-                    f"Source file {source_location} does not exist. "
-                    f"Skipping copy."
-                ),
-                log_flag=log_flag,
+            logging.info(
+                f"Source file {source_location} does not exist. "
+                f"Skipping copy."
             )
 
 
@@ -776,7 +742,6 @@ def sync_core_json_files(
     bucket: str,
     prefix: str,
     s3_client: S3Client,
-    log_flag: bool = False,
 ) -> None:
     """
     Sync the core schema files with the core fields from metadata.nd.json.
@@ -795,8 +760,6 @@ def sync_core_json_files(
         The prefix for the S3 object keys.
     s3_client : S3Client
         The S3 client object.
-    log_flag: bool
-        Flag indicating whether to log operations. Default is False.
 
     Returns
     -------
@@ -823,28 +786,22 @@ def sync_core_json_files(
             # Core schema jsons are created if they don't already exist.
             # Otherwise, they are only updated if their contents are outdated.
             if core_files_infos[object_key] is None:
-                _log_message(
-                    message=(f"Uploading new {field_name} to {location}"),
-                    log_flag=log_flag,
-                )
+                logging.info(f"Uploading new {field_name} to {location}")
                 response = upload_json_str_to_s3(
                     bucket=bucket,
                     object_key=object_key,
                     json_str=field_contents_str,
                     s3_client=s3_client,
                 )
-                _log_message(message=response, log_flag=log_flag)
+                logging.debug(response)
             else:
                 s3_object_hash = core_files_infos[object_key]["e_tag"].strip(
                     '"'
                 )
                 core_field_md5_hash = compute_md5_hash(field_contents_str)
                 if core_field_md5_hash != s3_object_hash:
-                    _log_message(
-                        message=(
-                            f"Uploading updated {field_name} to {location}"
-                        ),
-                        log_flag=log_flag,
+                    logging.info(
+                        f"Uploading updated {field_name} to {location}"
                     )
                     response = upload_json_str_to_s3(
                         bucket=bucket,
@@ -852,37 +809,28 @@ def sync_core_json_files(
                         json_str=field_contents_str,
                         s3_client=s3_client,
                     )
-                    _log_message(message=response, log_flag=log_flag)
+                    logging.debug(response)
                 else:
-                    _log_message(
-                        message=(
-                            f"{field_name} is up-to-date in {location}. "
-                            f"Skipping."
-                        ),
-                        log_flag=log_flag,
+                    logging.info(
+                        f"{field_name} is up-to-date in {location}. "
+                        f"Skipping."
                     )
         else:
             # If a core field is None but the core json exists,
             # delete the core json.
             if core_files_infos[object_key] is not None:
-                _log_message(
-                    message=(
-                        f"{field_name} not found in metadata.nd.json for "
-                        f"{prefix} but {location} exists! Deleting."
-                    ),
-                    log_flag=log_flag,
+                logging.info(
+                    f"{field_name} not found in metadata.nd.json for "
+                    f"{prefix} but {location} exists! Deleting."
                 )
                 response = s3_client.delete_object(
                     Bucket=bucket, Key=object_key
                 )
-                _log_message(message=response, log_flag=log_flag)
+                logging.debug(response)
             else:
-                _log_message(
-                    message=(
-                        f"{field_name} not found in metadata.nd.json for "
-                        f"{prefix} nor in {location}! Skipping."
-                    ),
-                    log_flag=log_flag,
+                logging.info(
+                    f"{field_name} not found in metadata.nd.json for "
+                    f"{prefix} nor in {location}! Skipping."
                 )
 
 
@@ -895,6 +843,7 @@ def does_metadata_record_exist_in_docdb(
 ) -> bool:
     """
     For a given bucket and prefix, check if there is already a record in DocDb
+
     Parameters
     ----------
     docdb_client : MongoClient
@@ -930,6 +879,7 @@ def get_record_from_docdb(
 ) -> Optional[dict]:
     """
     Download a record from docdb using the record _id.
+
     Parameters
     ----------
     docdb_client : MongoClient
@@ -963,6 +913,7 @@ def paginate_docdb(
 ) -> Iterator[List[dict]]:
     """
     Paginate through records in DocDb.
+
     Parameters
     ----------
     db_name : str
@@ -1006,6 +957,7 @@ def build_docdb_location_to_id_map(
     like {'s3://bucket/prefix': 'abc-1234'} where the value is the id of the
     record in DocDb. If the record does not exist, then there will be no key
     in the dictionary.
+
     Parameters
     ----------
     db_name : str
@@ -1036,6 +988,7 @@ def get_all_processed_codeocean_asset_records(
     Gets all the data asset records we're interested in indexing. The location
     field in the output is the expected location of the data asset. It may
     still require double-checking that the s3 location is valid.
+
     Parameters
     ----------
     co_client : CodeOceanClient

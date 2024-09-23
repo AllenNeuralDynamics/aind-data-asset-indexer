@@ -1,4 +1,5 @@
-"""Module to index Code Ocean processed results in DocDB."""
+"""Module to index Code Ocean processed results and update external links in
+DocDB."""
 
 import argparse
 import json
@@ -34,14 +35,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class CodeOceanIndexBucketJob:
     """This job will:
-    1) Download all processed results records from the Code Ocean index
-    2) Download all the records in DocDB for the Code Ocean bucket. The
+    1) For records in AIND buckets, update the external links with Code
+    Ocean data asset ids if needed.
+    2) Download all processed results records from the Code Ocean index
+    3) Download all the records in DocDB for the Code Ocean bucket. The
     response is projected to just the {_id, location} fields.
-    3) Creates a list of locations found in Code Ocean and a list of
+    4) Creates a list of locations found in Code Ocean and a list of
     locations found in DocDB.
-    4) For locations found in Code Ocean not in DocDB, a new record will be
+    5) For locations found in Code Ocean not in DocDB, a new record will be
     created from the aind-data-schema json files in S3.
-    5) For locations in DocDB not found in Code Ocean, the records will be
+    6) For locations in DocDB not found in Code Ocean, the records will be
     removed from DocDB.
     """
 
@@ -82,6 +85,7 @@ class CodeOceanIndexBucketJob:
         [{"id": "abc", "location": "s3://bucket/prefix},
         {"id": "def", "location": "s3://bucket/prefix"}]
         will be mapped to {"s3://bucket/prefix": ["abc", "def"]}
+
         Parameters
         ----------
         external_recs : List[dict]
@@ -110,6 +114,7 @@ class CodeOceanIndexBucketJob:
         """
         Small utility to parse the external_links field of the docdb record.
         Supports the legacy type.
+
         Parameters
         ----------
         docdb_record : dict | list
@@ -143,6 +148,7 @@ class CodeOceanIndexBucketJob:
         2) Paginate through the docdb records where the location doesn't match
         the internal co bucket.
         3) Add or remove the external_links from the docdb record if needed.
+
         Parameters
         ----------
         docdb_client : MongoClient
@@ -272,7 +278,7 @@ class CodeOceanIndexBucketJob:
                 {"$set": json_contents},
                 upsert=True,
             )
-            logging.info(x.raw_result)
+            logging.debug(x.raw_result)
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"
@@ -283,6 +289,7 @@ class CodeOceanIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 code ocean records.
+
         Parameters
         ----------
         record_list : List[dict]
@@ -318,6 +325,7 @@ class CodeOceanIndexBucketJob:
         """
         For a list of codeocean records, divvy up the list across
         n_partitions. Process the set of records in each partition.
+
         Parameters
         ----------
         records : List[dict]
@@ -336,6 +344,7 @@ class CodeOceanIndexBucketJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 ids.
+
         Parameters
         ----------
         record_list : List[str]
@@ -354,10 +363,11 @@ class CodeOceanIndexBucketJob:
         db = docdb_client[self.job_settings.doc_db_db_name]
         collection = db[self.job_settings.doc_db_collection_name]
         try:
+            logging.info(f"Removing {len(record_list)} records")
             response = collection.delete_many(
                 filter={"_id": {"$in": record_list}}
             )
-            logging.info(response.raw_result)
+            logging.debug(response.raw_result)
         except Exception as e:
             logging.error(f"Error deleting records: {repr(e)}")
         docdb_client.close()

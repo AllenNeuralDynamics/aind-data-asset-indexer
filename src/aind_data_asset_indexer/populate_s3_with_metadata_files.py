@@ -50,6 +50,7 @@ class AindPopulateMetadataJsonJob:
         Original core json files will be first copied to a subfolder,
         and then overwritten with the new fields from metadata.nd.json,
         or deleted if the new field is None.
+
         Parameters
         ----------
         prefix : str
@@ -78,7 +79,6 @@ class AindPopulateMetadataJsonJob:
                 bucket=bucket,
                 prefix=prefix,
                 s3_client=s3_client,
-                log_flag=True,
                 copy_original_md_subdir=(
                     self.job_settings.copy_original_md_subdir
                 ),
@@ -91,7 +91,7 @@ class AindPopulateMetadataJsonJob:
                 prefix=prefix,
                 s3_client=s3_client,
             )
-            logging.info(response)
+            logging.debug(response)
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"
@@ -104,6 +104,7 @@ class AindPopulateMetadataJsonJob:
         The task to perform within a partition. If n_partitions is set to 20
         and the outer prefix list had length 1000, then this should process
         50 prefixes.
+
         Parameters
         ----------
         prefix_list : List[str]
@@ -122,6 +123,7 @@ class AindPopulateMetadataJsonJob:
         """
         For a list of prefixes (up to a 1000 in the list), divvy up the list
         across n_partitions. Process the set of prefixes in each partition.
+
         Parameters
         ----------
         prefixes : List[str]
