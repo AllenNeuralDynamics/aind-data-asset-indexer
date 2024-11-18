@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
+from aind_data_schema.core.metadata import is_dict_corrupt
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
 from pymongo import MongoClient
@@ -30,7 +31,6 @@ from aind_data_asset_indexer.utils import (
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
     get_s3_location,
-    is_dict_corrupt,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,

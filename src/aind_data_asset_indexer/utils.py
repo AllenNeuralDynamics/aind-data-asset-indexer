@@ -11,7 +11,11 @@ from urllib.parse import urlparse
 
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.data_description import DataLevel, DataRegex
-from aind_data_schema.core.metadata import ExternalPlatforms, Metadata
+from aind_data_schema.core.metadata import (
+    ExternalPlatforms,
+    Metadata,
+    is_dict_corrupt,
+)
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
@@ -489,32 +493,6 @@ def iterate_through_top_level(
             for p in page["CommonPrefixes"]
             if p.get("Prefix") is not None
         ]
-
-
-def is_dict_corrupt(input_dict: dict) -> bool:
-    """
-    Checks that all the keys, included nested keys, don't contain '$' or '.'
-
-    Parameters
-    ----------
-    input_dict : dict
-
-    Returns
-    -------
-    bool
-      True if input_dict is not a dict, or if nested dictionary keys contain
-      forbidden characters. False otherwise.
-
-    """
-    if not isinstance(input_dict, dict):
-        return True
-    for key, value in input_dict.items():
-        if "$" in key or "." in key:
-            return True
-        elif isinstance(value, dict):
-            if is_dict_corrupt(value):
-                return True
-    return False
 
 
 def download_json_file_from_s3(

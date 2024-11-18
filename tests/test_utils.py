@@ -29,7 +29,6 @@ from aind_data_asset_indexer.utils import (
     get_record_from_docdb,
     get_s3_bucket_and_prefix,
     get_s3_location,
-    is_dict_corrupt,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
@@ -146,22 +145,6 @@ class TestUtils(unittest.TestCase):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
         self.assertEqual("64b6ffe67c392acd534f51129ad1af60", md5_hash)
-
-    def test_is_dict_corrupt(self):
-        """Tests is_dict_corrupt method"""
-        good_contents = {"a": 1, "b": {"c": 2, "d": 3}}
-        bad_contents1 = {"a.1": 1, "b": {"c": 2, "d": 3}}
-        bad_contents2 = {"a": 1, "b": {"c": 2, "$d": 3}}
-        bad_contents3 = {"a": 1, "b": {"c": 2, "d": 3}, "$e": 4}
-        bad_contents4 = {"a": 1, "b": {"c": {"d": 3}, "$e": 4}}
-        bad_contents5 = [{"a": 1}, {"b": {"c": 2, "d": 3}}]
-        self.assertFalse(is_dict_corrupt(good_contents))
-        self.assertTrue(is_dict_corrupt(bad_contents1))
-        self.assertTrue(is_dict_corrupt(bad_contents2))
-        self.assertTrue(is_dict_corrupt(bad_contents3))
-        self.assertTrue(is_dict_corrupt(bad_contents4))
-        # noinspection PyTypeChecker
-        self.assertTrue(is_dict_corrupt(bad_contents5))
 
     def test_create_object_key(self):
         """Tests create_object_key"""
