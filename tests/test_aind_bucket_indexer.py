@@ -70,7 +70,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     "last_modified": datetime(
                         2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
                     ),
-                    "e_tag": '"275d922d2a1e547f2e0f35b5cc54f493"',
+                    "e_tag": '"64b6ffe67c392acd534f51129ad1af60"',
                     "version_id": "version_id",
                 },
                 prefix="ecephys_642478_2023-01-17_13-56-29",

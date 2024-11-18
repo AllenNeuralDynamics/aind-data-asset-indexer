@@ -145,7 +145,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("275d922d2a1e547f2e0f35b5cc54f493", md5_hash)
+        self.assertEqual("64b6ffe67c392acd534f51129ad1af60", md5_hash)
 
     def test_is_dict_corrupt(self):
         """Tests is_dict_corrupt method"""
