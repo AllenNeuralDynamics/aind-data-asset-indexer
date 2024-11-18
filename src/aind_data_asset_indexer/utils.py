@@ -14,8 +14,8 @@ from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import (
     ExternalPlatforms,
     Metadata,
-    is_dict_corrupt,
 )
+from aind_data_schema.base import is_dict_corrupt
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
