@@ -14,6 +14,7 @@ from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import (
     ExternalPlatforms,
     Metadata,
+    create_metadata_json,
 )
 from aind_data_schema.base import is_dict_corrupt
 from aind_data_schema.utils.json_writer import SchemaWriter
@@ -565,14 +566,7 @@ def build_metadata_record_from_prefix(
     )
     record_name = prefix.strip("/") if optional_name is None else optional_name
     try:
-        metadata_dict = {
-            "name": record_name,
-            "location": get_s3_location(bucket=bucket, prefix=prefix),
-        }
-        if optional_created is not None:
-            metadata_dict["created"] = optional_created
-        if optional_external_links is not None:
-            metadata_dict["external_links"] = optional_external_links
+        core_jsons = dict()
         for object_key, response_data in s3_file_responses.items():
             if response_data is not None:
                 field_name = object_key.split("/")[-1].replace(".json", "")
@@ -580,20 +574,20 @@ def build_metadata_record_from_prefix(
                     s3_client=s3_client, bucket=bucket, object_key=object_key
                 )
                 if json_contents is not None:
-                    is_corrupt = is_dict_corrupt(input_dict=json_contents)
-                    if not is_corrupt:
-                        metadata_dict[field_name] = json_contents
-        # TODO: We should handle constructing the Metadata file in a better way
-        #  in aind-data-schema. By using model_validate, a lot of info from the
-        #  original files get removed. For now, we can use model_construct
-        #  until a better method is implemented in aind-data-schema. This will
-        #  mark all the initial files as metadata_status=Unknown
-        metadata_dict = Metadata.model_construct(
-            **metadata_dict
-        ).model_dump_json(warnings=False, by_alias=True)
+                    core_jsons[field_name] = json_contents
+        # Construct Metadata file using core schema jsons
+        # Validation and de/serialization are handled in aind-data-schema
+        metadata_dict = create_metadata_json(
+            name=record_name,
+            location=get_s3_location(bucket=bucket, prefix=prefix),
+            core_jsons=core_jsons,
+            optional_created=optional_created,
+            optional_external_links=optional_external_links,
+        )
+        metadata_str = json.dumps(metadata_dict)
     except Exception:
-        metadata_dict = None
-    return metadata_dict
+        metadata_str = None
+    return metadata_str
 
 
 def cond_copy_then_sync_core_json_files(

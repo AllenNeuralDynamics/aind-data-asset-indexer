@@ -144,7 +144,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("64b6ffe67c392acd534f51129ad1af60", md5_hash)
+        self.assertEqual("a0f1022e3b4a8bc60e63e3677171f784", md5_hash)
 
     def test_create_object_key(self):
         """Tests create_object_key"""
@@ -776,7 +776,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual("2020-01-02T03:04:05", md["created"])
         self.assertEqual({"Code Ocean": ["123-456"]}, md["external_links"])
 
-    @patch("aind_data_asset_indexer.utils.Metadata.model_construct")
+    @patch("aind_data_asset_indexer.utils.create_metadata_json")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
@@ -785,7 +785,7 @@ class TestUtils(unittest.TestCase):
         mock_download_json_file: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
-        mock_metadata_model_construct: MagicMock,
+        mock_create_metadata_json: MagicMock,
     ):
         """Tests build_metadata_record_from_prefix method when there is an
         error when creating the metadata record"""
@@ -816,7 +816,7 @@ class TestUtils(unittest.TestCase):
             self.example_processing,
             self.example_subject,
         ]
-        mock_metadata_model_construct.side_effect = ValueError(
+        mock_create_metadata_json.side_effect = ValueError(
             "Error creating metadata record"
         )
         # noinspection PyTypeChecker
