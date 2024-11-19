@@ -580,8 +580,9 @@ class AindIndexBucketJob:
                         collection = db[
                             self.job_settings.doc_db_collection_name
                         ]
-                        if "_id" in json_contents:
-                            # TODO: check is_dict_corrupt(json_contents)
+                        if "_id" in json_contents and not is_dict_corrupt(
+                            json_contents
+                        ):
                             logging.info(
                                 f"Adding record to docdb for: {location}"
                             )
@@ -601,6 +602,10 @@ class AindIndexBucketJob:
                                 copy_original_md_subdir=(
                                     self.job_settings.copy_original_md_subdir
                                 ),
+                            )
+                        elif "_id" in json_contents:
+                            logging.warning(
+                                f"Metadata record for {location} is corrupt!"
                             )
                         else:
                             logging.warning(

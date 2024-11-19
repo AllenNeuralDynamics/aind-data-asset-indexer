@@ -358,7 +358,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             ],
         )
 
-    @patch("aind_data_schema.core.metadata.Metadata.model_construct")
+    @patch("aind_data_asset_indexer.utils.create_metadata_json")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
@@ -369,7 +369,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_model_construct: MagicMock,
+        mock_create_metadata_json: MagicMock,
     ):
         """Tests _process_codeocean_record when there is an issue building the
         record"""
@@ -378,8 +378,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             self.example_dict_of_file_info
         )
 
-        # Suppose there is an error using model_construct
-        mock_model_construct.side_effect = Exception("Something went wrong")
+        # Suppose there is an error creating metadata file
+        mock_create_metadata_json.side_effect = Exception(
+            "Something went wrong"
+        )
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_codeocean_record(

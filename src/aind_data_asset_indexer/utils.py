@@ -16,7 +16,6 @@ from aind_data_schema.core.metadata import (
     Metadata,
     create_metadata_json,
 )
-from aind_data_schema.base import is_dict_corrupt
 from aind_data_schema.utils.json_writer import SchemaWriter
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
