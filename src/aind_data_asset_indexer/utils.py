@@ -11,11 +11,11 @@ from urllib.parse import urlparse
 
 from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.data_description import DataLevel, DataRegex
+from aind_data_schema.core.metadata import CORE_FILES as CORE_SCHEMAS
 from aind_data_schema.core.metadata import (
     ExternalPlatforms,
     Metadata,
     create_metadata_json,
-    CORE_FILES as CORE_SCHEMAS,
 )
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
