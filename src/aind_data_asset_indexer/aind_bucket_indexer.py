@@ -215,14 +215,13 @@ class AindIndexBucketJob:
           The fields in the DocDb record that will require updating.
         """
         docdb_record_fields_to_update = dict()
-        for core_schema_file_name in core_schema_file_names:
-            field_name = core_schema_file_name.replace(".json", "")
+        for field_name, core_schema_file_name in core_schema_file_names.items():
             is_in_record = docdb_record.get(field_name) is not None
             is_in_root = (
                 core_schema_info_in_root.get(core_schema_file_name) is not None
             )
             is_in_copy_subdir = (
-                core_schema_file_name in list_of_schemas_in_copy_subdir
+                field_name in list_of_schemas_in_copy_subdir
             )
             # To avoid copying and pasting the same arguments, we'll keep it
             # them in a dict

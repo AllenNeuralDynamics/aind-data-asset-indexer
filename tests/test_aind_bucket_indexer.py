@@ -201,7 +201,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_1(
         self,
@@ -229,7 +229,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
+            list_of_schemas_in_copy_subdir=["subject"],
             docdb_record=self.example_md_record,
         )
         self.assertEqual(dict(), docdb_fields_to_update)
@@ -260,7 +260,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_2(
         self,
@@ -326,7 +326,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_3(
         self,
@@ -346,7 +346,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
+            list_of_schemas_in_copy_subdir=["subject"],
             docdb_record=self.example_md_record,
         )
         self.assertEqual(dict(), docdb_fields_to_update)
@@ -378,7 +378,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_4(
         self,
@@ -454,7 +454,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_5(
         self,
@@ -485,7 +485,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     core_schema_info_in_root=core_schema_info_in_root,
-                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    list_of_schemas_in_copy_subdir=["subject"],
                     docdb_record=dict(),
                 )
             )
@@ -516,7 +516,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_6(
         self,
@@ -579,7 +579,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_6_corrupt_download(
         self,
@@ -652,7 +652,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_7(
         self,
@@ -674,7 +674,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     core_schema_info_in_root=core_schema_info_in_root,
-                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    list_of_schemas_in_copy_subdir=["subject"],
                     docdb_record=dict(),
                 )
             )
@@ -704,7 +704,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_8(
         self,
