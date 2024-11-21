@@ -73,16 +73,17 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 },
             },
         ]
+        # corresponds to cls.example_codeocean_records[1]
         cls.example_dict_of_file_info = {
-            "ecephys_642478_2023-01-17_13-56-29/acquisition.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/data_description.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/processing.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/session.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/subject.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/acquisition.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/data_description.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/instrument.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/procedures.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/processing.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/quality_control.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/rig.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/session.json": None,
+            "666666cc-66cc-6c66-666c-6c66c6666666/subject.json": None,
         }
         cls.example_docdb_records = [
             {
@@ -358,7 +359,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             ],
         )
 
-    @patch("aind_data_schema.core.metadata.Metadata.model_construct")
+    @patch("aind_data_asset_indexer.utils.create_metadata_json")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
@@ -369,7 +370,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_model_construct: MagicMock,
+        mock_create_metadata_json: MagicMock,
     ):
         """Tests _process_codeocean_record when there is an issue building the
         record"""
@@ -378,8 +379,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             self.example_dict_of_file_info
         )
 
-        # Suppose there is an error using model_construct
-        mock_model_construct.side_effect = Exception("Something went wrong")
+        # Suppose there is an error creating metadata file
+        mock_create_metadata_json.side_effect = Exception(
+            "Something went wrong"
+        )
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_codeocean_record(

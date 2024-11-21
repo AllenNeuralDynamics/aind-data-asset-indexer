@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
+from aind_data_schema.base import is_dict_corrupt
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
 from pymongo import MongoClient
@@ -30,7 +31,6 @@ from aind_data_asset_indexer.utils import (
     get_dict_of_file_info,
     get_s3_bucket_and_prefix,
     get_s3_location,
-    is_dict_corrupt,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
@@ -215,15 +215,15 @@ class AindIndexBucketJob:
           The fields in the DocDb record that will require updating.
         """
         docdb_record_fields_to_update = dict()
-        for core_schema_file_name in core_schema_file_names:
-            field_name = core_schema_file_name.replace(".json", "")
+        for (
+            field_name,
+            core_schema_file_name,
+        ) in core_schema_file_names.items():
             is_in_record = docdb_record.get(field_name) is not None
             is_in_root = (
                 core_schema_info_in_root.get(core_schema_file_name) is not None
             )
-            is_in_copy_subdir = (
-                core_schema_file_name in list_of_schemas_in_copy_subdir
-            )
+            is_in_copy_subdir = field_name in list_of_schemas_in_copy_subdir
             # To avoid copying and pasting the same arguments, we'll keep it
             # them in a dict
             common_kwargs = {
@@ -580,8 +580,9 @@ class AindIndexBucketJob:
                         collection = db[
                             self.job_settings.doc_db_collection_name
                         ]
-                        if "_id" in json_contents:
-                            # TODO: check is_dict_corrupt(json_contents)
+                        if "_id" in json_contents and not is_dict_corrupt(
+                            json_contents
+                        ):
                             logging.info(
                                 f"Adding record to docdb for: {location}"
                             )
@@ -601,6 +602,10 @@ class AindIndexBucketJob:
                                 copy_original_md_subdir=(
                                     self.job_settings.copy_original_md_subdir
                                 ),
+                            )
+                        elif "_id" in json_contents:
+                            logging.warning(
+                                f"Metadata record for {location} is corrupt!"
                             )
                         else:
                             logging.warning(

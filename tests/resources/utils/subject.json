@@ -1,23 +1,39 @@
 {
-    "describedBy": "https://raw.githubusercontent.com/AllenNeuralDynamics/aind-data-schema/main/site-packages/aind_data_schema/subject.py",
-    "schema_version": "0.2.2",
-    "species": "Mus musculus",
-    "subject_id": "642478",
-    "sex": "Male",
-    "date_of_birth": "2022-07-16",
-    "genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo",
-    "mgi_allele_ids": null,
-    "background_strain": null,
-    "source": null,
-    "rrid": null,
-    "restrictions": null,
-    "breeding_group": "Chat-IRES-Cre-neo",
-    "maternal_id": "624133",
-    "maternal_genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo",
-    "paternal_id": "624115",
-    "paternal_genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo",
-    "light_cycle": null,
-    "home_cage_enrichment": null,
-    "wellness_reports": null,
-    "notes": null
+   "describedBy": "https://raw.githubusercontent.com/AllenNeuralDynamics/aind-data-schema/main/src/aind_data_schema/core/subject.py",
+   "schema_version": "1.0.0",
+   "subject_id": "642478",
+   "sex": "Male",
+   "date_of_birth": "2022-07-16",
+   "genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo",
+   "species": {
+      "name": "Mus musculus",
+      "registry": {
+         "name": "National Center for Biotechnology Information",
+         "abbreviation": "NCBI"
+      },
+      "registry_identifier": "NCBI:txid10090"
+   },
+   "alleles": [],
+   "background_strain": null,
+   "breeding_info": {
+      "breeding_group": "Chat-IRES-Cre-neo",
+      "maternal_id": "624133",
+      "maternal_genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo",
+      "paternal_id": "624115",
+      "paternal_genotype": "Chat-IRES-Cre-neo/Chat-IRES-Cre-neo"
+   },
+   "source": {
+      "name": "Allen Institute",
+      "abbreviation": "AI",
+      "registry": {
+         "name": "Research Organization Registry",
+         "abbreviation": "ROR"
+      },
+      "registry_identifier": "03cpe7c52"
+   },
+   "rrid": null,
+   "restrictions": null,
+   "wellness_reports": [],
+   "housing": null,
+   "notes": null
 }

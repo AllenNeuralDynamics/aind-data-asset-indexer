@@ -29,7 +29,6 @@ from aind_data_asset_indexer.utils import (
     get_record_from_docdb,
     get_s3_bucket_and_prefix,
     get_s3_location,
-    is_dict_corrupt,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
@@ -145,23 +144,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("275d922d2a1e547f2e0f35b5cc54f493", md5_hash)
-
-    def test_is_dict_corrupt(self):
-        """Tests is_dict_corrupt method"""
-        good_contents = {"a": 1, "b": {"c": 2, "d": 3}}
-        bad_contents1 = {"a.1": 1, "b": {"c": 2, "d": 3}}
-        bad_contents2 = {"a": 1, "b": {"c": 2, "$d": 3}}
-        bad_contents3 = {"a": 1, "b": {"c": 2, "d": 3}, "$e": 4}
-        bad_contents4 = {"a": 1, "b": {"c": {"d": 3}, "$e": 4}}
-        bad_contents5 = [{"a": 1}, {"b": {"c": 2, "d": 3}}]
-        self.assertFalse(is_dict_corrupt(good_contents))
-        self.assertTrue(is_dict_corrupt(bad_contents1))
-        self.assertTrue(is_dict_corrupt(bad_contents2))
-        self.assertTrue(is_dict_corrupt(bad_contents3))
-        self.assertTrue(is_dict_corrupt(bad_contents4))
-        # noinspection PyTypeChecker
-        self.assertTrue(is_dict_corrupt(bad_contents5))
+        self.assertEqual("a0f1022e3b4a8bc60e63e3677171f784", md5_hash)
 
     def test_create_object_key(self):
         """Tests create_object_key"""
@@ -480,7 +463,7 @@ class TestUtils(unittest.TestCase):
             copy_subdir="original_metadata",
             s3_client=mock_s3_client,
         )
-        self.assertEqual(["data_description.json", "subject.json"], contents)
+        self.assertEqual(["data_description", "subject"], contents)
 
     @patch("boto3.client")
     def test_does_s3_metadata_copy_exist_none(self, mock_s3_client: MagicMock):
@@ -717,17 +700,19 @@ class TestUtils(unittest.TestCase):
             },
         }
         mock_download_json_file.side_effect = [
-            self.example_processing,
             self.example_subject,
+            self.example_processing,
         ]
-        # noinspection PyTypeChecker
-        md = json.loads(
-            build_metadata_record_from_prefix(
-                bucket="aind-ephys-data-dev-u5u0i5",
-                prefix="ecephys_642478_2023-01-17_13-56-29",
-                s3_client=mock_s3_client,
+        # there are some userwarnings when creating Subject from json
+        with self.assertWarns(UserWarning):
+            # noinspection PyTypeChecker
+            md = json.loads(
+                build_metadata_record_from_prefix(
+                    bucket="aind-ephys-data-dev-u5u0i5",
+                    prefix="ecephys_642478_2023-01-17_13-56-29",
+                    s3_client=mock_s3_client,
+                )
             )
-        )
         mock_get_dict_of_file_info.assert_called_once()
         mock_download_json_file.assert_has_calls(
             [
@@ -735,14 +720,14 @@ class TestUtils(unittest.TestCase):
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
                     object_key=(
-                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
+                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
                     ),
                 ),
                 call(
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
                     object_key=(
-                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
+                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
                     ),
                 ),
             ]
@@ -765,15 +750,15 @@ class TestUtils(unittest.TestCase):
         """Tests build_metadata_record_from_prefix method when 'created' and
         'external_links' are provided"""
         mock_get_dict_of_file_info.return_value = {
-            "ecephys_642478_2023-01-17_13-56-29/acquisition.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/data_description.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/instrument.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/procedures.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/processing.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/quality_control.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/rig.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/session.json": None,
-            "ecephys_642478_2023-01-17_13-56-29/subject.json": None,
+            "abc-123/acquisition.json": None,
+            "abc-123/data_description.json": None,
+            "abc-123/instrument.json": None,
+            "abc-123/procedures.json": None,
+            "abc-123/processing.json": None,
+            "abc-123/quality_control.json": None,
+            "abc-123/rig.json": None,
+            "abc-123/session.json": None,
+            "abc-123/subject.json": None,
         }
         # noinspection PyTypeChecker
         md = json.loads(
@@ -793,7 +778,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual("2020-01-02T03:04:05", md["created"])
         self.assertEqual({"Code Ocean": ["123-456"]}, md["external_links"])
 
-    @patch("aind_data_asset_indexer.utils.Metadata.model_construct")
+    @patch("aind_data_asset_indexer.utils.create_metadata_json")
     @patch("boto3.client")
     @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
@@ -802,7 +787,7 @@ class TestUtils(unittest.TestCase):
         mock_download_json_file: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_s3_client: MagicMock,
-        mock_metadata_model_construct: MagicMock,
+        mock_create_metadata_json: MagicMock,
     ):
         """Tests build_metadata_record_from_prefix method when there is an
         error when creating the metadata record"""
@@ -830,10 +815,10 @@ class TestUtils(unittest.TestCase):
             },
         }
         mock_download_json_file.side_effect = [
-            self.example_processing,
             self.example_subject,
+            self.example_processing,
         ]
-        mock_metadata_model_construct.side_effect = ValueError(
+        mock_create_metadata_json.side_effect = ValueError(
             "Error creating metadata record"
         )
         # noinspection PyTypeChecker
@@ -849,14 +834,14 @@ class TestUtils(unittest.TestCase):
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
                     object_key=(
-                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
+                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
                     ),
                 ),
                 call(
                     s3_client=mock_s3_client,
                     bucket="aind-ephys-data-dev-u5u0i5",
                     object_key=(
-                        "ecephys_642478_2023-01-17_13-56-29/subject.json"
+                        "ecephys_642478_2023-01-17_13-56-29/processing.json"
                     ),
                 ),
             ]
@@ -955,7 +940,7 @@ class TestUtils(unittest.TestCase):
             f"INFO:root:subject is up-to-date in "
             f"{s3_loc}/subject.json. Skipping.",
         ]
-        self.assertEqual(expected_log_messages, captured.output)
+        self.assertCountEqual(expected_log_messages, captured.output)
         mock_get_dict_of_file_info.assert_called_once()
         # assert that only new or updated core jsons were uploaded to s3
         mock_upload_core_record.assert_has_calls(
@@ -1057,7 +1042,7 @@ class TestUtils(unittest.TestCase):
             f"s3://{bucket}/{pfx}/subject.json",
             "DEBUG:root:Some Message",
         ]
-        self.assertEqual(expected_output_messages, captured.output)
+        self.assertCountEqual(expected_output_messages, captured.output)
         # assert that an existing /original_metadata folder was detected
         mock_does_s3_metadata_copy_exist.assert_called_once_with(
             bucket=bucket,
@@ -1084,7 +1069,8 @@ class TestUtils(unittest.TestCase):
                     json_str=json.dumps(self.example_metadata_nd["subject"]),
                     s3_client=mock_s3_client,
                 ),
-            ]
+            ],
+            any_order=True,
         )
         mock_s3_client.delete_object.assert_not_called()
 
@@ -1200,7 +1186,7 @@ class TestUtils(unittest.TestCase):
             f"s3://{bucket}/{pfx}/subject.json",
             "DEBUG:root:Uploaded json",
         ]
-        self.assertEqual(expected_log_messages, captured.output)
+        self.assertCountEqual(expected_log_messages, captured.output)
         # assert that the original core jsons were copied, including
         # corrupt rig.json
         mock_s3_client.copy_object.assert_has_calls(
@@ -1229,7 +1215,8 @@ class TestUtils(unittest.TestCase):
                     },
                     Key=f"{pfx}/original_metadata/subject.20240202.json",
                 ),
-            ]
+            ],
+            any_order=True,
         )
         # assert that only valid core jsons were overwritten
         mock_upload_core_record.assert_has_calls(
@@ -1248,7 +1235,8 @@ class TestUtils(unittest.TestCase):
                     json_str=json.dumps(self.example_metadata_nd["subject"]),
                     s3_client=mock_s3_client,
                 ),
-            ]
+            ],
+            any_order=True,
         )
         # assert the corrupt core json was deleted
         mock_s3_client.delete_object.assert_called_once_with(
