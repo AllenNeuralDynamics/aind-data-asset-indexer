@@ -70,7 +70,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     "last_modified": datetime(
                         2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
                     ),
-                    "e_tag": '"275d922d2a1e547f2e0f35b5cc54f493"',
+                    "e_tag": '"a0f1022e3b4a8bc60e63e3677171f784"',
                     "version_id": "version_id",
                 },
                 prefix="ecephys_642478_2023-01-17_13-56-29",
@@ -201,7 +201,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_1(
         self,
@@ -229,7 +229,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
+            list_of_schemas_in_copy_subdir=["subject"],
             docdb_record=self.example_md_record,
         )
         self.assertEqual(dict(), docdb_fields_to_update)
@@ -260,7 +260,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_2(
         self,
@@ -326,7 +326,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_3(
         self,
@@ -346,7 +346,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             s3_client=mock_s3_client,
             core_schema_info_in_root=core_schema_info_in_root,
-            list_of_schemas_in_copy_subdir=["subject.json"],
+            list_of_schemas_in_copy_subdir=["subject"],
             docdb_record=self.example_md_record,
         )
         self.assertEqual(dict(), docdb_fields_to_update)
@@ -378,7 +378,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_4(
         self,
@@ -454,7 +454,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_5(
         self,
@@ -485,7 +485,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     core_schema_info_in_root=core_schema_info_in_root,
-                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    list_of_schemas_in_copy_subdir=["subject"],
                     docdb_record=dict(),
                 )
             )
@@ -516,7 +516,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_6(
         self,
@@ -579,7 +579,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_6_corrupt_download(
         self,
@@ -652,7 +652,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_7(
         self,
@@ -674,7 +674,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     core_schema_info_in_root=core_schema_info_in_root,
-                    list_of_schemas_in_copy_subdir=["subject.json"],
+                    list_of_schemas_in_copy_subdir=["subject"],
                     docdb_record=dict(),
                 )
             )
@@ -704,7 +704,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.core_schema_file_names",
-        ["subject.json"],
+        {"subject": "subject.json"},
     )  # Mocking this to limit for loop to one iteration
     def test_resolve_schema_information_case_8(
         self,
@@ -1313,6 +1313,62 @@ class TestAindIndexBucketJob(unittest.TestCase):
             s3_client=mock_s3_client,
             copy_original_md_subdir="original_metadata",
         )
+        mock_upload_metadata_json_str_to_s3.assert_not_called()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "upload_metadata_json_str_to_s3"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "cond_copy_then_sync_core_json_files"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.is_dict_corrupt")
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "download_json_file_from_s3"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("boto3.client")
+    def test_process_prefix_no_record_yes_file_corrupt_file(
+        self,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+        mock_download_json_file_from_s3: MagicMock,
+        mock_is_dict_corrupt: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
+        mock_upload_metadata_json_str_to_s3: MagicMock,
+    ):
+        """Tests _process_prefix method when there is no record in DocDb,
+        there is and there is metadata.nd.json file in S3, and the file can
+        be serialized to json, but its contents are corrupt."""
+        mock_db = MagicMock()
+        mock_docdb_client.__getitem__.return_value = mock_db
+        mock_collection = MagicMock()
+        mock_db.__getitem__.return_value = mock_collection
+
+        mock_does_s3_object_exist.return_value = True
+        mocked_downloaded_record = deepcopy(self.example_md_record)
+        mock_download_json_file_from_s3.return_value = mocked_downloaded_record
+        mock_is_dict_corrupt.return_value = True
+
+        location_to_id_map = dict()
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "WARNING:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29 is corrupt!"
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        mock_collection.assert_not_called()
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
     @patch(

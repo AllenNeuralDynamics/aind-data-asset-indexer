@@ -52,7 +52,7 @@
       "subject_id": "567890"
    },
    "describedBy": "https://raw.githubusercontent.com/AllenNeuralDynamics/aind-data-schema/main/src/aind_data_schema/core/metadata.py",
-   "external_links": [],
+   "external_links": {},
    "instrument": null,
    "last_modified": "2024-05-15T17:41:26.697535",
    "location": "s3://aind-ephys-data-dev-u5u0i5/ecephys_567890_2000-01-01_04-00-00",
@@ -97,7 +97,7 @@
    },
    "quality_control": null,
    "rig": null,
-   "schema_version": "1.0.0",
+   "schema_version": "1.1.1",
    "session": null,
    "subject": {
       "background_strain": null,
