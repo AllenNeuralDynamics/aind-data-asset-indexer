@@ -24,7 +24,7 @@ dependencies = [
     "pymongo==4.3.3",
     "dask==2023.5.0",
     "aind-data-schema==1.2.0",
-    "aind-codeocean-api==0.5.0",
+    "codeocean==0.3.0",
 ]
 
 [project.optional-dependencies]
