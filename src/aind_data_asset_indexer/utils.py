@@ -9,7 +9,6 @@ from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
-from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import CORE_FILES as CORE_SCHEMAS
 from aind_data_schema.core.metadata import (
@@ -18,6 +17,12 @@ from aind_data_schema.core.metadata import (
     create_metadata_json,
 )
 from botocore.exceptions import ClientError
+from codeocean import CodeOcean
+from codeocean.data_asset import (
+    DataAssetSearchParams,
+    DataAssetState,
+    DataAssetType,
+)
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import (
     PaginatorConfigTypeDef,
@@ -934,7 +939,7 @@ def build_docdb_location_to_id_map(
 
 
 def get_all_processed_codeocean_asset_records(
-    co_client: CodeOceanClient, co_data_asset_bucket: str
+    co_client: CodeOcean, co_data_asset_bucket: str
 ) -> Dict[str, dict]:
     """
     Gets all the data asset records we're interested in indexing. The location
@@ -943,7 +948,7 @@ def get_all_processed_codeocean_asset_records(
 
     Parameters
     ----------
-    co_client : CodeOceanClient
+    co_client : CodeOcean
     co_data_asset_bucket : str
       Name of Code Ocean's data asset bucket
     Returns
@@ -966,31 +971,27 @@ def get_all_processed_codeocean_asset_records(
     all_responses = dict()
 
     for tag in {DataLevel.DERIVED.value, "processed"}:
-        response = co_client.search_all_data_assets(
-            type="result", query=f"tag:{tag}"
+        search_params = DataAssetSearchParams(
+            type=DataAssetType.Result, query=f"tag:{tag}"
         )
-        # There is a bug with the codeocean api that caps the number of
-        # results in a single request to 10000.
-        if len(response.json()["results"]) >= 10000:
-            logging.warning(
-                "Number of records exceeds 10,000! This can lead to "
-                "possible data loss."
-            )
+        iter_response = co_client.data_assets.search_data_assets_iterator(
+            search_params=search_params
+        )
         # Extract relevant information
         extracted_info = dict()
-        for data_asset_info in response.json()["results"]:
-            data_asset_id = data_asset_info["id"]
-            data_asset_name = data_asset_info["name"]
-            created_timestamp = data_asset_info["created"]
+        for data_asset_info in iter_response:
+            data_asset_id = data_asset_info.id
+            data_asset_name = data_asset_info.name
+            created_timestamp = data_asset_info.created
             created_datetime = datetime.fromtimestamp(
                 created_timestamp, tz=timezone.utc
             )
             # Results hosted externally have a source_bucket field
-            is_external = (
-                data_asset_info.get("sourceBucket") is not None
-                or data_asset_info.get("source_bucket") is not None
-            )
-            if not is_external and data_asset_info.get("state") == "ready":
+            is_external = data_asset_info.source_bucket is not None
+            if (
+                not is_external
+                and data_asset_info.state == DataAssetState.Ready
+            ):
                 location = f"s3://{co_data_asset_bucket}/{data_asset_id}"
                 extracted_info[location] = {
                     "name": data_asset_name,

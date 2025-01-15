@@ -920,9 +920,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
         self.assertEqual(expected_log_messages, captured.output)
         expected_docdb_record_to_write = deepcopy(mock_docdb_record)
-        expected_docdb_record_to_write[
-            "last_modified"
-        ] = "2024-08-25T17:41:28+00:00"
+        expected_docdb_record_to_write["last_modified"] = (
+            "2024-08-25T17:41:28+00:00"
+        )
         expected_docdb_record_to_write["subject"] = self.example_md_record.get(
             "subject"
         )

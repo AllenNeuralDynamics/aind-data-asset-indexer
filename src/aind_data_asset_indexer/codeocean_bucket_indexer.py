@@ -13,12 +13,13 @@ from typing import List, Optional, Union
 import boto3
 import dask.bag as dask_bag
 import requests
-from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.metadata import ExternalPlatforms
+from codeocean import CodeOcean
 from mypy_boto3_s3 import S3Client
 from pymongo import MongoClient
 from pymongo.operations import UpdateOne
 from requests.exceptions import ReadTimeout
+from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -394,9 +395,16 @@ class CodeOceanIndexBucketJob:
     def run_job(self):
         """Main method to run."""
         logging.info("Starting to scan through CodeOcean.")
-        co_client = CodeOceanClient(
+        retry = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+        )
+        co_client = CodeOcean(
             domain=self.job_settings.codeocean_domain,
             token=self.job_settings.codeocean_token.get_secret_value(),
+            retries=retry,
         )
         code_ocean_records = get_all_processed_codeocean_asset_records(
             co_client=co_client,
