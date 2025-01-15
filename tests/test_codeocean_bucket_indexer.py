@@ -1,15 +1,20 @@
 """Tests methods in codeocean_bucket_indexer module"""
 
-import json
 import os
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
+from codeocean import CodeOcean
+from codeocean.data_asset import (
+    DataAsset,
+    DataAssetOrigin,
+    DataAssetState,
+    DataAssetType,
+    SourceBucket,
+)
 from pymongo.operations import UpdateOne
-from requests import Response
-from requests.exceptions import ReadTimeout
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -102,54 +107,85 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             },
         ]
 
-        cls.example_temp_endpoint_response = [
-            {"id": "abc-123", "source": "s3://bucket/prefix1"},
-            {"id": "def-456", "source": "s3://bucket/prefix1"},
-            {"id": "ghi-789", "source": "s3://bucket/prefix2"},
+        cls.example_search_iterator_response = [
+            DataAsset(
+                id="abc-123",
+                created=0,
+                name="prefix1",
+                mount="prefix1",
+                state=DataAssetState.Ready,
+                type=DataAssetType.Dataset,
+                last_used=0,
+                source_bucket=SourceBucket(
+                    bucket="bucket",
+                    prefix="prefix1",
+                    origin=DataAssetOrigin.AWS,
+                ),
+            ),
+            DataAsset(
+                id="def-456",
+                created=0,
+                name="prefix1",
+                mount="prefix1",
+                state=DataAssetState.Ready,
+                type=DataAssetType.Dataset,
+                last_used=0,
+                source_bucket=SourceBucket(
+                    bucket="bucket",
+                    prefix="prefix1",
+                    origin=DataAssetOrigin.AWS,
+                ),
+            ),
+            DataAsset(
+                id="ghi-789",
+                created=0,
+                name="prefix2",
+                mount="prefix2",
+                state=DataAssetState.Ready,
+                type=DataAssetType.Dataset,
+                last_used=0,
+                source_bucket=SourceBucket(
+                    bucket="bucket",
+                    prefix="prefix2",
+                    origin=DataAssetOrigin.AWS,
+                ),
+            ),
         ]
 
-    @patch("requests.get")
-    def test_get_external_data_asset_records(self, mock_get: MagicMock):
+    @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
+    def test_get_external_data_asset_records(self, mock_search: MagicMock):
         """Tests the _get_external_data_asset_records method"""
-        example_response = self.example_temp_endpoint_response
-        mock_get_response = Response()
-        mock_get_response.status_code = 200
-        mock_get_response._content = json.dumps(example_response).encode(
-            "utf-8"
+        mock_search.return_value = self.example_search_iterator_response
+        response = self.basic_job._get_external_data_asset_records(
+            co_client=CodeOcean(domain="www.example.com", token="")
         )
-        mock_get.return_value = mock_get_response
-        response = self.basic_job._get_external_data_asset_records()
-        self.assertEqual(example_response, response)
+        expected_response = [
+            {"id": "abc-123", "location": "s3://bucket/prefix1"},
+            {"id": "def-456", "location": "s3://bucket/prefix1"},
+            {"id": "ghi-789", "location": "s3://bucket/prefix2"},
+        ]
+        self.assertEqual(expected_response, response)
 
-    @patch("requests.get")
-    def test_get_external_data_asset_records_error(self, mock_get: MagicMock):
+    @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
+    def test_get_external_data_asset_records_err(self, mock_search: MagicMock):
         """Tests the _get_external_data_asset_records method when an error
         response is returned"""
-        mock_get_response = Response()
-        mock_get_response.status_code = 500
-        mock_get.return_value = mock_get_response
-        response = self.basic_job._get_external_data_asset_records()
-        self.assertIsNone(response)
-
-    @patch("requests.get")
-    def test_get_external_data_asset_records_read_timeout(
-        self, mock_get: MagicMock
-    ):
-        """Tests the _get_external_data_asset_records method when the read
-        times out."""
-        mock_get.side_effect = ReadTimeout()
+        mock_search.side_effect = Exception("Something went wrong!")
         with self.assertLogs(level="DEBUG") as captured:
-            response = self.basic_job._get_external_data_asset_records()
-        expected_log_messages = [
-            "ERROR:root:Read timed out at http://some_url:8080/created_after/0"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
+            response = self.basic_job._get_external_data_asset_records(
+                co_client=CodeOcean(domain="www.example.com", token="")
+            )
         self.assertIsNone(response)
+        self.assertIsNotNone(captured.output)
 
     def test_map_external_list_to_dict(self):
         """Tests _map_external_list_to_dict method"""
         mapped_response = self.basic_job._map_external_list_to_dict(
-            self.example_temp_endpoint_response
+            [
+                {"id": "abc-123", "location": "s3://bucket/prefix1"},
+                {"id": "def-456", "location": "s3://bucket/prefix1"},
+                {"id": "ghi-789", "location": "s3://bucket/prefix2"},
+            ]
         )
         expected_response = {
             "s3://bucket/prefix1": {"abc-123", "def-456"},
@@ -185,27 +221,21 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.assertEqual(["abc-123", "def-456"], output)
 
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
-    @patch("requests.get")
+    @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.datetime")
     def test_update_external_links_in_docdb(
         self,
         mock_datetime: MagicMock,
         mock_paginate: MagicMock,
-        mock_get: MagicMock,
+        mock_search: MagicMock,
         mock_docdb_client: MagicMock,
     ):
         """Tests _update_external_links_in_docdb method."""
         mock_datetime.utcnow.return_value = datetime(2024, 9, 5)
 
-        # Mock requests get response
-        example_response = self.example_temp_endpoint_response
-        mock_get_response = Response()
-        mock_get_response.status_code = 200
-        mock_get_response._content = json.dumps(example_response).encode(
-            "utf-8"
-        )
-        mock_get.return_value = mock_get_response
+        # Mock code ocean search response
+        mock_search.return_value = self.example_search_iterator_response
 
         # Mock bulk_write
         mock_db = MagicMock()
@@ -237,7 +267,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._update_external_links_in_docdb(
-                docdb_client=mock_docdb_client
+                docdb_client=mock_docdb_client,
+                co_client=CodeOcean(domain="www.example.com", token=""),
             )
         expected_log_messages = [
             "INFO:root:No code ocean data asset ids found for "
@@ -284,31 +315,31 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_collection.bulk_write.assert_has_calls(expected_bulk_write_calls)
 
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
-    @patch("requests.get")
+    @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
     def test_update_external_links_in_docdb_error(
         self,
         mock_paginate: MagicMock,
-        mock_get: MagicMock,
+        mock_search: MagicMock,
         mock_docdb_client: MagicMock,
     ):
         """Tests _update_external_links_in_docdb method when there is an
         error retrieving info from the temp endpoint."""
-        # Mock requests get response
-        mock_get_response = Response()
-        mock_get_response.status_code = 500
-        mock_get.return_value = mock_get_response
+        # Mock search response
+        mock_search.side_effect = Exception("Something went wrong!")
 
         mock_db = MagicMock()
         mock_docdb_client.__getitem__.return_value = mock_db
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._update_external_links_in_docdb(
-                docdb_client=mock_docdb_client
+                docdb_client=mock_docdb_client,
+                co_client=CodeOcean(domain="www.example.com", token=""),
             )
-        expected_log_messages = [
+        expected_log_message = (
             "ERROR:root:There was an error retrieving external links!"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
+        )
+        self.assertEqual(2, len(captured.output))
+        self.assertEqual(expected_log_message, captured.output[1])
         mock_paginate.assert_not_called()
 
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MongoClient")
@@ -568,8 +599,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.codeocean_bucket_indexer."
         "get_all_processed_codeocean_asset_records"
     )
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.CodeOcean")
     def test_run_job(
         self,
+        mock_codeocean_client: MagicMock,
         mock_get_all_co_records: MagicMock,
         mock_docdb_client: MagicMock,
         mock_paginate_docdb: MagicMock,
@@ -581,6 +614,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         one record, add one record, and delete one record."""
         mock_mongo_client = MagicMock()
         mock_docdb_client.return_value = mock_mongo_client
+        mock_co_client = MagicMock()
+        mock_codeocean_client.return_value = mock_co_client
         mock_get_all_co_records.return_value = dict(
             [(r["location"], r) for r in self.example_codeocean_records]
         )
@@ -602,7 +637,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.assertEqual(expected_log_messages, captured.output)
 
         mock_update_external_links_in_docdb.assert_called_once_with(
-            docdb_client=mock_mongo_client
+            docdb_client=mock_mongo_client, co_client=mock_co_client
         )
         mock_process_codeocean_records.assert_called_once_with(
             records=[self.example_codeocean_records[0]]
