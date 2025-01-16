@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-from aind_codeocean_api.codeocean import CodeOceanClient
 from botocore.exceptions import ClientError
-from requests import Response
+from codeocean import CodeOcean
+from codeocean.data_asset import DataAsset
 
 from aind_data_asset_indexer.utils import (
     build_docdb_location_to_id_map,
@@ -139,7 +139,9 @@ class TestUtils(unittest.TestCase):
         cls.example_put_object_response1 = load_json_file(
             "example_put_object_response1.json"
         )
-        cls.example_co_search_data_assets = example_co_search_data_assets
+        cls.example_co_search_data_assets = [
+            DataAsset(**r) for r in example_co_search_data_assets["results"]
+        ]
 
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
@@ -1394,26 +1396,16 @@ class TestUtils(unittest.TestCase):
         }
         self.assertEqual(expected_map, actual_map)
 
-    @patch(
-        "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
-    )
+    @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
     def test_get_all_processed_codeocean_asset_records(
         self, mock_search_all_data_assets: MagicMock
     ):
         """Tests get_all_processed_codeocean_asset_records method"""
-        mock_response1 = Response()
-        mock_response1.status_code = 200
-        body = json.dumps(self.example_co_search_data_assets)
-        mock_response1._content = body.encode("utf-8")
-        mock_response2 = Response()
-        mock_response2.status_code = 200
-        body = json.dumps({"results": []})
-        mock_response2._content = body.encode("utf-8")
-        mock_search_all_data_assets.side_effect = [
-            mock_response1,
-            mock_response2,
-        ]
-        co_client = CodeOceanClient(domain="some_domain", token="some_token")
+
+        mock_search_all_data_assets.return_value = (
+            self.example_co_search_data_assets
+        )
+        co_client = CodeOcean(domain="some_domain", token="some_token")
         records = get_all_processed_codeocean_asset_records(
             co_client=co_client,
             co_data_asset_bucket="some_co_bucket",
@@ -1452,42 +1444,6 @@ class TestUtils(unittest.TestCase):
         }
 
         self.assertEqual(expected_records, records)
-
-    @patch(
-        "aind_codeocean_api.codeocean.CodeOceanClient.search_all_data_assets"
-    )
-    def test_get_all_processed_codeocean_asset_records_warning(
-        self, mock_search_all_data_assets: MagicMock
-    ):
-        """Tests get_all_processed_codeocean_asset_records method when 10,000
-        records are returned"""
-        # Fake a response with 10,000 records
-        search_result_copy = deepcopy(self.example_co_search_data_assets)
-        result0 = search_result_copy["results"][0]
-        search_result_copy["results"] = [result0 for _ in range(0, 10000)]
-        mock_response1 = Response()
-        mock_response1.status_code = 200
-        body = json.dumps(search_result_copy)
-        mock_response1._content = body.encode("utf-8")
-        mock_response2 = Response()
-        mock_response2.status_code = 200
-        body = json.dumps({"results": []})
-        mock_response2._content = body.encode("utf-8")
-        mock_search_all_data_assets.side_effect = [
-            mock_response1,
-            mock_response2,
-        ]
-        co_client = CodeOceanClient(domain="some_domain", token="some_token")
-        with self.assertLogs(level="DEBUG") as captured:
-            get_all_processed_codeocean_asset_records(
-                co_client=co_client,
-                co_data_asset_bucket="some_co_bucket",
-            )
-        expected_log_messages = [
-            "WARNING:root:Number of records exceeds 10,000! "
-            "This can lead to possible data loss."
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
 
 
 if __name__ == "__main__":

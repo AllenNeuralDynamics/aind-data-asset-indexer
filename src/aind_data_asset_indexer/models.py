@@ -124,11 +124,12 @@ class CodeOceanIndexBucketJobSettings(IndexJobSettings):
     doc_db_collection_name: str
     codeocean_domain: str
     codeocean_token: SecretStr
-    temp_codeocean_endpoint: str = Field(
+    temp_codeocean_endpoint: Optional[str] = Field(
+        default=None,
         description=(
-            "Temp proxy to access code ocean information from their analytics "
-            "databases."
-        )
+            "(deprecated) Temp proxy to access code ocean information from "
+            "their analytics databases. Will be removed in a future release."
+        ),
     )
 
     @classmethod

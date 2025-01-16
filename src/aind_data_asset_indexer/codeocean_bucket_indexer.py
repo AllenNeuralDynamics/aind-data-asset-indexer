@@ -12,13 +12,13 @@ from typing import List, Optional, Union
 
 import boto3
 import dask.bag as dask_bag
-import requests
-from aind_codeocean_api.codeocean import CodeOceanClient
 from aind_data_schema.core.metadata import ExternalPlatforms
+from codeocean import CodeOcean
+from codeocean.data_asset import DataAssetSearchOrigin, DataAssetSearchParams
 from mypy_boto3_s3 import S3Client
 from pymongo import MongoClient
 from pymongo.operations import UpdateOne
-from requests.exceptions import ReadTimeout
+from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -52,30 +52,51 @@ class CodeOceanIndexBucketJob:
         """Class constructor."""
         self.job_settings = job_settings
 
-    def _get_external_data_asset_records(self) -> Optional[List[dict]]:
+    @staticmethod
+    def _get_external_data_asset_records(
+        co_client: CodeOcean,
+    ) -> Optional[List[dict]]:
         """
         Retrieves list of code ocean ids and locations for external data
         assets. The timeout is set to 600 seconds.
+
+        Parameters
+        ----------
+        co_client : CodeOcean
+
         Returns
         -------
         List[dict] | None
           List items have shape {"id": str, "location": str}. If error occurs,
           return None.
+
         """
         try:
-            response = requests.get(
-                self.job_settings.temp_codeocean_endpoint,
-                timeout=600,
+            search_params = DataAssetSearchParams(
+                archived=False,
+                origin=DataAssetSearchOrigin.External,
+                limit=1000,
             )
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return None
-        except ReadTimeout:
-            logging.error(
-                f"Read timed out at "
-                f"{self.job_settings.temp_codeocean_endpoint}"
+            data_assets = co_client.data_assets.search_data_assets_iterator(
+                search_params=search_params
             )
+            external_records = []
+            for data_asset in data_assets:
+                data_asset_source = data_asset.source_bucket
+                if (
+                    data_asset_source is not None
+                    and data_asset_source.bucket is not None
+                    and data_asset_source.prefix is not None
+                ):
+                    bucket = data_asset_source.bucket
+                    prefix = data_asset_source.prefix
+                    location = f"s3://{bucket}/{prefix}"
+                    external_records.append(
+                        {"id": data_asset.id, "location": location}
+                    )
+            return external_records
+        except Exception as e:
+            logging.exception(e)
             return None
 
     @staticmethod
@@ -97,7 +118,7 @@ class CodeOceanIndexBucketJob:
         """
         new_records = dict()
         for r in external_recs:
-            location = r.get("source")
+            location = r.get("location")
             rec_id = r["id"]
             if location is not None and new_records.get(location) is not None:
                 old_id_set = new_records.get(location)
@@ -140,7 +161,7 @@ class CodeOceanIndexBucketJob:
         return external_links
 
     def _update_external_links_in_docdb(
-        self, docdb_client: MongoClient
+        self, docdb_client: MongoClient, co_client: CodeOcean
     ) -> None:
         """
         This method will:
@@ -159,7 +180,9 @@ class CodeOceanIndexBucketJob:
 
         """
         # Should return a list like [{"id": co_id, "location": "s3://..."},]
-        list_of_co_ids_and_locations = self._get_external_data_asset_records()
+        list_of_co_ids_and_locations = self._get_external_data_asset_records(
+            co_client=co_client
+        )
         db = docdb_client[self.job_settings.doc_db_db_name]
         collection = db[self.job_settings.doc_db_collection_name]
         if list_of_co_ids_and_locations is not None:
@@ -394,9 +417,16 @@ class CodeOceanIndexBucketJob:
     def run_job(self):
         """Main method to run."""
         logging.info("Starting to scan through CodeOcean.")
-        co_client = CodeOceanClient(
+        retry = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+        )
+        co_client = CodeOcean(
             domain=self.job_settings.codeocean_domain,
             token=self.job_settings.codeocean_token.get_secret_value(),
+            retries=retry,
         )
         code_ocean_records = get_all_processed_codeocean_asset_records(
             co_client=co_client,
@@ -416,7 +446,7 @@ class CodeOceanIndexBucketJob:
         # Use existing client to add external links to fields
         logging.info("Adding links to records.")
         self._update_external_links_in_docdb(
-            docdb_client=iterator_docdb_client
+            docdb_client=iterator_docdb_client, co_client=co_client
         )
         logging.info("Finished adding links to records")
         all_docdb_records = dict()
