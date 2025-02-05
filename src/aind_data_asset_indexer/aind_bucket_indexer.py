@@ -11,7 +11,6 @@ from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
-from aind_data_schema.base import is_dict_corrupt
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
 from pymongo import MongoClient
@@ -308,11 +307,7 @@ class AindIndexBucketJob:
                     bucket=self.job_settings.s3_bucket,
                     object_key=object_key,
                 )
-                if file_contents is None:
-                    is_file_corrupt = True
-                else:
-                    is_file_corrupt = is_dict_corrupt(file_contents)
-                if not is_file_corrupt:
+                if file_contents is not None:
                     docdb_record_fields_to_update[field_name] = file_contents
                 else:
                     logging.warning(
@@ -578,9 +573,7 @@ class AindIndexBucketJob:
                         collection = db[
                             self.job_settings.doc_db_collection_name
                         ]
-                        if "_id" in json_contents and not is_dict_corrupt(
-                            json_contents
-                        ):
+                        if "_id" in json_contents:
                             logging.info(
                                 f"Adding record to docdb for: {location}"
                             )
@@ -600,10 +593,6 @@ class AindIndexBucketJob:
                                 copy_original_md_subdir=(
                                     self.job_settings.copy_original_md_subdir
                                 ),
-                            )
-                        elif "_id" in json_contents:
-                            logging.warning(
-                                f"Metadata record for {location} is corrupt!"
                             )
                         else:
                             logging.warning(
