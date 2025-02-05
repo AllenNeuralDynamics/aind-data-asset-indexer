@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 from bson.timestamp import Timestamp
-from pymongo.results import DeleteResult, UpdateResult
+from pymongo.results import DeleteResult, InsertOneResult
 
 from aind_data_asset_indexer.aind_bucket_indexer import AindIndexBucketJob
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
@@ -1270,15 +1270,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client.__getitem__.return_value = mock_db
         mock_collection = MagicMock()
         mock_db.__getitem__.return_value = mock_collection
-        mock_collection.update_one.return_value = UpdateResult(
-            raw_result={
-                "n": 1,
-                "nModified": 0,
-                "upserted": "488bbe42-832b-4c37-8572-25eb87cc50e2",
-                "ok": 1.0,
-                "operationTime": Timestamp(1715819252, 1),
-                "updatedExisting": False,
-            },
+        mock_collection.insert_one.return_value = InsertOneResult(
+            inserted_id="488bbe42-832b-4c37-8572-25eb87cc50e2",
             acknowledged=True,
         )
 
@@ -1297,13 +1290,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "INFO:root:Adding record to docdb for: "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29",
-            "DEBUG:root:"
-            "{'n': 1, "
-            "'nModified': 0, "
-            "'upserted': '488bbe42-832b-4c37-8572-25eb87cc50e2', "
-            "'ok': 1.0, "
-            "'operationTime': Timestamp(1715819252, 1), "
-            "'updatedExisting': False}",
+            "DEBUG:root:488bbe42-832b-4c37-8572-25eb87cc50e2",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_called_once_with(

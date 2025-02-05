@@ -296,12 +296,8 @@ class CodeOceanIndexBucketJob:
             collection = db[self.job_settings.doc_db_collection_name]
             # noinspection PyTypeChecker
             json_contents = json.loads(new_metadata_contents)
-            x = collection.update_one(
-                {"_id": json_contents["_id"]},
-                {"$set": json_contents},
-                upsert=True,
-            )
-            logging.debug(x.raw_result)
+            x = collection.insert_one(json_contents)
+            logging.debug(x.inserted_id)
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"

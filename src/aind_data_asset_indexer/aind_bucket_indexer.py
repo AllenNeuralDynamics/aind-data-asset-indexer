@@ -577,12 +577,8 @@ class AindIndexBucketJob:
                             logging.info(
                                 f"Adding record to docdb for: {location}"
                             )
-                            response = collection.update_one(
-                                {"_id": json_contents["_id"]},
-                                {"$set": json_contents},
-                                upsert=True,
-                            )
-                            logging.debug(response.raw_result)
+                            response = collection.insert_one(json_contents)
+                            logging.debug(response.inserted_id)
                             cond_copy_then_sync_core_json_files(
                                 metadata_json=json.dumps(
                                     json_contents, default=str
