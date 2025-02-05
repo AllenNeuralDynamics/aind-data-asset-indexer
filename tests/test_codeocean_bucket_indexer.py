@@ -15,6 +15,7 @@ from codeocean.data_asset import (
     SourceBucket,
 )
 from pymongo.operations import UpdateOne
+from pymongo.results import InsertOneResult
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -362,9 +363,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_docdb_client.__getitem__.return_value = mock_db
         mock_collection = MagicMock()
         mock_db.__getitem__.return_value = mock_collection
-        mock_collection.update_one.return_value.raw_result = {
-            "message": "success"
-        }
+        mock_collection.insert_one.return_value = InsertOneResult(
+            inserted_id="mock_id",
+            acknowledged=True,
+        )
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_codeocean_record(
@@ -375,19 +377,17 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         expected_messages = [
             "INFO:root:Uploading metadata record for: "
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
-            "DEBUG:root:{'message': 'success'}",
+            "DEBUG:root:mock_id",
         ]
         self.assertEqual(expected_messages, captured.output)
         mock_download_json_file.assert_not_called()
         self.assertEqual(
             "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59",
-            mock_collection.update_one.mock_calls[0].args[1]["$set"]["name"],
+            mock_collection.insert_one.mock_calls[0].args[0]["name"],
         )
         self.assertEqual(
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
-            mock_collection.update_one.mock_calls[0].args[1]["$set"][
-                "location"
-            ],
+            mock_collection.insert_one.mock_calls[0].args[0]["location"],
         )
 
     @patch("aind_data_asset_indexer.utils.create_metadata_json")
