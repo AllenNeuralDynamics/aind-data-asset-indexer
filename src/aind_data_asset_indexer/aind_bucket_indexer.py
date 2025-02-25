@@ -6,18 +6,22 @@ import logging
 import os
 import sys
 import warnings
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
+from aind_data_access_api.document_db import MetadataDbClient
+from aind_data_access_api.utils import (
+    build_docdb_location_to_id_map,
+    get_s3_bucket_and_prefix,
+    get_s3_location,
+    paginate_docdb,
+)
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
-from pymongo import MongoClient
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
-    build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
     cond_copy_then_sync_core_json_files,
@@ -28,14 +32,11 @@ from aind_data_asset_indexer.utils import (
     download_json_file_from_s3,
     get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
-    get_s3_bucket_and_prefix,
-    get_s3_location,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     list_metadata_copies,
     metadata_filename,
-    paginate_docdb,
     upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
 )
@@ -335,7 +336,7 @@ class AindIndexBucketJob:
     def _process_docdb_record(
         self,
         docdb_record: dict,
-        docdb_client: MongoClient,
+        docdb_client: MetadataDbClient,
         s3_client: S3Client,
     ):
         """
@@ -349,7 +350,7 @@ class AindIndexBucketJob:
         Parameters
         ----------
         docdb_record : dict
-        docdb_client : MongoClient
+        docdb_client : MetadataDbClient
         s3_client : S3Client
 
         Returns
@@ -381,12 +382,10 @@ class AindIndexBucketJob:
                     f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
                     f"Removing metadata record from DocDb."
                 )
-                db = docdb_client[self.job_settings.doc_db_db_name]
-                collection = db[self.job_settings.doc_db_collection_name]
-                response = collection.delete_one(
-                    filter={"_id": docdb_record["_id"]}
+                response = docdb_client.delete_one_record(
+                    data_asset_record_id=docdb_record["_id"]
                 )
-                logging.debug(response.raw_result)
+                logging.debug(response.json())
             else:  # There is a metadata.nd.json file in S3.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -415,17 +414,13 @@ class AindIndexBucketJob:
                         f"in {self.job_settings.copy_original_md_subdir}. "
                         f"Updating DocDb record with new info."
                     )
-                    db = docdb_client[self.job_settings.doc_db_db_name]
-                    collection = db[self.job_settings.doc_db_collection_name]
-                    fields_to_update["last_modified"] = (
-                        datetime.utcnow().isoformat()
+                    response = docdb_client.upsert_one_docdb_record(
+                        record={
+                            "_id": docdb_record["_id"],
+                            **fields_to_update,
+                        }
                     )
-                    response = collection.update_one(
-                        {"_id": docdb_record["_id"]},
-                        {"$set": fields_to_update},
-                        upsert=True,
-                    )
-                    logging.debug(response.raw_result)
+                    logging.debug(response.json())
                 docdb_record.update(fields_to_update)
                 metadata_nd_json_info = get_dict_of_file_info(
                     s3_client=s3_client,
@@ -456,16 +451,12 @@ class AindIndexBucketJob:
         -------
 
         """
-        # create a clients here since dask doesn't serialize them
+        # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        doc_db_client = MongoClient(
+        doc_db_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
         for record in record_list:
             try:
@@ -503,7 +494,7 @@ class AindIndexBucketJob:
     def _process_prefix(
         self,
         s3_prefix: str,
-        docdb_client: MongoClient,
+        docdb_client: MetadataDbClient,
         s3_client: S3Client,
         location_to_id_map: Dict[str, str],
     ):
@@ -524,7 +515,7 @@ class AindIndexBucketJob:
         Parameters
         ----------
         s3_prefix : str
-        docdb_client : MongoClient
+        docdb_client : MetadataDbClient
         s3_client : S3Client
         location_to_id_map : Dict[str, str]
           A map created by looping through DocDb records and creating a dict
@@ -569,16 +560,14 @@ class AindIndexBucketJob:
                         expected_bucket=bucket,
                         expected_prefix=s3_prefix,
                     ):
-                        db = docdb_client[self.job_settings.doc_db_db_name]
-                        collection = db[
-                            self.job_settings.doc_db_collection_name
-                        ]
                         if "_id" in json_contents:
                             logging.info(
                                 f"Adding record to docdb for: {location}"
                             )
-                            response = collection.insert_one(json_contents)
-                            logging.debug(response.inserted_id)
+                            response = docdb_client.insert_one_docdb_record(
+                                record=json_contents
+                            )
+                            logging.debug(response.json())
                             cond_copy_then_sync_core_json_files(
                                 metadata_json=json.dumps(
                                     json_contents, default=str
@@ -660,23 +649,17 @@ class AindIndexBucketJob:
         """
         # create a s3_client here since dask doesn't serialize it
         s3_client = boto3.client("s3")
-        doc_db_client = MongoClient(
+        doc_db_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
         # For the given prefix list, download all the records from docdb
         # with those locations.
         location_to_id_map = build_docdb_location_to_id_map(
             bucket=self.job_settings.s3_bucket,
             prefixes=prefix_list,
-            db_name=self.job_settings.doc_db_db_name,
-            collection_name=self.job_settings.doc_db_collection_name,
-            docdb_client=doc_db_client,
+            docdb_api_client=doc_db_client,
         )
         for prefix in prefix_list:
             try:
@@ -716,20 +699,14 @@ class AindIndexBucketJob:
     def run_job(self):
         """Main method to run."""
         logging.info("Starting to scan through DocDb.")
-        iterator_docdb_client = MongoClient(
+        iterator_docdb_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
 
         docdb_pages = paginate_docdb(
-            db_name=self.job_settings.doc_db_db_name,
-            docdb_client=iterator_docdb_client,
-            collection_name=self.job_settings.doc_db_collection_name,
+            docdb_api_client=iterator_docdb_client,
             page_size=500,
             filter_query={
                 "location": {
