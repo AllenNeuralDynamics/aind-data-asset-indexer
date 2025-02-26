@@ -8,8 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-from bson.timestamp import Timestamp
-from pymongo.results import DeleteResult, InsertOneResult
+from requests import Response
 
 from aind_data_asset_indexer.aind_bucket_indexer import AindIndexBucketJob
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
@@ -741,7 +740,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_copy_file_to_subdir.assert_not_called()
         mock_download_json_file.assert_not_called()
 
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_docdb_record_invalid_location(
         self,
@@ -769,7 +768,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_docdb_record_invalid_prefix(
         self,
@@ -796,7 +795,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.assertEqual(expected_log_messages, captured.output)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_docdb_record_s3_file_missing(
         self,
@@ -806,18 +805,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
     ):
         """Tests _process_docdb_record when the s3 metadata.nd.json file is
         missing."""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.delete_one.return_value = DeleteResult(
-            raw_result={
-                "n": 1,
-                "ok": 1.0,
-                "operationTime": Timestamp(1715812466, 1),
-            },
-            acknowledged=True,
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response.json = MagicMock(
+            return_value={"acknowledged": True, "deletedCount": 1}
         )
+        mock_docdb_client.delete_one_record.return_value = mock_response
 
         mock_does_s3_object_exist.return_value = False
         with self.assertLogs(level="DEBUG") as captured:
@@ -831,8 +824,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json! "
             "Removing metadata record from DocDb.",
-            "DEBUG:root:"
-            "{'n': 1, 'ok': 1.0, 'operationTime': Timestamp(1715812466, 1)}",
+            "DEBUG:root:{'acknowledged': True, 'deletedCount': 1}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
@@ -851,12 +843,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.datetime")
     def test_process_docdb_record_valid_metadata_nd_json_file(
         self,
-        mock_datetime: MagicMock,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
@@ -869,11 +859,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _process_docdb_record method when there is a metadata.nd.json
         file."""
 
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_collection.update_one.return_value.raw_result = "Updated docdb"
-        mock_db.__getitem__.return_value = mock_collection
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response.json = MagicMock(
+            return_value={
+                "acknowledged": True,
+                "modifiedCount": 1,
+                "upsertedId": None,
+                "upsertedCount": 0,
+                "matchedCount": 1,
+            }
+        )
+        mock_docdb_client.upsert_one_docdb_record.return_value = mock_response
         mock_does_s3_object_exist.return_value = True
         core_info = {
             "last_modified": datetime(
@@ -898,9 +895,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_resolve_schema_information.return_value = {
             "subject": self.example_md_record.get("subject")
         }
-        mock_datetime.utcnow.return_value.isoformat.return_value = datetime(
-            2024, 8, 25, 17, 41, 28, tzinfo=timezone.utc
-        ).isoformat()
         mock_docdb_record = deepcopy(self.example_md_record)
         # Assume the subject is null in docdb
         mock_docdb_record["subject"] = None
@@ -916,13 +910,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29 but not in original_metadata. "
             "Updating DocDb record with new info.",
-            "DEBUG:root:Updated docdb",
+            "DEBUG:root:{'acknowledged': True, 'modifiedCount': 1, ",
+            "'upsertedId': None, 'upsertedCount': 0, 'matchedCount': 1}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         expected_docdb_record_to_write = deepcopy(mock_docdb_record)
-        expected_docdb_record_to_write["last_modified"] = (
-            "2024-08-25T17:41:28+00:00"
-        )
         expected_docdb_record_to_write["subject"] = self.example_md_record.get(
             "subject"
         )
@@ -938,7 +930,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_docdb_record"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_dask_task_to_process_record_list(
         self,
@@ -949,8 +941,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_mongo_client = MagicMock()
-        mock_docdb_client.return_value = mock_mongo_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value = mock_docdb_api_client
         records = [
             self.example_md_record,
             self.example_md_record1,
@@ -961,29 +953,29 @@ class TestAindIndexBucketJob(unittest.TestCase):
             [
                 call(
                     docdb_record=self.example_md_record,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
                 call(
                     docdb_record=self.example_md_record1,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
                 call(
                     docdb_record=self.example_md_record2,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_mongo_client.close.assert_called_once_with()
+        mock_docdb_api_client.close.assert_called_once_with()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_docdb_record"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_dask_task_to_process_record_list_error(
         self,
@@ -995,8 +987,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         record."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_mongo_client = MagicMock()
-        mock_docdb_client.return_value = mock_mongo_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value = mock_docdb_api_client
         records = [
             self.example_md_record,
             self.example_md_record1,
@@ -1023,23 +1015,23 @@ class TestAindIndexBucketJob(unittest.TestCase):
             [
                 call(
                     docdb_record=self.example_md_record,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
                 call(
                     docdb_record=self.example_md_record1,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
                 call(
                     docdb_record=self.example_md_record2,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_mongo_client.close.assert_called_once_with()
+        mock_docdb_api_client.close.assert_called_once_with()
 
     @patch("dask.bag.map_partitions")
     def test_process_records(self, mock_dask_bag_map_parts: MagicMock):
@@ -1053,7 +1045,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_dask_bag_map_parts.assert_called()
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_invalid_prefix(
         self,
@@ -1091,7 +1083,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "build_metadata_record_from_prefix"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_no_file_build_no(
         self,
@@ -1139,7 +1131,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "build_metadata_record_from_prefix"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_no_file_build_yes(
         self,
@@ -1204,7 +1196,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "download_json_file_from_s3"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_yes_file_bad_file(
         self,
@@ -1252,7 +1244,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "download_json_file_from_s3"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_yes_file_good_file(
         self,
@@ -1266,14 +1258,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _process_prefix method when there is no record in DocDb,
         there is and there is metadata.nd.json file in S3, and the file can
         be serialized to json."""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.insert_one.return_value = InsertOneResult(
-            inserted_id="488bbe42-832b-4c37-8572-25eb87cc50e2",
-            acknowledged=True,
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response.json = MagicMock(
+            return_value={
+                "acknowledged": True,
+                "insertedId": "488bbe42-832b-4c37-8572-25eb87cc50e2",
+            }
         )
+        mock_docdb_client.insert_one_docdb_record.return_value = mock_response
 
         mock_does_s3_object_exist.return_value = True
         mock_download_json_file_from_s3.return_value = self.example_md_record
@@ -1290,7 +1283,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "INFO:root:Adding record to docdb for: "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29",
-            "DEBUG:root:488bbe42-832b-4c37-8572-25eb87cc50e2",
+            "DEBUG:root:{'acknowledged': True, ",
+            "'insertedId': '488bbe42-832b-4c37-8572-25eb87cc50e2'}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
@@ -1315,7 +1309,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "download_json_file_from_s3"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_yes_file_good_file_no__id(
         self,
@@ -1329,11 +1323,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _process_prefix method when there is no record in DocDb,
         there is and there is metadata.nd.json file in S3, and the file can
         be serialized to json, but there is no _id in the file."""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-
         mock_does_s3_object_exist.return_value = True
         mocked_downloaded_record = deepcopy(self.example_md_record)
         del mocked_downloaded_record["_id"]
@@ -1352,7 +1341,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "ecephys_642478_2023-01-17_13-56-29 does not have an _id field!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        mock_collection.assert_not_called()
+        mock_docdb_client.insert_one_docdb_record.assert_not_called()
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
@@ -1369,7 +1358,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "download_json_file_from_s3"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_yes_file_good_file_bad_location(
         self,
@@ -1384,11 +1373,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         there is and there is metadata.nd.json file in S3, and the file can
         be serialized to json, but the location inside the metadata record
         does not match actual location of the record."""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-
         mock_does_s3_object_exist.return_value = True
         # Test what happens when the location in the record does not match the
         # expected location
@@ -1415,12 +1399,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "ecephys_642478_2023-01-17_13-56-29!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        mock_collection.assert_not_called()
+        mock_docdb_client.insert_one_docdb_record.assert_not_called()
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_yes_record_yes_file(
         self,
@@ -1461,7 +1445,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_prefix"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_dask_task_to_process_prefix_list(
         self,
@@ -1473,8 +1457,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_prefix_list"""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_mongo_client = MagicMock()
-        mock_docdb_client.return_value = mock_mongo_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value = mock_docdb_api_client
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1496,24 +1480,24 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_567890_2000-01-01_04-00-00",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_655019_2000-01-01_01-01-02",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_mongo_client.close.assert_called_once_with()
+        mock_docdb_api_client.close.assert_called_once_with()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1523,7 +1507,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_prefix"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_dask_task_to_process_prefix_list_error(
         self,
@@ -1536,8 +1520,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
         prefix."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_mongo_client = MagicMock()
-        mock_docdb_client.return_value = mock_mongo_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value = mock_docdb_api_client
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1573,24 +1557,24 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_567890_2000-01-01_04-00-00",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_655019_2000-01-01_01-01-02",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
-                    docdb_client=mock_mongo_client,
+                    docdb_client=mock_docdb_api_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_mongo_client.close.assert_called_once_with()
+        mock_docdb_api_client.close.assert_called_once_with()
 
     @patch("dask.bag.map_partitions")
     def test_process_prefixes(self, mock_dask_bag_map_parts: MagicMock):
@@ -1615,7 +1599,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_records"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MongoClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
     @patch("boto3.client")
     def test_run_job(
@@ -1631,8 +1615,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_mongo_client = MagicMock()
-        mock_docdb_client.return_value = mock_mongo_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value = mock_docdb_api_client
         mock_paginate.return_value = iter(
             [
                 [
@@ -1661,7 +1645,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-        mock_mongo_client.close.assert_called_once()
+        mock_docdb_api_client.close.assert_called_once()
         mock_s3_client.close.assert_called_once()
         mock_process_records.assert_called_once_with(
             records=[

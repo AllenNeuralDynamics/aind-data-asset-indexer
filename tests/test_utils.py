@@ -13,27 +13,21 @@ from codeocean import CodeOcean
 from codeocean.data_asset import DataAsset
 
 from aind_data_asset_indexer.utils import (
-    build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
     cond_copy_then_sync_core_json_files,
     create_metadata_object_key,
     create_object_key,
-    does_metadata_record_exist_in_docdb,
     does_s3_metadata_copy_exist,
     does_s3_object_exist,
     download_json_file_from_s3,
     get_all_processed_codeocean_asset_records,
     get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
-    get_record_from_docdb,
-    get_s3_bucket_and_prefix,
-    get_s3_location,
     is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     list_metadata_copies,
-    paginate_docdb,
     sync_core_json_files,
     upload_json_str_to_s3,
     upload_metadata_json_str_to_s3,
@@ -167,29 +161,6 @@ class TestUtils(unittest.TestCase):
         obj_key2 = create_metadata_object_key(prefix2)
         self.assertEqual("prefix1/metadata.nd.json", obj_key1)
         self.assertEqual("prefix2/metadata.nd.json", obj_key2)
-
-    def test_get_s3_bucket_and_prefix(self):
-        """Tests get_s3_bucket_and_prefix"""
-        results1 = get_s3_bucket_and_prefix(
-            s3_location="s3://some_bucket/prefix1/"
-        )
-        results2 = get_s3_bucket_and_prefix(
-            s3_location="s3://some_bucket/prefix2"
-        )
-
-        self.assertEqual(
-            {"bucket": "some_bucket", "prefix": "prefix1"}, results1
-        )
-        self.assertEqual(
-            {"bucket": "some_bucket", "prefix": "prefix2"}, results2
-        )
-
-    def test_get_s3_location(self):
-        """Tests get_s3_location"""
-        result1 = get_s3_location(bucket="some_bucket", prefix="prefix1")
-        result2 = get_s3_location(bucket="some_bucket", prefix="prefix2/")
-        self.assertEqual("s3://some_bucket/prefix1", result1)
-        self.assertEqual("s3://some_bucket/prefix2", result2)
 
     def test_is_prefix_valid(self):
         """Tests is_prefix_valid"""
@@ -1244,157 +1215,6 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=bucket, Key=f"{pfx}/rig.json"
         )
-
-    @patch("pymongo.MongoClient")
-    def test_does_metadata_record_exist_in_docdb_true(
-        self, mock_docdb_client: MagicMock
-    ):
-        """Tests does_metadata_record_exist_in_docdb when true"""
-
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter(
-            [{"_id": "70bcf356-985f-4a2a-8105-de900e35e788"}]
-        )
-        self.assertTrue(
-            does_metadata_record_exist_in_docdb(
-                docdb_client=mock_docdb_client,
-                db_name="metadata_index",
-                collection_name="data_assets",
-                bucket="aind-ephys-data-dev-u5u0i5",
-                prefix="ecephys_642478_2023-01-17_13-56-29",
-            )
-        )
-
-    @patch("pymongo.MongoClient")
-    def test_does_metadata_record_exist_in_docdb_false(
-        self, mock_docdb_client: MagicMock
-    ):
-        """Tests does_metadata_record_exist_in_docdb when false"""
-
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter([])
-        self.assertFalse(
-            does_metadata_record_exist_in_docdb(
-                docdb_client=mock_docdb_client,
-                db_name="metadata_index",
-                collection_name="data_assets",
-                bucket="aind-ephys-data-dev-u5u0i5",
-                prefix="ecephys_642478_2023-01-17_13-56-29",
-            )
-        )
-
-    @patch("pymongo.MongoClient")
-    def test_get_record_from_docdb(self, mock_docdb_client: MagicMock):
-        """Tests get_record_from_docdb when record exists"""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter([self.example_metadata_nd])
-        record = get_record_from_docdb(
-            docdb_client=mock_docdb_client,
-            db_name="metadata_index",
-            collection_name="data_assets",
-            record_id="488bbe42-832b-4c37-8572-25eb87cc50e2",
-        )
-        self.assertEqual(self.example_metadata_nd, record)
-
-    @patch("pymongo.MongoClient")
-    def test_get_record_from_docdb_none(self, mock_docdb_client: MagicMock):
-        """Tests get_record_from_docdb when record doesn't exist"""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter([])
-        record = get_record_from_docdb(
-            docdb_client=mock_docdb_client,
-            db_name="metadata_index",
-            collection_name="data_assets",
-            record_id="488bbe42-832b-4c37-8572-25eb87cc50ee",
-        )
-        self.assertIsNone(record)
-
-    @patch("pymongo.MongoClient")
-    def test_paginate_docdb(self, mock_docdb_client: MagicMock):
-        """Tests paginate_docdb"""
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter(
-            [
-                self.example_metadata_nd,
-                self.example_metadata_nd1,
-                self.example_metadata_nd2,
-            ]
-        )
-        pages = paginate_docdb(
-            docdb_client=mock_docdb_client,
-            db_name="metadata_index",
-            collection_name="data_assets",
-            page_size=2,
-        )
-        expected_results = [
-            [self.example_metadata_nd, self.example_metadata_nd1],
-            [self.example_metadata_nd2],
-        ]
-        actual_results = list(pages)
-        self.assertEqual(expected_results, actual_results)
-
-    @patch("pymongo.MongoClient")
-    def test_build_docdb_location_to_id_map(
-        self, mock_docdb_client: MagicMock
-    ):
-        """Tests build_docdb_location_to_id_map"""
-        bucket = "aind-ephys-data-dev-u5u0i5"
-        mock_db = MagicMock()
-        mock_docdb_client.__getitem__.return_value = mock_db
-        mock_collection = MagicMock()
-        mock_db.__getitem__.return_value = mock_collection
-        mock_collection.find.return_value = iter(
-            [
-                {
-                    "_id": "70bcf356-985f-4a2a-8105-de900e35e788",
-                    "location": (
-                        f"s3://{bucket}/ecephys_655019_2000-04-04_04-00-00"
-                    ),
-                },
-                {
-                    "_id": "5ca4a951-d374-4f4b-8279-d570a35b2286",
-                    "location": (
-                        f"s3://{bucket}/ecephys_567890_2000-01-01_04-00-00"
-                    ),
-                },
-            ]
-        )
-
-        actual_map = build_docdb_location_to_id_map(
-            docdb_client=mock_docdb_client,
-            db_name="metadata_index",
-            collection_name="data_assets",
-            bucket=bucket,
-            prefixes=[
-                "ecephys_655019_2000-04-04_04-00-00",
-                "ecephys_567890_2000-01-01_04-00-00/",
-                "missing_655019_2000-01-01_01-01-02",
-            ],
-        )
-        expected_map = {
-            f"s3://{bucket}/ecephys_655019_2000-04-04_04-00-00": (
-                "70bcf356-985f-4a2a-8105-de900e35e788"
-            ),
-            f"s3://{bucket}/ecephys_567890_2000-01-01_04-00-00": (
-                "5ca4a951-d374-4f4b-8279-d570a35b2286"
-            ),
-        }
-        self.assertEqual(expected_map, actual_map)
 
     @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
     def test_get_all_processed_codeocean_asset_records(
