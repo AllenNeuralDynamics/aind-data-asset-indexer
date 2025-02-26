@@ -35,14 +35,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         basic_job_configs = CodeOceanIndexBucketJobSettings(
             s3_bucket="some_bucket",
             doc_db_host="some_docdb_host",
-            doc_db_port=12345,
-            doc_db_password="some_docdb_password",
-            doc_db_user_name="some_docdb_username",
             doc_db_db_name="some_docdb_dbname",
             doc_db_collection_name="some_docdb_collection_name",
             codeocean_domain="some_co_domain",
             codeocean_token="some_co_token",
-            temp_codeocean_endpoint="http://some_url:8080/created_after/0",
         )
         cls.basic_job_configs = basic_job_configs
         cls.basic_job = CodeOceanIndexBucketJob(job_settings=basic_job_configs)
