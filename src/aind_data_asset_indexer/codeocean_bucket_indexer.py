@@ -127,7 +127,7 @@ class CodeOceanIndexBucketJob:
 
     @staticmethod
     def _get_co_links_from_record(
-        docdb_record: Union[dict, list]
+        docdb_record: Union[dict, list],
     ) -> List[str]:
         """
         Small utility to parse the external_links field of the docdb record.

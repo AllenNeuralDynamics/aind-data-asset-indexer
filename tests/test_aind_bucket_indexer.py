@@ -855,18 +855,16 @@ class TestAindIndexBucketJob(unittest.TestCase):
     ):
         """Tests _process_docdb_record method when there is a metadata.nd.json
         file."""
-
+        upsert_response = {
+            "acknowledged": True,
+            "modifiedCount": 1,
+            "upsertedId": None,
+            "upsertedCount": 0,
+            "matchedCount": 1,
+        }
         mock_response = Response()
         mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={
-                "acknowledged": True,
-                "modifiedCount": 1,
-                "upsertedId": None,
-                "upsertedCount": 0,
-                "matchedCount": 1,
-            }
-        )
+        mock_response.json = MagicMock(return_value=upsert_response)
         mock_docdb_client.upsert_one_docdb_record.return_value = mock_response
         mock_does_s3_object_exist.return_value = True
         core_info = {
@@ -907,8 +905,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29 but not in original_metadata. "
             "Updating DocDb record with new info.",
-            "DEBUG:root:{'acknowledged': True, 'modifiedCount': 1, ",
-            "'upsertedId': None, 'upsertedCount': 0, 'matchedCount': 1}",
+            f"DEBUG:root:{upsert_response}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         expected_docdb_record_to_write = deepcopy(mock_docdb_record)
@@ -1255,14 +1252,13 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _process_prefix method when there is no record in DocDb,
         there is and there is metadata.nd.json file in S3, and the file can
         be serialized to json."""
+        insert_response = {
+            "acknowledged": True,
+            "insertedId": "488bbe42-832b-4c37-8572-25eb87cc50e2",
+        }
         mock_response = Response()
         mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={
-                "acknowledged": True,
-                "insertedId": "488bbe42-832b-4c37-8572-25eb87cc50e2",
-            }
-        )
+        mock_response.json = MagicMock(return_value=insert_response)
         mock_docdb_client.insert_one_docdb_record.return_value = mock_response
 
         mock_does_s3_object_exist.return_value = True
@@ -1280,8 +1276,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "INFO:root:Adding record to docdb for: "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29",
-            "DEBUG:root:{'acknowledged': True, ",
-            "'insertedId': '488bbe42-832b-4c37-8572-25eb87cc50e2'}",
+            f"DEBUG:root:{insert_response}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_cond_copy_then_sync_core_json_files.assert_called_once_with(

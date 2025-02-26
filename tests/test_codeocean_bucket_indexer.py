@@ -230,21 +230,20 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_search.return_value = self.example_search_iterator_response
 
         # Mock bulk_write
+        bulk_write_response = {
+            "ok": 1,
+            "writeErrors": [],
+            "insertedIds": [],
+            "nInserted": 0,
+            "nUpserted": 0,
+            "nMatched": 2,
+            "nModified": 2,
+            "nRemoved": 0,
+            "upserted": [],
+        }
         mock_response = Response()
         mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={
-                "ok": 1,
-                "writeErrors": [],
-                "insertedIds": [],
-                "nInserted": 0,
-                "nUpserted": 0,
-                "nMatched": 2,
-                "nModified": 2,
-                "nRemoved": 0,
-                "upserted": [],
-            }
-        )
+        mock_response.json = MagicMock(return_value=bulk_write_response)
         mock_docdb_client.upsert_list_of_docdb_records.return_value = [
             mock_response
         ]
@@ -279,9 +278,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "INFO:root:No code ocean data asset ids found for "
             "s3://bucket2/prefix3. Removing external links from record.",
             "INFO:root:Updating 2 records",
-            "DEBUG:root:[{'ok': 1, 'writeErrors': [], 'insertedIds': [], ",
-            "'nInserted': 0, 'nUpserted': 0, 'nMatched': 2, 'nModified': 2, ",
-            "'nRemoved': 0, 'upserted': []}]",
+            f"DEBUG:root:[{bulk_write_response}]",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         expected_bulk_write_calls = [
