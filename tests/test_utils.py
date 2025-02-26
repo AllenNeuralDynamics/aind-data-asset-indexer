@@ -13,6 +13,7 @@ from codeocean import CodeOcean
 from codeocean.data_asset import DataAsset
 
 from aind_data_asset_indexer.utils import (
+    build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
     cond_copy_then_sync_core_json_files,
@@ -1215,6 +1216,46 @@ class TestUtils(unittest.TestCase):
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=bucket, Key=f"{pfx}/rig.json"
         )
+
+    @patch("aind_data_access_api.utils.MetadataDbClient")
+    def test_build_docdb_location_to_id_map(
+        self, mock_docdb_client: MagicMock
+    ):
+        """Tests build_docdb_location_to_id_map"""
+        bucket = "aind-ephys-data-dev-u5u0i5"
+        mock_docdb_client.aggregate_docdb_records.return_value = [
+            {
+                "_id": "70bcf356-985f-4a2a-8105-de900e35e788",
+                "location": (
+                    f"s3://{bucket}/ecephys_655019_2000-04-04_04-00-00"
+                ),
+            },
+            {
+                "_id": "5ca4a951-d374-4f4b-8279-d570a35b2286",
+                "location": (
+                    f"s3://{bucket}/ecephys_567890_2000-01-01_04-00-00"
+                ),
+            },
+        ]
+
+        actual_map = build_docdb_location_to_id_map(
+            docdb_api_client=mock_docdb_client,
+            bucket=bucket,
+            prefixes=[
+                "ecephys_655019_2000-04-04_04-00-00",
+                "ecephys_567890_2000-01-01_04-00-00/",
+                "missing_655019_2000-01-01_01-01-02",
+            ],
+        )
+        expected_map = {
+            f"s3://{bucket}/ecephys_655019_2000-04-04_04-00-00": (
+                "70bcf356-985f-4a2a-8105-de900e35e788"
+            ),
+            f"s3://{bucket}/ecephys_567890_2000-01-01_04-00-00": (
+                "5ca4a951-d374-4f4b-8279-d570a35b2286"
+            ),
+        }
+        self.assertEqual(expected_map, actual_map)
 
     @patch("codeocean.data_asset.DataAssets.search_data_assets_iterator")
     def test_get_all_processed_codeocean_asset_records(

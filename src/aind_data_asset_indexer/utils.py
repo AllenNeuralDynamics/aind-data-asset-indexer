@@ -9,6 +9,7 @@ from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
+from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.utils import get_s3_location
 from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import CORE_FILES as CORE_SCHEMAS
@@ -747,6 +748,40 @@ def sync_core_json_files(
                     f"{field_name} not found in metadata.nd.json for "
                     f"{prefix} nor in {location}! Skipping."
                 )
+
+
+# TODO: replace with method from aind_data_access_api.utils once available
+def build_docdb_location_to_id_map(
+    docdb_api_client: MetadataDbClient,
+    bucket: str,
+    prefixes: List[str],
+) -> Dict[str, str]:
+    """
+    For a given s3 bucket and list of prefixes, return a dictionary that looks
+    like {'s3://bucket/prefix': 'abc-1234'} where the value is the id of the
+    record in DocDb. If the record does not exist, then there will be no key
+    in the dictionary.
+
+    Parameters
+    ----------
+    docdb_api_client : MongoClient
+    bucket : str
+    prefixes : List[str]
+
+    Returns
+    -------
+    Dict[str, str]
+
+    """
+    locations = [get_s3_location(bucket=bucket, prefix=p) for p in prefixes]
+    # NOTE: use aggregation since filter too large for retrieve_docdb_records
+    agg_pipeline = [
+        {"$match": {"location": {"$in": locations}}},
+        {"$project": {"location": 1, "_id": 1}},
+    ]
+    results = docdb_api_client.aggregate_docdb_records(pipeline=agg_pipeline)
+    location_to_id_map = {r["location"]: r["_id"] for r in results}
+    return location_to_id_map
 
 
 def get_all_processed_codeocean_asset_records(

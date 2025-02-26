@@ -12,7 +12,6 @@ import boto3
 import dask.bag as dask_bag
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.utils import (
-    build_docdb_location_to_id_map,
     get_s3_bucket_and_prefix,
     get_s3_location,
     paginate_docdb,
@@ -22,6 +21,7 @@ from mypy_boto3_s3.type_defs import CopySourceTypeDef
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
+    build_docdb_location_to_id_map,
     build_metadata_record_from_prefix,
     compute_md5_hash,
     cond_copy_then_sync_core_json_files,
