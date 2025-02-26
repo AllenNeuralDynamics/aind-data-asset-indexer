@@ -764,7 +764,7 @@ def build_docdb_location_to_id_map(
 
     Parameters
     ----------
-    docdb_api_client : MongoClient
+    docdb_api_client : MetadataDbClient
     bucket : str
     prefixes : List[str]
 
