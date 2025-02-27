@@ -7,25 +7,22 @@ import logging
 import os
 import sys
 import warnings
-from datetime import datetime
 from typing import List, Optional, Union
 
 import boto3
 import dask.bag as dask_bag
+from aind_data_access_api.document_db import MetadataDbClient
+from aind_data_access_api.utils import get_s3_bucket_and_prefix, paginate_docdb
 from aind_data_schema.core.metadata import ExternalPlatforms
 from codeocean import CodeOcean
 from codeocean.data_asset import DataAssetSearchOrigin, DataAssetSearchParams
 from mypy_boto3_s3 import S3Client
-from pymongo import MongoClient
-from pymongo.operations import UpdateOne
 from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     get_all_processed_codeocean_asset_records,
-    get_s3_bucket_and_prefix,
-    paginate_docdb,
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -130,7 +127,7 @@ class CodeOceanIndexBucketJob:
 
     @staticmethod
     def _get_co_links_from_record(
-        docdb_record: Union[dict, list]
+        docdb_record: Union[dict, list],
     ) -> List[str]:
         """
         Small utility to parse the external_links field of the docdb record.
@@ -161,7 +158,7 @@ class CodeOceanIndexBucketJob:
         return external_links
 
     def _update_external_links_in_docdb(
-        self, docdb_client: MongoClient, co_client: CodeOcean
+        self, docdb_client: MetadataDbClient, co_client: CodeOcean
     ) -> None:
         """
         This method will:
@@ -172,7 +169,7 @@ class CodeOceanIndexBucketJob:
 
         Parameters
         ----------
-        docdb_client : MongoClient
+        docdb_client : MetadataDbClient
 
         Returns
         -------
@@ -183,16 +180,12 @@ class CodeOceanIndexBucketJob:
         list_of_co_ids_and_locations = self._get_external_data_asset_records(
             co_client=co_client
         )
-        db = docdb_client[self.job_settings.doc_db_db_name]
-        collection = db[self.job_settings.doc_db_collection_name]
         if list_of_co_ids_and_locations is not None:
             co_loc_to_id_map = self._map_external_list_to_dict(
                 list_of_co_ids_and_locations
             )
             pages = paginate_docdb(
-                docdb_client=docdb_client,
-                db_name=self.job_settings.doc_db_db_name,
-                collection_name=self.job_settings.doc_db_collection_name,
+                docdb_api_client=docdb_client,
                 filter_query={
                     "location": {
                         "$not": {
@@ -234,32 +227,27 @@ class CodeOceanIndexBucketJob:
                                 list(new_external_links)
                             )
                         }
-                        last_modified = datetime.utcnow().isoformat()
                         records_to_update.append(
-                            UpdateOne(
-                                filter={"_id": docdb_rec_id},
-                                update={
-                                    "$set": {
-                                        "external_links": record_links,
-                                        "last_modified": last_modified,
-                                    }
-                                },
-                                upsert=False,
-                            )
+                            {
+                                "_id": docdb_rec_id,
+                                "external_links": record_links,
+                            }
                         )
                 if len(records_to_update) > 0:
                     logging.info(f"Updating {len(records_to_update)} records")
-                    write_response = collection.bulk_write(
-                        requests=records_to_update
+                    write_responses = (
+                        docdb_client.upsert_list_of_docdb_records(
+                            records=records_to_update
+                        )
                     )
-                    logging.debug(write_response)
+                    logging.debug([r.json() for r in write_responses])
         else:
             logging.error("There was an error retrieving external links!")
 
     def _process_codeocean_record(
         self,
         codeocean_record: dict,
-        docdb_client: MongoClient,
+        docdb_client: MetadataDbClient,
         s3_client: S3Client,
     ):
         """
@@ -271,7 +259,7 @@ class CodeOceanIndexBucketJob:
         Parameters
         ----------
         codeocean_record : dict
-        docdb_client : MongoClient
+        docdb_client : MetadataDbClient
         s3_client : S3Client
 
         """
@@ -292,12 +280,12 @@ class CodeOceanIndexBucketJob:
         )
         if new_metadata_contents is not None:
             logging.info(f"Uploading metadata record for: {location}")
-            db = docdb_client[self.job_settings.doc_db_db_name]
-            collection = db[self.job_settings.doc_db_collection_name]
             # noinspection PyTypeChecker
             json_contents = json.loads(new_metadata_contents)
-            x = collection.insert_one(json_contents)
-            logging.debug(x.inserted_id)
+            response = docdb_client.insert_one_docdb_record(
+                record=json_contents
+            )
+            logging.debug(response.json())
         else:
             logging.warning(
                 f"Unable to build metadata record for: {location}!"
@@ -316,14 +304,10 @@ class CodeOceanIndexBucketJob:
         """
         # create a s3_client here since dask doesn't serialize it
         s3_client = boto3.client("s3")
-        doc_db_client = MongoClient(
+        doc_db_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
 
         for record in record_list:
@@ -369,24 +353,18 @@ class CodeOceanIndexBucketJob:
         record_list : List[str]
 
         """
-        # create a s3_client here since dask doesn't serialize it
-        docdb_client = MongoClient(
+        # create a docdb_client here since dask doesn't serialize it
+        docdb_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
-        db = docdb_client[self.job_settings.doc_db_db_name]
-        collection = db[self.job_settings.doc_db_collection_name]
         try:
             logging.info(f"Removing {len(record_list)} records")
-            response = collection.delete_many(
-                filter={"_id": {"$in": record_list}}
+            response = docdb_client.delete_many_records(
+                data_asset_record_ids=record_list
             )
-            logging.debug(response.raw_result)
+            logging.debug(response.json())
         except Exception as e:
             logging.error(f"Error deleting records: {repr(e)}")
         docdb_client.close()
@@ -430,14 +408,10 @@ class CodeOceanIndexBucketJob:
         )
         logging.info("Finished scanning through CodeOcean.")
         logging.info("Starting to scan through DocDb.")
-        iterator_docdb_client = MongoClient(
+        iterator_docdb_client = MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            port=self.job_settings.doc_db_port,
-            retryWrites=False,
-            directConnection=True,
-            username=self.job_settings.doc_db_user_name,
-            password=self.job_settings.doc_db_password.get_secret_value(),
-            authSource="admin",
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
         )
         # Use existing client to add external links to fields
         logging.info("Adding links to records.")
@@ -447,9 +421,7 @@ class CodeOceanIndexBucketJob:
         logging.info("Finished adding links to records")
         all_docdb_records = dict()
         docdb_pages = paginate_docdb(
-            db_name=self.job_settings.doc_db_db_name,
-            docdb_client=iterator_docdb_client,
-            collection_name=self.job_settings.doc_db_collection_name,
+            docdb_api_client=iterator_docdb_client,
             page_size=500,
             filter_query={
                 "location": {
