@@ -822,6 +822,8 @@ def get_all_processed_codeocean_asset_records(
             type=DataAssetType.Result,
             query=f"tag:{tag}",
             archived=False,
+            origin=DataAssetSearchOrigin.Internal,
+            limit=1000,
         )
         iter_response = co_client.data_assets.search_data_assets_iterator(
             search_params=search_params
