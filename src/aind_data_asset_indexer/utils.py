@@ -21,6 +21,7 @@ from aind_data_schema.core.metadata import (
 from botocore.exceptions import ClientError
 from codeocean import CodeOcean
 from codeocean.data_asset import (
+    DataAssetSearchOrigin,
     DataAssetSearchParams,
     DataAssetState,
     DataAssetType,
@@ -818,7 +819,9 @@ def get_all_processed_codeocean_asset_records(
 
     for tag in {DataLevel.DERIVED.value, "processed"}:
         search_params = DataAssetSearchParams(
-            type=DataAssetType.Result, query=f"tag:{tag}"
+            type=DataAssetType.Result,
+            query=f"tag:{tag}",
+            archived=False,
         )
         iter_response = co_client.data_assets.search_data_assets_iterator(
             search_params=search_params
