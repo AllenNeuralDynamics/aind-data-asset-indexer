@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import boto3
 import dask.bag as dask_bag
@@ -126,24 +126,23 @@ class CodeOceanIndexBucketJob:
         return new_records
 
     @staticmethod
-    def _get_co_links_from_record(
-        docdb_record: Union[dict, list],
-    ) -> List[str]:
+    def _get_co_links_from_record(docdb_record: dict) -> List[str]:
         """
         Small utility to parse the external_links field of the docdb record.
-        Supports the legacy type.
+        Supports the legacy type for the external_links field.
 
         Parameters
         ----------
-        docdb_record : dict | list
-          The legacy type was a list, while the current version is a dict.
+        docdb_record : dict
+          The legacy external_links type was a list, while the current
+          version is a dict.
 
         Returns
         -------
         List[str]
 
         """
-        external_links = docdb_record.get("external_links", [])
+        external_links = docdb_record.get("external_links", dict())
 
         # Hopefully, ExternalPlatforms.CODEOCEAN doesn't change
         if isinstance(external_links, dict):
@@ -207,18 +206,16 @@ class CodeOceanIndexBucketJob:
                         else co_loc_to_id_map.get(location)
                     )
                     docdb_rec_id = record["_id"]
-                    if (
-                        external_links is not None
-                        and code_ocean_ids is not None
-                        and code_ocean_ids != set(external_links)
+                    if code_ocean_ids is not None and code_ocean_ids != set(
+                        external_links
                     ):
                         new_external_links = code_ocean_ids
-                    elif external_links is not None and not code_ocean_ids:
+                    elif external_links and not code_ocean_ids:
                         logging.info(
                             f"No code ocean data asset ids found for "
                             f"{location}. Removing external links from record."
                         )
-                        new_external_links = dict()
+                        new_external_links = set()
                     else:
                         new_external_links = None
                     if new_external_links is not None:
