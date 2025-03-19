@@ -266,6 +266,11 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                     "location": "s3://bucket2/prefix3",
                     "external_links": [{"Code Ocean": "xyz-789"}],
                 },
+                {
+                    "_id": "0003",
+                    "location": "s3://bucket2/prefix4",
+                    "external_links": [],
+                },
             ]
         ]
 
