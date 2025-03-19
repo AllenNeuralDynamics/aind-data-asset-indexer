@@ -811,10 +811,6 @@ def get_all_processed_codeocean_asset_records(
 
     """
 
-    # We need to break up the search query until Code Ocean fixes a bug in
-    # their search API. This may still break if the number of records in an
-    # individual response exceeds 10,000
-
     all_responses = dict()
 
     for tag in {DataLevel.DERIVED.value, "processed"}:
