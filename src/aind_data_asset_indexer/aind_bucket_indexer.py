@@ -443,7 +443,13 @@ class AindIndexBucketJob:
                         }
                     )
                     logging.debug(response.json())
-                docdb_record.update(fields_to_update)
+                    # Pull record from docdb to get new last_modified as well
+                    docdb_response = docdb_client.retrieve_docdb_records(
+                        filter_query={"_id": docdb_record["_id"]},
+                        paginate=False,
+                    )
+                    docdb_record = docdb_response[0]
+                # Sync docdb record to metadata.nd.json in root folder
                 metadata_nd_json_info = get_dict_of_file_info(
                     s3_client=s3_client,
                     bucket=s3_bucket,

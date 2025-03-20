@@ -893,6 +893,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_record = deepcopy(self.example_md_record)
         # Assume the subject is null in docdb
         mock_docdb_record["subject"] = None
+        # Record after updating fields_to_update
+        expected_docdb_record_to_write = deepcopy(self.example_md_record)
+        expected_docdb_record_to_write["last_modified"] = "new_last_modified"
+        mock_docdb_client.retrieve_docdb_records.return_value = [
+            expected_docdb_record_to_write
+        ]
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_docdb_record(
@@ -908,9 +914,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
             f"DEBUG:root:{upsert_response}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        expected_docdb_record_to_write = deepcopy(mock_docdb_record)
-        expected_docdb_record_to_write["subject"] = self.example_md_record.get(
-            "subject"
+        mock_docdb_client.upsert_one_docdb_record.assert_called_once_with(
+            record={
+                "_id": self.example_md_record.get("_id"),
+                "subject": self.example_md_record.get("subject"),
+            }
+        )
+        mock_docdb_client.retrieve_docdb_records.assert_called_once_with(
+            filter_query={"_id": self.example_md_record.get("_id")},
+            paginate=False,
         )
         mock_write_root_file_with_record_info.assert_called_once_with(
             s3_client=mock_s3_client,
