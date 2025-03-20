@@ -1639,8 +1639,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job.run_job()
+        expected_filter = {
+            "location": {"$regex": "^s3://aind-ephys-data-dev-u5u0i5.*"}
+        }
         expected_log_messages = [
-            "INFO:root:Starting to scan through DocDb.",
+            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
             "INFO:root:Finished scanning through DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
@@ -1655,6 +1658,87 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 self.example_md_record1,
                 self.example_md_record2,
             ]
+        )
+        mock_process_prefixes.assert_called_once_with(
+            prefixes=[
+                "ecephys_642478_2023-01-17_13-56-29/",
+                "ecephys_567890_2000-01-01_04-00-00/",
+                "ecephys_655019_2000-01-01_01-01-02/",
+            ]
+        )
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_prefixes"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "iterate_through_top_level"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_records"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.datetime")
+    def test_run_job_lookback_days(
+        self,
+        mock_datetime: MagicMock,
+        mock_boto3_client: MagicMock,
+        mock_paginate: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_records: MagicMock,
+        mock_iterate_prefixes: MagicMock,
+        mock_process_prefixes: MagicMock,
+    ):
+        """Tests main run_job method when lookback_days is set."""
+
+        job_configs_json = self.basic_job_configs.model_dump(mode="json")
+        job_configs_json["lookback_days"] = 3
+        job_configs = AindIndexBucketJobSettings(**job_configs_json)
+        job = AindIndexBucketJob(job_settings=job_configs)
+
+        mock_datetime.now.return_value = datetime(
+            2025, 3, 20, tzinfo=timezone.utc
+        )
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        mock_paginate.return_value = iter([[self.example_md_record]])
+        mock_iterate_prefixes.return_value = iter(
+            [
+                [
+                    "ecephys_642478_2023-01-17_13-56-29/",
+                    "ecephys_567890_2000-01-01_04-00-00/",
+                    "ecephys_655019_2000-01-01_01-01-02/",
+                ]
+            ]
+        )
+        with self.assertLogs(level="DEBUG") as captured:
+            job.run_job()
+
+        expected_filter = {
+            "location": {"$regex": "^s3://aind-ephys-data-dev-u5u0i5.*"},
+            "last_modified": {"$gte": "2025-03-17T00:00:00Z"},
+        }
+        expected_log_messages = [
+            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through DocDb.",
+            "INFO:root:Starting to scan through S3.",
+            "INFO:root:Finished scanning through S3.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
+        mock_datetime.now.assert_called_once_with(timezone.utc)
+        mock_docdb_client.return_value.__exit__.assert_called_once()
+        mock_s3_client.close.assert_called_once()
+        mock_process_records.assert_called_once_with(
+            records=[self.example_md_record]
         )
         mock_process_prefixes.assert_called_once_with(
             prefixes=[

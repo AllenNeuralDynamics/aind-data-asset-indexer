@@ -18,7 +18,7 @@ class IndexJobSettings(BaseSettings):
     lookback_days: Optional[int] = Field(
         default=None,
         description=(
-            "Records from S3 and DocDB will be filtered by this date time. If "
+            "Records from DocDB will be filtered by this date time. If "
             "set to None, then all records will be processed."
         ),
     )

@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import warnings
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import boto3
@@ -690,7 +691,7 @@ class AindIndexBucketJob:
 
     def _process_prefixes(self, prefixes: List[str]):
         """
-        For a list of prefixes (up to a 1000 in the list), divvy up the list
+        For a list of prefixes (up to 1000 in the list), divvy up the list
         across n_partitions. Process the set of prefixes in each partition.
 
         Parameters
@@ -708,16 +709,24 @@ class AindIndexBucketJob:
 
     def run_job(self):
         """Main method to run."""
-        logging.info("Starting to scan through DocDb.")
         with self._create_docdb_client() as iterator_docdb_client:
+            filter = {
+                "location": {
+                    "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                }
+            }
+            if self.job_settings.lookback_days is not None:
+                lookback_utc = datetime.now(timezone.utc) - timedelta(
+                    days=self.job_settings.lookback_days
+                )
+                filter["last_modified"] = {
+                    "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
+                }
+            logging.info(f"Starting to scan through DocDb: {filter}")
             docdb_pages = paginate_docdb(
                 docdb_api_client=iterator_docdb_client,
                 page_size=500,
-                filter_query={
-                    "location": {
-                        "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
-                    }
-                },
+                filter_query=filter,
             )
             for page in docdb_pages:
                 if len(page) > 0:
