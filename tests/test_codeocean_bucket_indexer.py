@@ -436,7 +436,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = self.example_codeocean_records
         self.basic_job._dask_task_to_process_record_list(record_list=records)
         mock_process_codeocean_record.assert_has_calls(
@@ -454,7 +456,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
@@ -473,7 +475,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = self.example_codeocean_records
         mock_process_codeocean_record.side_effect = [
             Exception("Error processing record"),
@@ -504,7 +508,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_codeocean_records(
@@ -525,8 +529,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_response.json = MagicMock(
             return_value={"acknowledged": True, "deletedCount": 2}
         )
-        mock_docdb_client.return_value.delete_many_records.return_value = (
-            mock_response
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.return_value = mock_response
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
         )
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
         with self.assertLogs(level="DEBUG") as captured:
@@ -544,8 +550,12 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self, mock_docdb_client: MagicMock
     ):
         """Tests _dask_task_to_delete_record_list"""
-        mock_docdb_client.return_value.delete_many_records.side_effect = (
-            Exception("Error deleting records")
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.side_effect = Exception(
+            "Error deleting records"
+        )
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
         )
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
         with self.assertLogs(level="DEBUG") as captured:
@@ -602,7 +612,9 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         """Tests run_job method. Given the example responses, should ignore
         one record, add one record, and delete one record."""
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         mock_co_client = MagicMock()
         mock_codeocean_client.return_value = mock_co_client
         mock_get_all_co_records.return_value = dict(
@@ -634,7 +646,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_delete_records_from_docdb.assert_called_once_with(
             record_list=["efg-456"]
         )
-        mock_docdb_api_client.close.assert_called_once()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
 
 if __name__ == "__main__":

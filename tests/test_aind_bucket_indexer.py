@@ -936,7 +936,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = [
             self.example_md_record,
             self.example_md_record1,
@@ -963,7 +965,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -982,7 +984,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = [
             self.example_md_record,
             self.example_md_record1,
@@ -1025,7 +1029,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_records(self, mock_dask_bag_map_parts: MagicMock):
@@ -1450,7 +1454,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1489,7 +1495,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1513,7 +1519,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1566,7 +1574,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_prefixes(self, mock_dask_bag_map_parts: MagicMock):
@@ -1608,7 +1616,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         mock_paginate.return_value = iter(
             [
                 [
@@ -1637,7 +1647,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-        mock_docdb_api_client.close.assert_called_once()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
         mock_s3_client.close.assert_called_once()
         mock_process_records.assert_called_once_with(
             records=[

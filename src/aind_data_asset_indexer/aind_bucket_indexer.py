@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
+import requests
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.utils import (
     get_s3_bucket_and_prefix,
@@ -18,6 +19,8 @@ from aind_data_access_api.utils import (
 )
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -72,6 +75,24 @@ class AindIndexBucketJob:
     def __init__(self, job_settings: AindIndexBucketJobSettings):
         """Class constructor."""
         self.job_settings = job_settings
+
+    def _create_docdb_client(self) -> MetadataDbClient:
+        """Create a MetadataDbClient with custom retries."""
+        retry = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST", "DELETE"],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        return MetadataDbClient(
+            host=self.job_settings.doc_db_host,
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
+            session=session,
+        )
 
     def _write_root_file_with_record_info(
         self,
@@ -453,25 +474,20 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        doc_db_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-        for record in record_list:
-            try:
-                self._process_docdb_record(
-                    docdb_record=record,
-                    docdb_client=doc_db_client,
-                    s3_client=s3_client,
-                )
-            except Exception as e:
-                logging.error(
-                    f'Error processing docdb {record.get("_id")}, '
-                    f'{record.get("location")}: {repr(e)}'
-                )
+        with self._create_docdb_client() as doc_db_client:
+            for record in record_list:
+                try:
+                    self._process_docdb_record(
+                        docdb_record=record,
+                        docdb_client=doc_db_client,
+                        s3_client=s3_client,
+                    )
+                except Exception as e:
+                    logging.error(
+                        f'Error processing docdb {record.get("_id")}, '
+                        f'{record.get("location")}: {repr(e)}'
+                    )
         s3_client.close()
-        doc_db_client.close()
 
     def _process_records(self, records: List[dict]):
         """
@@ -647,36 +663,30 @@ class AindIndexBucketJob:
         prefix_list : List[str]
 
         """
-        # create a s3_client here since dask doesn't serialize it
+        # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        doc_db_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-        # For the given prefix list, download all the records from docdb
-        # with those locations.
-        location_to_id_map = build_docdb_location_to_id_map(
-            bucket=self.job_settings.s3_bucket,
-            prefixes=prefix_list,
-            docdb_api_client=doc_db_client,
-        )
-        for prefix in prefix_list:
-            try:
-                self._process_prefix(
-                    s3_prefix=prefix,
-                    s3_client=s3_client,
-                    location_to_id_map=location_to_id_map,
-                    docdb_client=doc_db_client,
-                )
-            except Exception as e:
-                logging.error(
-                    f"Error processing "
-                    f"{get_s3_location(self.job_settings.s3_bucket, prefix)}: "
-                    f"{repr(e)}"
-                )
+        with self._create_docdb_client() as doc_db_client:
+            # For the given prefix list, download all the records from docdb
+            # with those locations.
+            location_to_id_map = build_docdb_location_to_id_map(
+                bucket=self.job_settings.s3_bucket,
+                prefixes=prefix_list,
+                docdb_api_client=doc_db_client,
+            )
+            for prefix in prefix_list:
+                try:
+                    self._process_prefix(
+                        s3_prefix=prefix,
+                        s3_client=s3_client,
+                        location_to_id_map=location_to_id_map,
+                        docdb_client=doc_db_client,
+                    )
+                except Exception as e:
+                    location = get_s3_location(
+                        self.job_settings.s3_bucket, prefix
+                    )
+                    logging.error(f"Error processing {location}: {repr(e)}")
         s3_client.close()
-        doc_db_client.close()
 
     def _process_prefixes(self, prefixes: List[str]):
         """
@@ -699,24 +709,18 @@ class AindIndexBucketJob:
     def run_job(self):
         """Main method to run."""
         logging.info("Starting to scan through DocDb.")
-        iterator_docdb_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-
-        docdb_pages = paginate_docdb(
-            docdb_api_client=iterator_docdb_client,
-            page_size=500,
-            filter_query={
-                "location": {
-                    "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
-                }
-            },
-        )
-        for page in docdb_pages:
-            self._process_records(records=page)
-        iterator_docdb_client.close()
+        with self._create_docdb_client() as iterator_docdb_client:
+            docdb_pages = paginate_docdb(
+                docdb_api_client=iterator_docdb_client,
+                page_size=500,
+                filter_query={
+                    "location": {
+                        "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                    }
+                },
+            )
+            for page in docdb_pages:
+                self._process_records(records=page)
         logging.info("Finished scanning through DocDb.")
         logging.info("Starting to scan through S3.")
         iterator_s3_client = boto3.client("s3")
