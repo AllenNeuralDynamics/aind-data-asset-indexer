@@ -630,6 +630,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "INFO:root:Adding links to records.",
             "INFO:root:Finished adding links to records",
             "INFO:root:Finished scanning through DocDB.",
+            "INFO:root:1 records to add to DocDB.",
+            "INFO:root:1 records to delete from DocDB.",
             "INFO:root:Starting to add records to DocDB.",
             "INFO:root:Finished adding records to DocDB.",
             "INFO:root:Starting to delete records from DocDB.",

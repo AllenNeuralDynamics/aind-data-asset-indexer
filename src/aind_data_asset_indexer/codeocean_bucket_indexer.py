@@ -311,7 +311,7 @@ class CodeOceanIndexBucketJob:
     def _dask_task_to_process_record_list(self, record_list: List[dict]):
         """
         The task to perform within a partition. If n_partitions is set to 20
-        and the outer prefix list had length 1000, then this should process
+        and the outer record list had length 1000, then this should process
         50 code ocean records.
 
         Parameters
@@ -356,7 +356,7 @@ class CodeOceanIndexBucketJob:
     def _dask_task_to_delete_record_list(self, record_list: List[str]):
         """
         The task to perform within a partition. If n_partitions is set to 20
-        and the outer prefix list had length 1000, then this should process
+        and the outer record list had length 1000, then this should process
         50 ids.
 
         Parameters
@@ -444,13 +444,17 @@ class CodeOceanIndexBucketJob:
             records_to_add.append(code_ocean_records[location])
         for location in docdb_locations - codeocean_locations:
             records_to_delete.append(all_docdb_records[location])
+        logging.info(f"{len(records_to_add)} records to add to DocDB.")
+        logging.info(f"{len(records_to_delete)} records to delete from DocDB.")
 
-        logging.info("Starting to add records to DocDB.")
-        self._process_codeocean_records(records=records_to_add)
-        logging.info("Finished adding records to DocDB.")
-        logging.info("Starting to delete records from DocDB.")
-        self._delete_records_from_docdb(record_list=records_to_delete)
-        logging.info("Finished deleting records from DocDB.")
+        if len(records_to_add) > 0:
+            logging.info("Starting to add records to DocDB.")
+            self._process_codeocean_records(records=records_to_add)
+            logging.info("Finished adding records to DocDB.")
+        if len(records_to_delete) > 0:
+            logging.info("Starting to delete records from DocDB.")
+            self._delete_records_from_docdb(record_list=records_to_delete)
+            logging.info("Finished deleting records from DocDB.")
 
 
 if __name__ == "__main__":

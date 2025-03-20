@@ -461,8 +461,8 @@ class AindIndexBucketJob:
     ) -> None:
         """
         The task to perform within a partition. If n_partitions is set to 20
-        and the outer record list had length 1000, then this should process
-        50 records.
+        and the outer record list had length 500, then this should process
+        25 records.
 
         Parameters
         ----------
@@ -491,7 +491,7 @@ class AindIndexBucketJob:
 
     def _process_records(self, records: List[dict]):
         """
-        For a list of records (up to a 1000 in the list), divvy up the list
+        For a list of records (up to 500 in the list), divvy up the list
         across n_partitions. Process the set of records in each partition.
 
         Parameters
@@ -720,7 +720,8 @@ class AindIndexBucketJob:
                 },
             )
             for page in docdb_pages:
-                self._process_records(records=page)
+                if len(page) > 0:
+                    self._process_records(records=page)
         logging.info("Finished scanning through DocDb.")
         logging.info("Starting to scan through S3.")
         iterator_s3_client = boto3.client("s3")
@@ -728,9 +729,8 @@ class AindIndexBucketJob:
             s3_client=iterator_s3_client, bucket=self.job_settings.s3_bucket
         )
         for prefix_list in prefix_iterator:
-            self._process_prefixes(
-                prefixes=prefix_list,
-            )
+            if len(prefix_list) > 0:
+                self._process_prefixes(prefixes=prefix_list)
         iterator_s3_client.close()
         logging.info("Finished scanning through S3.")
 
