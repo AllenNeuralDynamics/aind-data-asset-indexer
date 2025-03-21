@@ -329,6 +329,11 @@ class CodeOceanIndexBucketJob:
                         docdb_client=doc_db_client,
                         s3_client=s3_client,
                     )
+                except requests.HTTPError as e:
+                    logging.error(
+                        f'Error processing {record.get("location")}: {repr(e)}'
+                        f". Response Body: {e.response.text}"
+                    )
                 except Exception as e:
                     logging.error(
                         f'Error processing {record.get("location")}: {repr(e)}'

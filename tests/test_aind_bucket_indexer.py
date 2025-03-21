@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-from requests import Response
+from requests import HTTPError, Response
 
 from aind_data_asset_indexer.aind_bucket_indexer import AindIndexBucketJob
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
@@ -1015,8 +1015,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_process_docdb_record: MagicMock,
     ):
-        """Tests _dask_task_to_process_record_list when there is an error in 1
-        record."""
+        """Tests _dask_task_to_process_record_list when there are errors."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_delete_response = Response()
@@ -1036,8 +1035,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
             self.example_md_record1,
             self.example_md_record2,
         ]
+        http_error_response = MagicMock(spec=Response)
+        http_error_response.status_code = 400
+        http_error_response.text = "MongoServerError"
         mock_process_docdb_record.side_effect = [
-            None,
+            HTTPError(response=http_error_response),
             Exception("Error processing record"),
             self.example_md_record2.get("_id"),
         ]
@@ -1046,6 +1048,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 record_list=records
             )
         expected_log_messages = [
+            "ERROR:root:Error processing docdb "
+            "488bbe42-832b-4c37-8572-25eb87cc50e2, "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29: "
+            "HTTPError(). Response Body: MongoServerError",
             "ERROR:root:Error processing docdb "
             "5ca4a951-d374-4f4b-8279-d570a35b2286, "
             "s3://aind-ephys-data-dev-u5u0i5/"
@@ -1610,8 +1617,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_process_prefix: MagicMock,
         mock_build_location_to_id_map: MagicMock,
     ):
-        """Tests _dask_task_to_process_prefix_list when there is an error in 1
-        prefix."""
+        """Tests _dask_task_to_process_prefix_list when there are errors."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
@@ -1632,8 +1638,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ),
         }
         mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        http_error_response = MagicMock(spec=Response)
+        http_error_response.status_code = 400
+        http_error_response.text = "MongoServerError"
         mock_process_prefix.side_effect = [
-            None,
+            HTTPError(response=http_error_response),
             Exception("Error processing prefix"),
             None,
         ]
@@ -1643,8 +1652,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
             )
         expected_log_messages = [
             "ERROR:root:Error processing s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29: "
+            "HTTPError(). Response Body: MongoServerError",
+            "ERROR:root:Error processing s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_567890_2000-01-01_04-00-00: "
-            "Exception('Error processing prefix')"
+            "Exception('Error processing prefix')",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_process_prefix.assert_has_calls(

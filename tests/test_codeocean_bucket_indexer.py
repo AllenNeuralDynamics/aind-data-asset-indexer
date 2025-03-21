@@ -14,7 +14,7 @@ from codeocean.data_asset import (
     DataAssetType,
     SourceBucket,
 )
-from requests import Response
+from requests import HTTPError, Response
 
 from aind_data_asset_indexer.codeocean_bucket_indexer import (
     CodeOceanIndexBucketJob,
@@ -470,8 +470,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_docdb_client: MagicMock,
         mock_process_codeocean_record: MagicMock,
     ):
-        """Tests _dask_task_to_process_record_list when there is an error in 1
-        record"""
+        """Tests _dask_task_to_process_record_list when there are errors."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
@@ -479,9 +478,12 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             mock_docdb_api_client
         )
         records = self.example_codeocean_records
+        http_error_response = MagicMock(spec=Response)
+        http_error_response.status_code = 400
+        http_error_response.text = "MongoServerError"
         mock_process_codeocean_record.side_effect = [
+            HTTPError(response=http_error_response),
             Exception("Error processing record"),
-            None,
         ]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_process_record_list(
@@ -490,7 +492,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         expected_log_messages = [
             "ERROR:root:Error processing "
             "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11: "
-            "Exception('Error processing record')"
+            "HTTPError(). Response Body: MongoServerError",
+            "ERROR:root:Error processing "
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666: "
+            "Exception('Error processing record')",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_process_codeocean_record.assert_has_calls(
