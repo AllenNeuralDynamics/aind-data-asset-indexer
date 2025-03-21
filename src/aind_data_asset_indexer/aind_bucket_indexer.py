@@ -689,7 +689,7 @@ class AindIndexBucketJob:
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
         with self._create_docdb_client() as doc_db_client:
-            # For the given prefix list, download all the records from docdb
+            # For the given prefix list, get record ids from docdb
             # with those locations.
             location_to_id_map = build_docdb_location_to_id_map(
                 bucket=self.job_settings.s3_bucket,
