@@ -46,7 +46,10 @@ runs the `AindIndexBucketJob` for a list of buckets.
 
 The workflow is generally as follows:
 
-1. Paginate DocDB to get all records for a particular bucket.
+1. Paginate DocDB to get records for a particular bucket.
+
+   -  Typically we filter for records that have been updated in the last
+      14 days.
 2. For each DocDB record, process by syncing any changes in DocDB to S3.
 
    -  If the record does not have a valid location, log a warning.

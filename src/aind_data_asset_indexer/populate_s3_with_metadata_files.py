@@ -9,13 +9,13 @@ from typing import List
 
 import boto3
 import dask.bag as dask_bag
+from aind_data_access_api.utils import get_s3_location
 from mypy_boto3_s3 import S3Client
 
 from aind_data_asset_indexer.models import IndexJobSettings
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
     cond_copy_then_sync_core_json_files,
-    get_s3_location,
     is_prefix_valid,
     iterate_through_top_level,
     upload_metadata_json_str_to_s3,

@@ -48,19 +48,15 @@ Running indexer jobs locally
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-The jobs are intended to be run as scheduled AWS ECS tasks in the same VPC
-as the DocDB instance. The job settings are stored in AWS Parameter Store.
+The jobs are intended to be run as scheduled AWS ECS tasks.
+The job settings are stored in AWS Parameter Store.
 
 If you wish to run the jobs locally, follow these steps:
 
-1. In a new terminal, start ssh session. Credentials can be found in AWS
-   Secrets Manager.
+1. Ensure the correct ``AWS_PROFILE`` is exported. This profile will be used to
+   read/write from S3 bucketsand DocumentDB (through the API Gateway).
 
-.. code:: bash
-
-   ssh -L 27017:{docdb_host}:27017 {ssh_username}@{ssh_host} -N -v
-
-2. For the `IndexAindBucketsJob`, you will need to set the ``INDEXER_PARAM_NAME``.
+2. For the `IndexAindBucketsJob`, you will need to set the ``PARAM_STORE_NAME``.
    Then, run the following:
 
 .. code:: python
@@ -69,13 +65,12 @@ If you wish to run the jobs locally, follow these steps:
    from aind_data_asset_indexer.models import AindIndexBucketsJobSettings
 
    if __name__ == "__main__":
-      main_job_settings = AindIndexBucketsJobSettings.from_param_store(param_store_name=INDEXER_PARAM_NAME)
-      main_job_settings.doc_db_host = "localhost"
+      main_job_settings = AindIndexBucketsJobSettings.from_param_store(param_store_name=PARAM_STORE_NAME)
       main_job = IndexAindBucketsJob(job_settings=main_job_settings)
       main_job.run_job()
 
-3. For the `CodeOceanIndexBucketJob`, you will need to set the ``CO_INDEXER_PARAM_NAME``
-   and ``DEVELOPER_CODEOCEAN_ENDPOINT``. Then, run the following:
+3. For the `CodeOceanIndexBucketJob`, you will need to set the ``PARAM_STORE_NAME_CO_JOB``.
+   Then, run the following:
 
 .. code:: python
 
@@ -83,14 +78,11 @@ If you wish to run the jobs locally, follow these steps:
    from aind_data_asset_indexer.codeocean_bucket_indexer import CodeOceanIndexBucketJob
 
    if __name__ == "__main__":
-      main_job_settings = CodeOceanIndexBucketJobSettings.from_param_store(param_store_name=CO_INDEXER_PARAM_NAME)
-      main_job_settings.doc_db_host = "localhost"
-      main_job_settings.temp_codeocean_endpoint=DEVELOPER_CODEOCEAN_ENDPOINT
+      main_job_settings = CodeOceanIndexBucketJobSettings.from_param_store(param_store_name=PARAM_STORE_NAME_CO_JOB)
       main_job = CodeOceanIndexBucketJob(job_settings=main_job_settings)
       main_job.run_job()
 
-4. Close the ssh session when you are done.
-
+4. Alternatively, run both jobs by running the script at ``/scripts/run.sh``.
 
 Branches and Pull Requests
 --------------------------

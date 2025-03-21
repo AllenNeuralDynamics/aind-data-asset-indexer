@@ -20,9 +20,6 @@ class TestIndexAindBucketsJob(unittest.TestCase):
         job_settings = AindIndexBucketsJobSettings(
             s3_buckets=["bucket1", "bucket2"],
             doc_db_host="some_docdb_host",
-            doc_db_port=12345,
-            doc_db_password="some_docdb_password",
-            doc_db_user_name="some_docdb_username",
             doc_db_db_name="some_docdb_dbname",
             doc_db_collection_name="some_docdb_collection_name",
         )
