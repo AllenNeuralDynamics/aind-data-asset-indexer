@@ -494,6 +494,12 @@ class AindIndexBucketJob:
                     )
                     if docdb_id_to_delete is not None:
                         records_to_delete.append(docdb_id_to_delete)
+                except requests.HTTPError as e:
+                    logging.error(
+                        f"Error processing docdb {record.get('_id')}, "
+                        f"{record.get('location')}: {repr(e)}. "
+                        f"Response Body: {e.response.text}"
+                    )
                 except Exception as e:
                     logging.error(
                         f'Error processing docdb {record.get("_id")}, '
@@ -703,6 +709,14 @@ class AindIndexBucketJob:
                         s3_client=s3_client,
                         location_to_id_map=location_to_id_map,
                         docdb_client=doc_db_client,
+                    )
+                except requests.HTTPError as e:
+                    location = get_s3_location(
+                        self.job_settings.s3_bucket, prefix
+                    )
+                    logging.error(
+                        f"Error processing {location}: {repr(e)}. "
+                        f"Response Body: {e.response.text}"
                     )
                 except Exception as e:
                     location = get_s3_location(
