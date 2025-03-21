@@ -748,7 +748,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         is not a valid s3 url"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -764,6 +764,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "aind-ephys-data-dev-u5u0i5!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -776,7 +777,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         has invalid prefix"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -790,6 +791,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "not valid for bucket aind-ephys-data-dev-u5u0i5!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
@@ -802,16 +804,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
     ):
         """Tests _process_docdb_record when the s3 metadata.nd.json file is
         missing."""
-        mock_response = Response()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={"acknowledged": True, "deletedCount": 1}
-        )
-        mock_docdb_client.delete_one_record.return_value = mock_response
-
         mock_does_s3_object_exist.return_value = False
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=self.example_md_record,
@@ -820,10 +815,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "WARNING:root:File not found in S3 at "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json! "
-            "Removing metadata record from DocDb.",
-            "DEBUG:root:{'acknowledged': True, 'deletedCount': 1}",
+            "Will delete metadata record from DocDb.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertEqual(self.example_md_record["_id"], docdb_id_to_delete)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -901,7 +896,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=mock_docdb_record,
@@ -931,6 +926,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             docdb_record_contents=expected_docdb_record_to_write,
         )
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -947,7 +943,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
+        mock_delete_response = Response()
+        mock_delete_response.status_code = 200
+        mock_delete_response.json = MagicMock(
+            return_value={"acknowledged": True, "deletedCount": 2}
+        )
         mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.return_value = (
+            mock_delete_response
+        )
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
@@ -956,7 +960,21 @@ class TestAindIndexBucketJob(unittest.TestCase):
             self.example_md_record1,
             self.example_md_record2,
         ]
-        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        # Assume 2 records need to be deleted
+        mock_process_docdb_record.side_effect = [
+            None,
+            self.example_md_record1.get("_id"),
+            self.example_md_record2.get("_id"),
+        ]
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "INFO:root:Deleting 2 records in DocDb.",
+            "INFO:root:{'acknowledged': True, 'deletedCount': 2}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
             [
                 call(
@@ -974,6 +992,12 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
+            ]
+        )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[
+                self.example_md_record1.get("_id"),
+                self.example_md_record2.get("_id"),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
@@ -995,7 +1019,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
         record."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
+        mock_delete_response = Response()
+        mock_delete_response.status_code = 200
+        mock_delete_response.json = MagicMock(
+            return_value={"acknowledged": True, "deletedCount": 1}
+        )
         mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.return_value = (
+            mock_delete_response
+        )
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
@@ -1007,7 +1039,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_process_docdb_record.side_effect = [
             None,
             Exception("Error processing record"),
-            None,
+            self.example_md_record2.get("_id"),
         ]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_process_record_list(
@@ -1018,7 +1050,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "5ca4a951-d374-4f4b-8279-d570a35b2286, "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_567890_2000-01-01_04-00-00: "
-            "Exception('Error processing record')"
+            "Exception('Error processing record')",
+            "INFO:root:Deleting 1 records in DocDb.",
+            "INFO:root:{'acknowledged': True, 'deletedCount': 1}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
@@ -1039,6 +1073,56 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_client=mock_s3_client,
                 ),
             ]
+        )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[self.example_md_record2.get("_id")]
+        )
+        mock_s3_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_docdb_record"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("boto3.client")
+    def test_dask_task_to_process_record_list_error_delete(
+        self,
+        mock_boto3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_docdb_record: MagicMock,
+    ):
+        """Tests _dask_task_to_process_record_list when there is an error
+        deleting records."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.side_effect = Exception(
+            "Error"
+        )
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        records = [self.example_md_record]
+        mock_process_docdb_record.return_value = self.example_md_record.get(
+            "_id"
+        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "INFO:root:Deleting 1 records in DocDb.",
+            "ERROR:root:Error deleting records: Exception('Error')",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        mock_process_docdb_record.assert_called_once_with(
+            docdb_record=self.example_md_record,
+            docdb_client=mock_docdb_api_client,
+            s3_client=mock_s3_client,
+        )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[self.example_md_record.get("_id")]
         )
         mock_s3_client.close.assert_called_once_with()
         mock_docdb_client.return_value.__exit__.assert_called_once()

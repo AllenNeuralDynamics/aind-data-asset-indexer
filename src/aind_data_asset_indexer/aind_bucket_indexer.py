@@ -360,11 +360,12 @@ class AindIndexBucketJob:
         docdb_record: dict,
         docdb_client: MetadataDbClient,
         s3_client: S3Client,
-    ):
+    ) -> Optional[str]:
         """
         For a given record,
         1. Check if its location field is valid. If not, log a warning.
-        2. Check if it needs to be deleted (no s3 object found)
+        2. Check if it needs to be deleted (no s3 object found). If so, the
+        record id is returned for batch deletion.
         3. If there is an s3 object, then overwrite the s3 object if the docdb
         is different. Also resolves the core schema json files in the root
         folder and the original_metadata folder to ensure they are in sync.
@@ -377,9 +378,12 @@ class AindIndexBucketJob:
 
         Returns
         -------
-        None
+        Optional[str]
+          The record id to delete from DocDb. If None, then the record does
+          not require deletion.
 
         """
+        docdb_id_to_delete = None
         if not is_record_location_valid(
             docdb_record, self.job_settings.s3_bucket
         ):
@@ -402,12 +406,9 @@ class AindIndexBucketJob:
                 logging.warning(
                     f"File not found in S3 at "
                     f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
-                    f"Removing metadata record from DocDb."
+                    f"Will delete metadata record from DocDb."
                 )
-                response = docdb_client.delete_one_record(
-                    data_asset_record_id=docdb_record["_id"]
-                )
-                logging.debug(response.json())
+                docdb_id_to_delete = docdb_record["_id"]
             else:  # There is a metadata.nd.json file in S3.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -462,6 +463,7 @@ class AindIndexBucketJob:
                     prefix=prefix,
                     docdb_record_contents=docdb_record,
                 )
+        return docdb_id_to_delete
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
@@ -482,18 +484,32 @@ class AindIndexBucketJob:
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
         with self._create_docdb_client() as doc_db_client:
+            records_to_delete = []
             for record in record_list:
                 try:
-                    self._process_docdb_record(
+                    docdb_id_to_delete = self._process_docdb_record(
                         docdb_record=record,
                         docdb_client=doc_db_client,
                         s3_client=s3_client,
                     )
+                    if docdb_id_to_delete is not None:
+                        records_to_delete.append(docdb_id_to_delete)
                 except Exception as e:
                     logging.error(
                         f'Error processing docdb {record.get("_id")}, '
                         f'{record.get("location")}: {repr(e)}'
                     )
+            if len(records_to_delete) > 0:
+                try:
+                    logging.info(
+                        f"Deleting {len(records_to_delete)} records in DocDb."
+                    )
+                    response = doc_db_client.delete_many_records(
+                        data_asset_record_ids=records_to_delete
+                    )
+                    logging.info(response.json())
+                except Exception as e:
+                    logging.error(f"Error deleting records: {repr(e)}")
         s3_client.close()
 
     def _process_records(self, records: List[dict]):
