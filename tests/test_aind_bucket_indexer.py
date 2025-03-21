@@ -748,7 +748,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         is not a valid s3 url"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -764,6 +764,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "aind-ephys-data-dev-u5u0i5!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -776,7 +777,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         has invalid prefix"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -790,6 +791,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "not valid for bucket aind-ephys-data-dev-u5u0i5!"
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
@@ -802,16 +804,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
     ):
         """Tests _process_docdb_record when the s3 metadata.nd.json file is
         missing."""
-        mock_response = Response()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={"acknowledged": True, "deletedCount": 1}
-        )
-        mock_docdb_client.delete_one_record.return_value = mock_response
-
         mock_does_s3_object_exist.return_value = False
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=self.example_md_record,
@@ -820,10 +815,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "WARNING:root:File not found in S3 at "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json! "
-            "Removing metadata record from DocDb.",
-            "DEBUG:root:{'acknowledged': True, 'deletedCount': 1}",
+            "Will delete metadata record from DocDb.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
+        self.assertEqual(self.example_md_record["_id"], docdb_id_to_delete)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -893,9 +888,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_record = deepcopy(self.example_md_record)
         # Assume the subject is null in docdb
         mock_docdb_record["subject"] = None
+        # Record after updating fields_to_update
+        expected_docdb_record_to_write = deepcopy(self.example_md_record)
+        expected_docdb_record_to_write["last_modified"] = "new_last_modified"
+        mock_docdb_client.retrieve_docdb_records.return_value = [
+            expected_docdb_record_to_write
+        ]
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            docdb_id_to_delete = self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=mock_docdb_record,
@@ -908,9 +909,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
             f"DEBUG:root:{upsert_response}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        expected_docdb_record_to_write = deepcopy(mock_docdb_record)
-        expected_docdb_record_to_write["subject"] = self.example_md_record.get(
-            "subject"
+        mock_docdb_client.upsert_one_docdb_record.assert_called_once_with(
+            record={
+                "_id": self.example_md_record.get("_id"),
+                "subject": self.example_md_record.get("subject"),
+            }
+        )
+        mock_docdb_client.retrieve_docdb_records.assert_called_once_with(
+            filter_query={"_id": self.example_md_record.get("_id")},
+            paginate=False,
         )
         mock_write_root_file_with_record_info.assert_called_once_with(
             s3_client=mock_s3_client,
@@ -919,6 +926,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             docdb_record_contents=expected_docdb_record_to_write,
         )
+        self.assertIsNone(docdb_id_to_delete)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -935,14 +943,38 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
+        mock_delete_response = Response()
+        mock_delete_response.status_code = 200
+        mock_delete_response.json = MagicMock(
+            return_value={"acknowledged": True, "deletedCount": 2}
+        )
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_api_client.delete_many_records.return_value = (
+            mock_delete_response
+        )
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = [
             self.example_md_record,
             self.example_md_record1,
             self.example_md_record2,
         ]
-        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        # Assume 2 records need to be deleted
+        mock_process_docdb_record.side_effect = [
+            None,
+            self.example_md_record1.get("_id"),
+            self.example_md_record2.get("_id"),
+        ]
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "INFO:root:Deleting 2 records in DocDb.",
+            "INFO:root:{'acknowledged': True, 'deletedCount': 2}",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
             [
                 call(
@@ -962,8 +994,14 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[
+                self.example_md_record1.get("_id"),
+                self.example_md_record2.get("_id"),
+            ]
+        )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -981,8 +1019,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         record."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
+        mock_delete_response = Response()
+        mock_delete_response.status_code = 200
+        mock_delete_response.json = MagicMock(
+            return_value={"acknowledged": True, "deletedCount": 1}
+        )
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_api_client.delete_many_records.return_value = (
+            mock_delete_response
+        )
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         records = [
             self.example_md_record,
             self.example_md_record1,
@@ -991,7 +1039,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_process_docdb_record.side_effect = [
             None,
             Exception("Error processing record"),
-            None,
+            self.example_md_record2.get("_id"),
         ]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_process_record_list(
@@ -1002,7 +1050,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "5ca4a951-d374-4f4b-8279-d570a35b2286, "
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_567890_2000-01-01_04-00-00: "
-            "Exception('Error processing record')"
+            "Exception('Error processing record')",
+            "INFO:root:Deleting 1 records in DocDb.",
+            "INFO:root:{'acknowledged': True, 'deletedCount': 1}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
@@ -1024,8 +1074,58 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 ),
             ]
         )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[self.example_md_record2.get("_id")]
+        )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_docdb_record"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("boto3.client")
+    def test_dask_task_to_process_record_list_error_delete(
+        self,
+        mock_boto3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_docdb_record: MagicMock,
+    ):
+        """Tests _dask_task_to_process_record_list when there is an error
+        deleting records."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_api_client.delete_many_records.side_effect = Exception(
+            "Error"
+        )
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        records = [self.example_md_record]
+        mock_process_docdb_record.return_value = self.example_md_record.get(
+            "_id"
+        )
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._dask_task_to_process_record_list(
+                record_list=records
+            )
+        expected_log_messages = [
+            "INFO:root:Deleting 1 records in DocDb.",
+            "ERROR:root:Error deleting records: Exception('Error')",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        mock_process_docdb_record.assert_called_once_with(
+            docdb_record=self.example_md_record,
+            docdb_client=mock_docdb_api_client,
+            s3_client=mock_s3_client,
+        )
+        mock_docdb_api_client.delete_many_records.assert_called_once_with(
+            data_asset_record_ids=[self.example_md_record.get("_id")]
+        )
+        mock_s3_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_records(self, mock_dask_bag_map_parts: MagicMock):
@@ -1450,7 +1550,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1489,7 +1591,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1513,7 +1615,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         prefixes = [
             "ecephys_642478_2023-01-17_13-56-29",
             "ecephys_567890_2000-01-01_04-00-00",
@@ -1566,7 +1670,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_api_client.close.assert_called_once_with()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_prefixes(self, mock_dask_bag_map_parts: MagicMock):
@@ -1608,7 +1712,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value = mock_docdb_api_client
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
         mock_paginate.return_value = iter(
             [
                 [
@@ -1629,15 +1735,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job.run_job()
+        expected_filter = {
+            "location": {"$regex": "^s3://aind-ephys-data-dev-u5u0i5.*"}
+        }
         expected_log_messages = [
-            "INFO:root:Starting to scan through DocDb.",
+            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
             "INFO:root:Finished scanning through DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-        mock_docdb_api_client.close.assert_called_once()
+        mock_docdb_client.return_value.__exit__.assert_called_once()
         mock_s3_client.close.assert_called_once()
         mock_process_records.assert_called_once_with(
             records=[
@@ -1645,6 +1754,87 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 self.example_md_record1,
                 self.example_md_record2,
             ]
+        )
+        mock_process_prefixes.assert_called_once_with(
+            prefixes=[
+                "ecephys_642478_2023-01-17_13-56-29/",
+                "ecephys_567890_2000-01-01_04-00-00/",
+                "ecephys_655019_2000-01-01_01-01-02/",
+            ]
+        )
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_prefixes"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "iterate_through_top_level"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_process_records"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
+    @patch("boto3.client")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.datetime")
+    def test_run_job_lookback_days(
+        self,
+        mock_datetime: MagicMock,
+        mock_boto3_client: MagicMock,
+        mock_paginate: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_process_records: MagicMock,
+        mock_iterate_prefixes: MagicMock,
+        mock_process_prefixes: MagicMock,
+    ):
+        """Tests main run_job method when lookback_days is set."""
+
+        job_configs_json = self.basic_job_configs.model_dump(mode="json")
+        job_configs_json["lookback_days"] = 3
+        job_configs = AindIndexBucketJobSettings(**job_configs_json)
+        job = AindIndexBucketJob(job_settings=job_configs)
+
+        mock_datetime.now.return_value = datetime(
+            2025, 3, 20, tzinfo=timezone.utc
+        )
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        mock_paginate.return_value = iter([[self.example_md_record]])
+        mock_iterate_prefixes.return_value = iter(
+            [
+                [
+                    "ecephys_642478_2023-01-17_13-56-29/",
+                    "ecephys_567890_2000-01-01_04-00-00/",
+                    "ecephys_655019_2000-01-01_01-01-02/",
+                ]
+            ]
+        )
+        with self.assertLogs(level="DEBUG") as captured:
+            job.run_job()
+
+        expected_filter = {
+            "location": {"$regex": "^s3://aind-ephys-data-dev-u5u0i5.*"},
+            "last_modified": {"$gte": "2025-03-17T00:00:00Z"},
+        }
+        expected_log_messages = [
+            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through DocDb.",
+            "INFO:root:Starting to scan through S3.",
+            "INFO:root:Finished scanning through S3.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
+        mock_datetime.now.assert_called_once_with(timezone.utc)
+        mock_docdb_client.return_value.__exit__.assert_called_once()
+        mock_s3_client.close.assert_called_once()
+        mock_process_records.assert_called_once_with(
+            records=[self.example_md_record]
         )
         mock_process_prefixes.assert_called_once_with(
             prefixes=[

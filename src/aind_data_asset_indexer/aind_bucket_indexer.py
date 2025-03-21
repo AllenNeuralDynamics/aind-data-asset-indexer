@@ -6,10 +6,12 @@ import logging
 import os
 import sys
 import warnings
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import boto3
 import dask.bag as dask_bag
+import requests
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.utils import (
     get_s3_bucket_and_prefix,
@@ -18,6 +20,8 @@ from aind_data_access_api.utils import (
 )
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
@@ -72,6 +76,24 @@ class AindIndexBucketJob:
     def __init__(self, job_settings: AindIndexBucketJobSettings):
         """Class constructor."""
         self.job_settings = job_settings
+
+    def _create_docdb_client(self) -> MetadataDbClient:
+        """Create a MetadataDbClient with custom retries."""
+        retry = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST", "DELETE"],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        return MetadataDbClient(
+            host=self.job_settings.doc_db_host,
+            database=self.job_settings.doc_db_db_name,
+            collection=self.job_settings.doc_db_collection_name,
+            session=session,
+        )
 
     def _write_root_file_with_record_info(
         self,
@@ -338,11 +360,12 @@ class AindIndexBucketJob:
         docdb_record: dict,
         docdb_client: MetadataDbClient,
         s3_client: S3Client,
-    ):
+    ) -> Optional[str]:
         """
         For a given record,
         1. Check if its location field is valid. If not, log a warning.
-        2. Check if it needs to be deleted (no s3 object found)
+        2. Check if it needs to be deleted (no s3 object found). If so, the
+        record id is returned for batch deletion.
         3. If there is an s3 object, then overwrite the s3 object if the docdb
         is different. Also resolves the core schema json files in the root
         folder and the original_metadata folder to ensure they are in sync.
@@ -355,9 +378,12 @@ class AindIndexBucketJob:
 
         Returns
         -------
-        None
+        Optional[str]
+          The record id to delete from DocDb. If None, then the record does
+          not require deletion.
 
         """
+        docdb_id_to_delete = None
         if not is_record_location_valid(
             docdb_record, self.job_settings.s3_bucket
         ):
@@ -380,12 +406,9 @@ class AindIndexBucketJob:
                 logging.warning(
                     f"File not found in S3 at "
                     f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
-                    f"Removing metadata record from DocDb."
+                    f"Will delete metadata record from DocDb."
                 )
-                response = docdb_client.delete_one_record(
-                    data_asset_record_id=docdb_record["_id"]
-                )
-                logging.debug(response.json())
+                docdb_id_to_delete = docdb_record["_id"]
             else:  # There is a metadata.nd.json file in S3.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -421,7 +444,13 @@ class AindIndexBucketJob:
                         }
                     )
                     logging.debug(response.json())
-                docdb_record.update(fields_to_update)
+                    # Pull record from docdb to get new last_modified as well
+                    docdb_response = docdb_client.retrieve_docdb_records(
+                        filter_query={"_id": docdb_record["_id"]},
+                        paginate=False,
+                    )
+                    docdb_record = docdb_response[0]
+                # Sync docdb record to metadata.nd.json in root folder
                 metadata_nd_json_info = get_dict_of_file_info(
                     s3_client=s3_client,
                     bucket=s3_bucket,
@@ -434,14 +463,15 @@ class AindIndexBucketJob:
                     prefix=prefix,
                     docdb_record_contents=docdb_record,
                 )
+        return docdb_id_to_delete
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
     ) -> None:
         """
         The task to perform within a partition. If n_partitions is set to 20
-        and the outer record list had length 1000, then this should process
-        50 records.
+        and the outer record list had length 500, then this should process
+        25 records.
 
         Parameters
         ----------
@@ -453,29 +483,38 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        doc_db_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-        for record in record_list:
-            try:
-                self._process_docdb_record(
-                    docdb_record=record,
-                    docdb_client=doc_db_client,
-                    s3_client=s3_client,
-                )
-            except Exception as e:
-                logging.error(
-                    f'Error processing docdb {record.get("_id")}, '
-                    f'{record.get("location")}: {repr(e)}'
-                )
+        with self._create_docdb_client() as doc_db_client:
+            records_to_delete = []
+            for record in record_list:
+                try:
+                    docdb_id_to_delete = self._process_docdb_record(
+                        docdb_record=record,
+                        docdb_client=doc_db_client,
+                        s3_client=s3_client,
+                    )
+                    if docdb_id_to_delete is not None:
+                        records_to_delete.append(docdb_id_to_delete)
+                except Exception as e:
+                    logging.error(
+                        f'Error processing docdb {record.get("_id")}, '
+                        f'{record.get("location")}: {repr(e)}'
+                    )
+            if len(records_to_delete) > 0:
+                try:
+                    logging.info(
+                        f"Deleting {len(records_to_delete)} records in DocDb."
+                    )
+                    response = doc_db_client.delete_many_records(
+                        data_asset_record_ids=records_to_delete
+                    )
+                    logging.info(response.json())
+                except Exception as e:
+                    logging.error(f"Error deleting records: {repr(e)}")
         s3_client.close()
-        doc_db_client.close()
 
     def _process_records(self, records: List[dict]):
         """
-        For a list of records (up to a 1000 in the list), divvy up the list
+        For a list of records (up to 500 in the list), divvy up the list
         across n_partitions. Process the set of records in each partition.
 
         Parameters
@@ -647,40 +686,34 @@ class AindIndexBucketJob:
         prefix_list : List[str]
 
         """
-        # create a s3_client here since dask doesn't serialize it
+        # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        doc_db_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-        # For the given prefix list, download all the records from docdb
-        # with those locations.
-        location_to_id_map = build_docdb_location_to_id_map(
-            bucket=self.job_settings.s3_bucket,
-            prefixes=prefix_list,
-            docdb_api_client=doc_db_client,
-        )
-        for prefix in prefix_list:
-            try:
-                self._process_prefix(
-                    s3_prefix=prefix,
-                    s3_client=s3_client,
-                    location_to_id_map=location_to_id_map,
-                    docdb_client=doc_db_client,
-                )
-            except Exception as e:
-                logging.error(
-                    f"Error processing "
-                    f"{get_s3_location(self.job_settings.s3_bucket, prefix)}: "
-                    f"{repr(e)}"
-                )
+        with self._create_docdb_client() as doc_db_client:
+            # For the given prefix list, get record ids from docdb
+            # with those locations.
+            location_to_id_map = build_docdb_location_to_id_map(
+                bucket=self.job_settings.s3_bucket,
+                prefixes=prefix_list,
+                docdb_api_client=doc_db_client,
+            )
+            for prefix in prefix_list:
+                try:
+                    self._process_prefix(
+                        s3_prefix=prefix,
+                        s3_client=s3_client,
+                        location_to_id_map=location_to_id_map,
+                        docdb_client=doc_db_client,
+                    )
+                except Exception as e:
+                    location = get_s3_location(
+                        self.job_settings.s3_bucket, prefix
+                    )
+                    logging.error(f"Error processing {location}: {repr(e)}")
         s3_client.close()
-        doc_db_client.close()
 
     def _process_prefixes(self, prefixes: List[str]):
         """
-        For a list of prefixes (up to a 1000 in the list), divvy up the list
+        For a list of prefixes (up to 1000 in the list), divvy up the list
         across n_partitions. Process the set of prefixes in each partition.
 
         Parameters
@@ -698,25 +731,28 @@ class AindIndexBucketJob:
 
     def run_job(self):
         """Main method to run."""
-        logging.info("Starting to scan through DocDb.")
-        iterator_docdb_client = MetadataDbClient(
-            host=self.job_settings.doc_db_host,
-            database=self.job_settings.doc_db_db_name,
-            collection=self.job_settings.doc_db_collection_name,
-        )
-
-        docdb_pages = paginate_docdb(
-            docdb_api_client=iterator_docdb_client,
-            page_size=500,
-            filter_query={
+        with self._create_docdb_client() as iterator_docdb_client:
+            filter = {
                 "location": {
                     "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
                 }
-            },
-        )
-        for page in docdb_pages:
-            self._process_records(records=page)
-        iterator_docdb_client.close()
+            }
+            if self.job_settings.lookback_days is not None:
+                lookback_utc = datetime.now(timezone.utc) - timedelta(
+                    days=self.job_settings.lookback_days
+                )
+                filter["last_modified"] = {
+                    "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
+                }
+            logging.info(f"Starting to scan through DocDb: {filter}")
+            docdb_pages = paginate_docdb(
+                docdb_api_client=iterator_docdb_client,
+                page_size=500,
+                filter_query=filter,
+            )
+            for page in docdb_pages:
+                if len(page) > 0:
+                    self._process_records(records=page)
         logging.info("Finished scanning through DocDb.")
         logging.info("Starting to scan through S3.")
         iterator_s3_client = boto3.client("s3")
@@ -724,9 +760,8 @@ class AindIndexBucketJob:
             s3_client=iterator_s3_client, bucket=self.job_settings.s3_bucket
         )
         for prefix_list in prefix_iterator:
-            self._process_prefixes(
-                prefixes=prefix_list,
-            )
+            if len(prefix_list) > 0:
+                self._process_prefixes(prefixes=prefix_list)
         iterator_s3_client.close()
         logging.info("Finished scanning through S3.")
 
