@@ -81,7 +81,7 @@ class AindIndexBucketJob:
         """Create a MetadataDbClient with custom retries."""
         retry = Retry(
             total=3,
-            backoff_factor=1,
+            backoff_factor=10,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["GET", "POST", "DELETE"],
         )
