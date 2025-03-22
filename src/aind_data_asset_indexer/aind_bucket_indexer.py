@@ -761,7 +761,7 @@ class AindIndexBucketJob:
             logging.info(f"Starting to scan through DocDb: {filter}")
             docdb_pages = paginate_docdb(
                 docdb_api_client=iterator_docdb_client,
-                page_size=500,
+                page_size=200,
                 filter_query=filter,
             )
             for page in docdb_pages:
