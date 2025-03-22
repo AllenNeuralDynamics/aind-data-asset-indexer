@@ -81,7 +81,7 @@ class AindIndexBucketJob:
         """Create a MetadataDbClient with custom retries."""
         retry = Retry(
             total=3,
-            backoff_factor=1,
+            backoff_factor=10,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["GET", "POST", "DELETE"],
         )
@@ -761,7 +761,7 @@ class AindIndexBucketJob:
             logging.info(f"Starting to scan through DocDb: {filter}")
             docdb_pages = paginate_docdb(
                 docdb_api_client=iterator_docdb_client,
-                page_size=500,
+                page_size=200,
                 filter_query=filter,
             )
             for page in docdb_pages:

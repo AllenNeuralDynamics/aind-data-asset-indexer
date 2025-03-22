@@ -36,6 +36,34 @@ class TestIndexAindBucketsJob(unittest.TestCase):
 
         mock_sub_run_job.assert_has_calls([call(), call()])
 
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "run_job"
+    )
+    def test_run_job_error(self, mock_sub_run_job: MagicMock):
+        """Tests run_job method when there is an error in 1 bucket job."""
+
+        mock_sub_run_job.side_effect = [Exception("Some error"), None]
+        job_settings = AindIndexBucketsJobSettings(
+            s3_buckets=["bucket1", "bucket2"],
+            doc_db_host="some_docdb_host",
+            doc_db_db_name="some_docdb_dbname",
+            doc_db_collection_name="some_docdb_collection_name",
+        )
+        job = IndexAindBucketsJob(job_settings=job_settings)
+        with self.assertLogs(level="DEBUG") as captured:
+            job.run_job()
+        expected_log_messages = [
+            "INFO:root:Processing bucket1",
+            "ERROR:root:Error processing bucket1. Error: Some error",
+            "INFO:root:Finished processing bucket1",
+            "INFO:root:Processing bucket2",
+            "INFO:root:Finished processing bucket2",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
+        mock_sub_run_job.assert_has_calls([call(), call()])
+
 
 if __name__ == "__main__":
     unittest.main()
