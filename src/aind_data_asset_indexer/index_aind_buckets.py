@@ -32,7 +32,10 @@ class IndexAindBucketsJob:
                 s3_bucket=bucket, **base_job_configs
             )
             bucket_job = AindIndexBucketJob(job_settings=bucket_job_settings)
-            bucket_job.run_job()
+            try:
+                bucket_job.run_job()
+            except Exception as e:
+                logging.error(f"Error processing {bucket}. Error: {e}")
             logging.info(f"Finished processing {bucket}")
 
 
