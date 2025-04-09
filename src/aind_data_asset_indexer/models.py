@@ -53,6 +53,14 @@ class AindIndexBucketJobSettings(IndexJobSettings):
     doc_db_host: str
     doc_db_db_name: str
     doc_db_collection_name: str
+    run_docdb_sync: bool = Field(
+        default=True,
+        description="If true, then process DocDB records to sync to S3.",
+    )
+    run_s3_sync: bool = Field(
+        default=True,
+        description="If true, then process S3 prefixes to sync to DocDB.",
+    )
 
 
 class PopulateAindBucketsJobSettings(IndexJobSettings):
@@ -73,13 +81,19 @@ class AindIndexBucketsJobSettings(AindIndexBucketJobSettings):
 
 
 class CodeOceanIndexBucketJobSettings(IndexJobSettings):
-    """Aind Index Bucket Job Settings"""
+    """Code Ocean Index Bucket Job Settings"""
 
     doc_db_host: str
     doc_db_db_name: str
     doc_db_collection_name: str
     codeocean_domain: str
     codeocean_token: SecretStr
+    run_co_sync: bool = Field(
+        default=True,
+        description=(
+            "If true, then process Code Ocean results and external links."
+        ),
+    )
 
     @classmethod
     def from_param_store(cls, param_store_name: str):

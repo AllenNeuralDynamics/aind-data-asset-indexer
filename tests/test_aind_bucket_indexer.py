@@ -1856,6 +1856,52 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
 
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_run_s3_sync"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_run_docdb_sync"
+    )
+    def test_run_job_skip_docdb_sync(
+        self,
+        mock_run_docdb_sync: MagicMock,
+        mock_run_s3_sync: MagicMock,
+    ):
+        """Tests main run_job method when run_docdb_sync is False."""
+
+        job_configs_json = self.basic_job_configs.model_dump(mode="json")
+        job_configs_json["run_docdb_sync"] = False
+        job_configs = AindIndexBucketJobSettings(**job_configs_json)
+        job = AindIndexBucketJob(job_settings=job_configs)
+        job.run_job()
+        mock_run_docdb_sync.assert_not_called()
+        mock_run_s3_sync.assert_called_once()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_run_s3_sync"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_run_docdb_sync"
+    )
+    def test_run_job_skip_s3_sync(
+        self,
+        mock_run_docdb_sync: MagicMock,
+        mock_run_s3_sync: MagicMock,
+    ):
+        """Tests main run_job method when run_s3_sync is False."""
+
+        job_configs_json = self.basic_job_configs.model_dump(mode="json")
+        job_configs_json["run_s3_sync"] = False
+        job_configs = AindIndexBucketJobSettings(**job_configs_json)
+        job = AindIndexBucketJob(job_settings=job_configs)
+        job.run_job()
+        mock_run_docdb_sync.assert_called_once()
+        mock_run_s3_sync.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

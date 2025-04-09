@@ -655,6 +655,41 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         )
         mock_docdb_client.return_value.__exit__.assert_called_once()
 
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._update_external_links_in_docdb"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._delete_records_from_docdb"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._process_codeocean_records"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "get_all_processed_codeocean_asset_records"
+    )
+    def test_run_job_skip(
+        self,
+        mock_get_all_co_records: MagicMock,
+        mock_process_codeocean_records: MagicMock,
+        mock_delete_records_from_docdb: MagicMock,
+        mock_update_external_links_in_docdb: MagicMock,
+    ):
+        """Tests run_job method. Given the example responses, should ignore
+        one record, add one record, and delete one record."""
+        job_configs_json = self.basic_job_configs.model_dump(mode="json")
+        job_configs_json["run_co_sync"] = False
+        job_configs = CodeOceanIndexBucketJobSettings(**job_configs_json)
+        job = CodeOceanIndexBucketJob(job_settings=job_configs)
+        job.run_job()
+        mock_get_all_co_records.assert_not_called()
+        mock_update_external_links_in_docdb.assert_not_called()
+        mock_process_codeocean_records.assert_not_called()
+        mock_delete_records_from_docdb.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
