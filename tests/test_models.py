@@ -86,6 +86,8 @@ class TestAindIndexBucketJobSettings(unittest.TestCase):
         self.assertEqual(
             "some_docdb_collection_name", job_settings.doc_db_collection_name
         )
+        self.assertTrue(job_settings.run_docdb_sync)
+        self.assertTrue(job_settings.run_s3_sync)
 
     @patch("boto3.client")
     def test_from_from_param_store(self, mock_boto3_client):
@@ -98,7 +100,8 @@ class TestAindIndexBucketJobSettings(unittest.TestCase):
                     '{"doc_db_host": "some_docdb_host",'
                     '"doc_db_db_name":"some_docdb_dbname",'
                     '"doc_db_collection_name":"some_docdb_collection_name",'
-                    '"s3_bucket":"some_bucket"}'
+                    '"s3_bucket":"some_bucket",'
+                    '"run_s3_sync":false}'
                 ),
                 "Version": 1,
                 "LastModifiedDate": datetime(
@@ -129,6 +132,7 @@ class TestAindIndexBucketJobSettings(unittest.TestCase):
             doc_db_host="some_docdb_host",
             doc_db_db_name="some_docdb_dbname",
             doc_db_collection_name="some_docdb_collection_name",
+            run_s3_sync=False,
         )
         self.assertEqual(expected_job_settings, job_settings)
 
@@ -167,6 +171,8 @@ class TestAindIndexBucketsJobSettings(unittest.TestCase):
         self.assertEqual(
             "some_docdb_collection_name", job_settings.doc_db_collection_name
         )
+        self.assertTrue(job_settings.run_docdb_sync)
+        self.assertTrue(job_settings.run_s3_sync)
 
 
 class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
@@ -194,6 +200,7 @@ class TestCodeOceanIndexBucketJobSettings(unittest.TestCase):
         self.assertEqual(
             "some_co_token", job_settings.codeocean_token.get_secret_value()
         )
+        self.assertTrue(job_settings.run_co_sync)
 
     @patch("boto3.client")
     def test_from_from_param_store(self, mock_boto3_client):
