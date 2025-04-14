@@ -401,6 +401,8 @@ class CodeOceanIndexBucketJob:
 
     def run_job(self):
         """Main method to run."""
+        if self.job_settings.run_co_sync is not True:
+            return
         logging.info("Starting to scan through CodeOcean.")
         retry = Retry(
             total=5,

@@ -743,8 +743,8 @@ class AindIndexBucketJob:
         )
         mapped_partitions.compute()
 
-    def run_job(self):
-        """Main method to run."""
+    def _run_docdb_sync(self):
+        """Sync changes in DocDB to S3"""
         with self._create_docdb_client() as iterator_docdb_client:
             filter = {
                 "location": {
@@ -768,6 +768,9 @@ class AindIndexBucketJob:
                 if len(page) > 0:
                     self._process_records(records=page)
         logging.info("Finished scanning through DocDb.")
+
+    def _run_s3_sync(self):
+        """Sync changes in S3 to DocDB"""
         logging.info("Starting to scan through S3.")
         iterator_s3_client = boto3.client("s3")
         prefix_iterator = iterate_through_top_level(
@@ -778,6 +781,13 @@ class AindIndexBucketJob:
                 self._process_prefixes(prefixes=prefix_list)
         iterator_s3_client.close()
         logging.info("Finished scanning through S3.")
+
+    def run_job(self):
+        """Main method to run."""
+        if self.job_settings.run_docdb_sync is True:
+            self._run_docdb_sync()
+        if self.job_settings.run_s3_sync is True:
+            self._run_s3_sync()
 
 
 if __name__ == "__main__":
