@@ -10,12 +10,12 @@ AIND metadata for data assets is stored in various places and must be
 kept in sync:
 
 1. **S3 buckets** store raw metadata files, including the ``metadata.nd.json``.
-2. A **document database (DocDB)** contains unstructured json
+2. A **document database (DocDB)** contains unstructured JSON
    documents describing the ``metadata.nd.json`` for a data asset.
-3. **Code Ocean**: data assets are mounted as CodeOcean data assets.
+3. **Code Ocean**: data assets are mounted as Code Ocean data assets.
    Processed results are also stored in an internal Code Ocean bucket.
 
-We have automated jobs to keep changes in DocDB and S3 in sync.
+We have automated jobs to keep changes in DocDB, S3 and Code Ocean in sync.
 This repository contains the code for these index jobs.
 
 More information including a user guide and contributor guidelines can be found at [readthedocs](https://aind-data-asset-indexer.readthedocs.io).

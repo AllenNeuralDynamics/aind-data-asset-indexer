@@ -32,7 +32,7 @@ For development,
    off of ``main``
 
 Consult the `Branches and Pull Requests <#branches-and-pull-requests>`__
-and `Release Cycles <#release-cycles>`__ for more details.
+and `Release Cycles <#release-cycles>`__ sections for more details.
 
 From the root directory, run:
 
@@ -47,14 +47,13 @@ to install the relevant code for development.
 Running indexer jobs locally
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
 The jobs are intended to be run as scheduled AWS ECS tasks.
 The job settings are stored in AWS Parameter Store.
 
 If you wish to run the jobs locally, follow these steps:
 
 1. Ensure the correct ``AWS_PROFILE`` is exported. This profile will be used to
-   read/write from S3 bucketsand DocumentDB (through the API Gateway).
+   read/write from S3 buckets and DocumentDB (through the API Gateway).
 
 2. For the `IndexAindBucketsJob`, you will need to set the ``PARAM_STORE_NAME``.
    Then, run the following:
@@ -206,7 +205,7 @@ Hotfixes
 ~~~~~~~~
 
 -  A ``hotfix`` branch is created off of ``main``
--  A Pull Request into is ``main`` is opened, reviewed, and merged into
+-  A Pull Request into ``main`` is opened, reviewed, and merged into
    ``main``
 -  A new ``tag`` with a patch bump is created, and a new ``release`` is
    deployed
@@ -235,7 +234,7 @@ Pre-release checklist
 ~~~~~~~~~~~~~~~~~~~~~
 
 -  ☐ Increment ``__version__`` in
-   ``aind_data_asset-indexer/__init__.py`` file
+   ``aind_data_asset_indexer/__init__.py`` file
 -  ☐ Run linters, unit tests, and integration tests
 -  ☐ Verify code is deployed and tested in test environment
 -  ☐ Update examples
