@@ -20,35 +20,34 @@ kept in sync:
       all core schema fields.
    -  ``original_metadata/{core_schema}.json``: a copy of each
       core schema file as it was originally uploaded to S3.
-2. A **document database (DocDB)** contains unstructured json
+2. A **document database (DocDB)** contains unstructured JSON
    documents describing the ``metadata.nd.json`` for a data asset.
-3. **Code Ocean**: data assets are mounted as CodeOcean data asssets.
+3. **Code Ocean**: data assets are mounted as Code Ocean data assets.
    Processed results are also stored in an internal Code Ocean bucket.
 
 Once the data is initially uploaded, the DocDB is assumed to be the
 source of truth for metadata. All updates to existing metadata should
 be made in the DocDB.
 
-We have automated jobs to keep changes in DocDB and S3 in sync.
+We have automated jobs to keep changes in DocDB, S3, and Code Ocean in sync.
 This repository contains the code for these index jobs:
 
 1. `AindIndexBucketJob <#aindindexbucketjob>`__: Syncs changes in S3 and DocDB.
-2. `CodeOceanIndexBucketJob <#codeoceanindexbucketjob>`__: Syncs changes in CodeOcean and DocDB.
+2. `CodeOceanIndexBucketJob <#codeoceanindexbucketjob>`__: Syncs changes in Code Ocean and DocDB.
 
 
 AindIndexBucketJob
 ------------------
 
 The `AindIndexBucketJob` handles syncing changes from DocDB to S3 for a
-particular S3 bucket. There is a `IndexAindBucketsJob` wrapper job that
+particular S3 bucket. There is an `IndexAindBucketsJob` wrapper job that
 runs the `AindIndexBucketJob` for a list of buckets.
-
 
 The workflow is generally as follows:
 
 1. Paginate DocDB to get records for a particular bucket.
 
-   -  Typically we filter for records that have been updated in the last
+   -  Typically, we filter for records that have been updated in the last
       14 days.
 2. For each DocDB record, process by syncing any changes in DocDB to S3.
 
@@ -66,7 +65,7 @@ The workflow is generally as follows:
    -  If the metadata record exists in S3 but not in DocDB, copy it
       to DocDB.
    -  If the metadata record does not exist in S3, create it and save
-      it to S3. Assume a lambda function will move it over to DocDB.
+      it to S3. Assume a Lambda function will move it over to DocDB.
    -  In both cases above, ensure the original metadata folder and core
       files are in sync with the metadata.nd.json file.
 
@@ -77,16 +76,16 @@ CodeOceanIndexBucketJob
 -----------------------
 
 The `CodeOceanIndexBucketJob` updates the external links for DocDB records
-with their CO data asset ids and indexes Code Ocean (CO) processed results.
+with their Code Ocean (CO) data asset IDs and indexes CO processed results.
 
 The workflow is generally as follows:
 
 1. For records in AIND buckets, update the external links with CO data
-   asset ids if needed.
+   asset IDs if needed.
 
-   -  Retrieve a list of CO data asset ids and locations
-   -  Paginate through docdb records where the location does not match
-      internal CO bucket
+   -  Retrieve a list of CO data asset IDs and locations.
+   -  Paginate through DocDB records where the location does not match
+      the internal CO bucket.
    -  Add or remove the external links from the DocDB record as needed.
 2. Index CO processed results from the CO internal bucket.
    
