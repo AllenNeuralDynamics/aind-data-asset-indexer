@@ -1495,25 +1495,24 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
             )
-        expected_record = {
-            "_id": mock_uuid.return_value,
-            "name": "ecephys_642478_2023-01-17_13-56-29",
-            "location": (
-                f"s3://{self.basic_job.job_settings.s3_bucket}/"
-                "ecephys_642478_2023-01-17_13-56-29",
-            ),
-        }
+        actual_location = (
+            f"s3://{self.basic_job.job_settings.s3_bucket}/"
+            "ecephys_642478_2023-01-17_13-56-29"
+        )
         expected_log_messages = [
             "WARNING:root:Location field s3://bucket/"
             "ecephys_642478_2020-01-10_10-10-10 or name field "
             "ecephys_642478_2023-01-17_13-56-29 does not match actual "
-            "location of record s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29! Updating the "
+            f"location of record {actual_location}! Updating the "
             "record with correct location/name and new id.",
-            "INFO:root:Adding record to docdb for: "
-            f"{expected_record['location']}",
+            f"INFO:root:Adding record to docdb for: {actual_location}",
             "DEBUG:root:inserted",
         ]
+        expected_record = {
+            "_id": mock_uuid.return_value,
+            "name": "ecephys_642478_2023-01-17_13-56-29",
+            "location": actual_location,
+        }
         self.assertEqual(expected_log_messages, captured.output)
         mock_docdb_client.insert_one_docdb_record.assert_called_once_with(
             record=expected_record
