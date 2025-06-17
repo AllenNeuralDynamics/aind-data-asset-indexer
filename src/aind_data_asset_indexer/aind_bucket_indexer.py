@@ -389,9 +389,8 @@ class AindIndexBucketJob:
             docdb_record, self.job_settings.s3_bucket
         ):
             logging.warning(
-                f"Record location {docdb_record.get('location')} or name "
-                f"{docdb_record.get('name')} not valid for bucket "
-                f"{self.job_settings.s3_bucket}!"
+                f"Record location {docdb_record.get('location')} not valid "
+                f"for bucket {self.job_settings.s3_bucket}! Skipping."
             )
         else:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
@@ -609,14 +608,12 @@ class AindIndexBucketJob:
                             f"Location field {json_contents.get('location')} "
                             f"or name field {json_contents.get('name')} does "
                             f"not match actual location of record {location}! "
-                            "Updating the record with correct location/name "
-                            "and new id."
+                            "Updating record with correct location and new id."
                         )
                         json_contents.update(
                             {
                                 "_id": str(uuid4()),
                                 "location": location,
-                                "name": s3_prefix.strip("/"),
                             }
                         )
                     if "_id" in json_contents:

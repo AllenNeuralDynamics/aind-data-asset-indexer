@@ -759,9 +759,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             )
         expected_log_messages = [
             "WARNING:root:Record location "
-            "no_s3/bucket/prefix1_2024-01-01_01-01-01 or name "
-            "prefix1_2024-01-01_01-01-01 not valid for bucket "
-            "aind-ephys-data-dev-u5u0i5!"
+            "no_s3/bucket/prefix1_2024-01-01_01-01-01 not valid "
+            "for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
         self.assertIsNone(docdb_id_to_delete)
@@ -787,8 +786,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 },
             )
         expected_log_messages = [
-            "WARNING:root:Record location s3://bucket/prefix1 or name prefix1 "
-            "not valid for bucket aind-ephys-data-dev-u5u0i5!"
+            "WARNING:root:Record location s3://bucket/prefix1 "
+            "not valid for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
         self.assertIsNone(docdb_id_to_delete)
@@ -1503,8 +1502,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "WARNING:root:Location field s3://bucket/"
             "ecephys_642478_2020-01-10_10-10-10 or name field "
             "ecephys_642478_2023-01-17_13-56-29 does not match actual "
-            f"location of record {actual_location}! Updating the "
-            "record with correct location/name and new id.",
+            f"location of record {actual_location}! Updating "
+            "record with correct location and new id.",
             f"INFO:root:Adding record to docdb for: {actual_location}",
             "DEBUG:root:inserted",
         ]
