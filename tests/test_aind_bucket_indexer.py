@@ -759,9 +759,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
             )
         expected_log_messages = [
             "WARNING:root:Record location "
-            "no_s3/bucket/prefix1_2024-01-01_01-01-01 or name "
-            "prefix1_2024-01-01_01-01-01 not valid for bucket "
-            "aind-ephys-data-dev-u5u0i5!"
+            "no_s3/bucket/prefix1_2024-01-01_01-01-01 not valid "
+            "for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
         self.assertIsNone(docdb_id_to_delete)
@@ -787,8 +786,8 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 },
             )
         expected_log_messages = [
-            "WARNING:root:Record location s3://bucket/prefix1 or name prefix1 "
-            "not valid for bucket aind-ephys-data-dev-u5u0i5!"
+            "WARNING:root:Record location s3://bucket/prefix1 "
+            "not valid for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
         self.assertIsNone(docdb_id_to_delete)
@@ -1444,6 +1443,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_cond_copy_then_sync_core_json_files.assert_not_called()
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.uuid4")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"
@@ -1467,6 +1467,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_download_json_file_from_s3: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
+        mock_uuid: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
         there is and there is metadata.nd.json file in S3, and the file can
@@ -1475,12 +1476,15 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_does_s3_object_exist.return_value = True
         # Test what happens when the location in the record does not match the
         # expected location
-        mocked_downloaded_record = deepcopy(self.example_md_record)
-        mocked_downloaded_record["location"] = (
-            f"s3://{self.basic_job.job_settings.s3_bucket}/"
-            f"ecephys_642478_2020-01-10_10-10-10"
+        mock_download_json_file_from_s3.return_value = {
+            "_id": "5ca4a951-d374-4f4b-8279-d570a35b2286",
+            "name": "ecephys_642478_2023-01-17_13-56-29",
+            "location": "s3://bucket/ecephys_642478_2020-01-10_10-10-10",
+        }
+        mock_uuid.return_value = "a62344ff-1cec-48f4-914e-7482797e6332"
+        mock_docdb_client.insert_one_docdb_record.return_value = MagicMock(
+            status_code=200, json=MagicMock(return_value="inserted")
         )
-        mock_download_json_file_from_s3.return_value = mocked_downloaded_record
 
         location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
@@ -1490,16 +1494,34 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
             )
+        actual_location = (
+            f"s3://{self.basic_job.job_settings.s3_bucket}/"
+            "ecephys_642478_2023-01-17_13-56-29"
+        )
         expected_log_messages = [
-            "WARNING:root:Location field s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2020-01-10_10-10-10 or name field "
-            "ecephys_642478_2023-01-17_13-56-29 does not match actual "
-            "location of record s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29!"
+            "WARNING:root:Location field s3://bucket/"
+            "ecephys_642478_2020-01-10_10-10-10 does not match actual "
+            f"location of record {actual_location}! Updating "
+            "record with correct location and new id.",
+            f"INFO:root:Adding record to docdb for: {actual_location}",
+            "DEBUG:root:inserted",
         ]
+        expected_record = {
+            "_id": mock_uuid.return_value,
+            "name": "ecephys_642478_2023-01-17_13-56-29",
+            "location": actual_location,
+        }
         self.assertEqual(expected_log_messages, captured.output)
-        mock_docdb_client.insert_one_docdb_record.assert_not_called()
-        mock_cond_copy_then_sync_core_json_files.assert_not_called()
+        mock_docdb_client.insert_one_docdb_record.assert_called_once_with(
+            record=expected_record
+        )
+        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
+            metadata_json=json.dumps(expected_record),
+            bucket=self.basic_job.job_settings.s3_bucket,
+            prefix="ecephys_642478_2023-01-17_13-56-29",
+            s3_client=mock_s3_client,
+            copy_original_md_subdir="original_metadata",
+        )
         mock_upload_metadata_json_str_to_s3.assert_not_called()
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")

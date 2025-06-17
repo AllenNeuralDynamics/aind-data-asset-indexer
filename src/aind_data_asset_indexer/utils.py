@@ -122,7 +122,9 @@ def is_record_location_valid(
       like 's3://{expected_bucket}/prefix'
       Will return False if there is no s3 scheme, the bucket does not match
       the expected bucket, the prefix contains forward slashes, or the prefix
-      is invalid, or doesn't match the record name or expected prefix.
+      is invalid or does not match the expected prefix.
+      If the record name does not match the prefix, a warning is logged,
+      but the method will still return True.
 
     """
     expected_stripped_prefix = (
@@ -142,15 +144,18 @@ def is_record_location_valid(
                 stripped_prefix == ""
                 or len(stripped_prefix.split("/")) > 1
                 or not is_prefix_valid(stripped_prefix)
-                or record.get("name") != stripped_prefix
                 or (
                     expected_prefix is not None
                     and stripped_prefix != expected_stripped_prefix
                 )
             ):
                 return False
-            else:
-                return True
+            elif record.get("name") != stripped_prefix:
+                logging.warning(
+                    f"Record name {record.get('name')} does not match "
+                    f"prefix {stripped_prefix}."
+                )
+            return True
 
 
 def compute_md5_hash(json_contents: str) -> str:
