@@ -1500,8 +1500,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         expected_log_messages = [
             "WARNING:root:Location field s3://bucket/"
-            "ecephys_642478_2020-01-10_10-10-10 or name field "
-            "ecephys_642478_2023-01-17_13-56-29 does not match actual "
+            "ecephys_642478_2020-01-10_10-10-10 does not match actual "
             f"location of record {actual_location}! Updating "
             "record with correct location and new id.",
             f"INFO:root:Adding record to docdb for: {actual_location}",

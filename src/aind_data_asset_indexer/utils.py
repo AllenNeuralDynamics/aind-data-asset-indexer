@@ -122,7 +122,7 @@ def is_record_location_valid(
       like 's3://{expected_bucket}/prefix'
       Will return False if there is no s3 scheme, the bucket does not match
       the expected bucket, the prefix contains forward slashes, or the prefix
-      is invalid or doesn't match the expected prefix.
+      is invalid or does not match the expected prefix.
       If the record name does not match the prefix, a warning is logged,
       but the method will still return True.
 

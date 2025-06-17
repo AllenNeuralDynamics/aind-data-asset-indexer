@@ -606,9 +606,9 @@ class AindIndexBucketJob:
                     ):
                         logging.warning(
                             f"Location field {json_contents.get('location')} "
-                            f"or name field {json_contents.get('name')} does "
-                            f"not match actual location of record {location}! "
-                            "Updating record with correct location and new id."
+                            "does not match actual location of record "
+                            f"{location}! Updating record with correct "
+                            "location and new id."
                         )
                         json_contents.update(
                             {
