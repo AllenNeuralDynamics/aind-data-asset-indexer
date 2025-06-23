@@ -8,6 +8,7 @@ import sys
 import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+from uuid import uuid4
 
 import boto3
 import dask.bag as dask_bag
@@ -388,9 +389,8 @@ class AindIndexBucketJob:
             docdb_record, self.job_settings.s3_bucket
         ):
             logging.warning(
-                f"Record location {docdb_record.get('location')} or name "
-                f"{docdb_record.get('name')} not valid for bucket "
-                f"{self.job_settings.s3_bucket}!"
+                f"Record location {docdb_record.get('location')} not valid "
+                f"for bucket {self.job_settings.s3_bucket}! Skipping."
             )
         else:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
@@ -587,10 +587,9 @@ class AindIndexBucketJob:
             key=object_key,
         )
         if does_metadata_file_exist:
-            # If record not in DocDb, then copy it to DocDb if the location
-            # in the metadata record matches the location the record lives in
-            # Otherwise, log a warning that the metadata record location does
-            # not make sense.
+            # If record not in DocDb, then copy it to DocDb.
+            # If location in the record does not match the actual s3 location,
+            # first log a warning and correct the record.
             s3_full_location = get_s3_location(bucket, object_key)
             if record_id is None:
                 json_contents = download_json_file_from_s3(
@@ -600,40 +599,44 @@ class AindIndexBucketJob:
                 )
                 if json_contents:
                     # noinspection PyTypeChecker
-                    if is_record_location_valid(
+                    if not is_record_location_valid(
                         json_contents,
                         expected_bucket=bucket,
                         expected_prefix=s3_prefix,
                     ):
-                        if "_id" in json_contents:
-                            logging.info(
-                                f"Adding record to docdb for: {location}"
-                            )
-                            response = docdb_client.insert_one_docdb_record(
-                                record=json_contents
-                            )
-                            logging.debug(response.json())
-                            cond_copy_then_sync_core_json_files(
-                                metadata_json=json.dumps(
-                                    json_contents, default=str
-                                ),
-                                bucket=bucket,
-                                prefix=s3_prefix,
-                                s3_client=s3_client,
-                                copy_original_md_subdir=(
-                                    self.job_settings.copy_original_md_subdir
-                                ),
-                            )
-                        else:
-                            logging.warning(
-                                f"Metadata record for {location} "
-                                f"does not have an _id field!"
-                            )
-                    else:
                         logging.warning(
                             f"Location field {json_contents.get('location')} "
-                            f"or name field {json_contents.get('name')} does "
-                            f"not match actual location of record {location}!"
+                            "does not match actual location of record "
+                            f"{location}! Updating record with correct "
+                            "location and new id."
+                        )
+                        json_contents.update(
+                            {
+                                "_id": str(uuid4()),
+                                "location": location,
+                            }
+                        )
+                    if "_id" in json_contents:
+                        logging.info(f"Adding record to docdb for: {location}")
+                        response = docdb_client.insert_one_docdb_record(
+                            record=json_contents
+                        )
+                        logging.debug(response.json())
+                        cond_copy_then_sync_core_json_files(
+                            metadata_json=json.dumps(
+                                json_contents, default=str
+                            ),
+                            bucket=bucket,
+                            prefix=s3_prefix,
+                            s3_client=s3_client,
+                            copy_original_md_subdir=(
+                                self.job_settings.copy_original_md_subdir
+                            ),
+                        )
+                    else:
+                        logging.warning(
+                            f"Metadata record for {location} "
+                            f"does not have an _id field!"
                         )
                 else:
                     logging.warning(
