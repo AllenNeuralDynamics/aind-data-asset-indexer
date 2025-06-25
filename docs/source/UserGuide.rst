@@ -59,9 +59,6 @@ The workflow is generally as follows:
 3. Paginate S3 to get all prefixes for a particular bucket.
 4. For each prefix, process by checking if it is a new data asset
    and adding it to DocDB if necessary.
-   
-   -  If the prefix is not valid (does not adhere to data asset
-      naming convention), log a warning.
    -  If the metadata record exists in S3 but not in DocDB, copy it
       to DocDB.
    -  If the metadata record does not exist in S3, create it and save
