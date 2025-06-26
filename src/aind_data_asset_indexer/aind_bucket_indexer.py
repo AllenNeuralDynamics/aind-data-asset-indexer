@@ -37,6 +37,7 @@ from aind_data_asset_indexer.utils import (
     download_json_file_from_s3,
     get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
+    is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     list_metadata_copies,
@@ -544,13 +545,15 @@ class AindIndexBucketJob:
     ):
         """
         Processes a prefix in S3
-        1) If metadata record exists in S3 and DocDB, do nothing.
-        2) If record is in S3 but not DocDb, then copy it to DocDb if the
+        1) If the prefix is not valid (does not adhere to data asset naming
+        convention), log a warning and do not process it further.
+        2) If metadata record exists in S3 and DocDB, do nothing.
+        3) If record is in S3 but not DocDb, then copy it to DocDb if the
         location in the metadata record matches the actual location and
         the record has an _id field. Otherwise, log a warning.
-        3) If record does not exist in both DocDB and S3, build a new metadata
+        4) If record does not exist in both DocDB and S3, build a new metadata
         file and save it to S3 (assume Lambda function will save to DocDB).
-        4) In both cases above, we also copy the original core json files to a
+        5) In both cases above, we also copy the original core json files to a
         subfolder and ensure the top level core jsons are in sync with the
         metadata.nd.json in S3.
 
@@ -566,6 +569,11 @@ class AindIndexBucketJob:
 
         """
         bucket = self.job_settings.s3_bucket
+        if not is_prefix_valid(s3_prefix):
+            logging.warning(
+                f"Prefix {s3_prefix} not valid in bucket {bucket}! Skipping."
+            )
+            return
         # Check if metadata record exists
         location = get_s3_location(bucket=bucket, prefix=s3_prefix)
         if location_to_id_map.get(location) is not None:

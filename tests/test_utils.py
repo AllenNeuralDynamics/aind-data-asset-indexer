@@ -25,6 +25,7 @@ from aind_data_asset_indexer.utils import (
     get_all_processed_codeocean_asset_records,
     get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
+    is_prefix_valid,
     is_record_location_valid,
     iterate_through_top_level,
     list_metadata_copies,
@@ -161,6 +162,26 @@ class TestUtils(unittest.TestCase):
         obj_key2 = create_metadata_object_key(prefix2)
         self.assertEqual("prefix1/metadata.nd.json", obj_key1)
         self.assertEqual("prefix2/metadata.nd.json", obj_key2)
+
+    def test_is_prefix_valid(self):
+        """Tests is_prefix_valid"""
+        valid_prefixes = [
+            "prefix1_2024-01-01_01-01-01",
+            "prefix1_2024-01-01_01-01-01/",
+            "ecephys_111111_2000-01-01_04-00-00/",
+            "multiplane-ophys_111111_2024-01-01_01-01-01/",
+        ]
+        invalid_prefixes = [
+            "prefix1",
+            "prefix1/",
+            "prefix1-2024-01-01-01-01-01",
+            "prefix1_2024-01-01_01-01-01/extra",
+            "prefix1_2024-01-01_01-01-01/extra/",
+        ]
+        for prefix in valid_prefixes:
+            self.assertTrue(is_prefix_valid(prefix))
+        for prefix in invalid_prefixes:
+            self.assertFalse(is_prefix_valid(prefix))
 
     def test_is_record_location_valid_true0(self):
         """Tests is_record_location_valid returns true when expected_prefix is
