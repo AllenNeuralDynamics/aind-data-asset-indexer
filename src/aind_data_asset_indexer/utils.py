@@ -121,8 +121,7 @@ def is_record_location_valid(
       True if there is a location field and the url in the field has a form
       like 's3://{expected_bucket}/prefix'
       Will return False if there is no s3 scheme, the bucket does not match
-      the expected bucket, the prefix contains forward slashes, or the prefix
-      is invalid or does not match the expected prefix.
+      the expected bucket, the prefix contains forward slashes, or does not match the expected prefix.
       If the record name does not match the prefix, a warning is logged,
       but the method will still return True.
 
@@ -143,7 +142,6 @@ def is_record_location_valid(
             if (
                 stripped_prefix == ""
                 or len(stripped_prefix.split("/")) > 1
-                or not is_prefix_valid(stripped_prefix)
                 or (
                     expected_prefix is not None
                     and stripped_prefix != expected_stripped_prefix
