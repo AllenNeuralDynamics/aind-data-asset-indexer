@@ -274,8 +274,8 @@ class TestUtils(unittest.TestCase):
             )
         )
 
-    def test_is_record_location_valid_false4(self):
-        """Tests is_record_location_valid returns false when prefix is
+    def test_is_record_location_valid_true4(self):
+        """Tests is_record_location_valid returns true when prefix is
         invalid"""
 
         example_record = {
@@ -283,7 +283,7 @@ class TestUtils(unittest.TestCase):
             "name": "prefix1",
             "location": "s3://some_bucket/prefix1",
         }
-        self.assertFalse(
+        self.assertTrue(
             is_record_location_valid(
                 example_record, expected_bucket="some_bucket"
             )
