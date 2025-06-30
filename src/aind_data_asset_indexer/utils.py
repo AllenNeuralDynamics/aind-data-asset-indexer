@@ -554,7 +554,7 @@ def cond_copy_then_sync_core_json_files(
     bucket: str,
     prefix: str,
     s3_client: S3Client,
-    copy_original_md_subdir: str = "original_metadata",
+    copy_original_md_subdir: str,
 ) -> None:
     """
     For a given bucket and prefix
