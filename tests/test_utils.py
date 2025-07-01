@@ -215,6 +215,41 @@ class TestUtils(unittest.TestCase):
             )
         )
 
+    def test_is_record_location_valid_true2(self):
+        """Tests is_record_location_valid returns true when prefix does not
+        match the naming convention"""
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "prefix1",
+            "location": "s3://some_bucket/prefix1",
+        }
+        self.assertTrue(
+            is_record_location_valid(
+                example_record, expected_bucket="some_bucket"
+            )
+        )
+
+    def test_is_record_location_valid_true3(self):
+        """Tests is_record_location_valid returns true when prefix does
+        not match name"""
+
+        example_record = {
+            "_id": "abc-123",
+            "name": "prefix2_2024-01-01_01-01-01",
+            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
+        }
+        with self.assertLogs(level="DEBUG") as captured:
+            result = is_record_location_valid(
+                example_record, expected_bucket="some_bucket"
+            )
+        expected_log_messages = [
+            "WARNING:root:Record name prefix2_2024-01-01_01-01-01 does not "
+            "match prefix prefix1_2024-01-01_01-01-01."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        self.assertTrue(result)
+
     def test_is_record_location_valid_false0(self):
         """Tests is_record_location_valid returns false when no location field
         is present"""
@@ -275,41 +310,6 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_is_record_location_valid_false4(self):
-        """Tests is_record_location_valid returns false when prefix is
-        invalid"""
-
-        example_record = {
-            "_id": "abc-123",
-            "name": "prefix1",
-            "location": "s3://some_bucket/prefix1",
-        }
-        self.assertFalse(
-            is_record_location_valid(
-                example_record, expected_bucket="some_bucket"
-            )
-        )
-
-    def test_is_record_location_valid_true2(self):
-        """Tests is_record_location_valid returns true when prefix does
-        not match name"""
-
-        example_record = {
-            "_id": "abc-123",
-            "name": "prefix2_2024-01-01_01-01-01",
-            "location": "s3://some_bucket/prefix1_2024-01-01_01-01-01",
-        }
-        with self.assertLogs(level="DEBUG") as captured:
-            result = is_record_location_valid(
-                example_record, expected_bucket="some_bucket"
-            )
-        expected_log_messages = [
-            "WARNING:root:Record name prefix2_2024-01-01_01-01-01 does not "
-            "match prefix prefix1_2024-01-01_01-01-01."
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        self.assertTrue(result)
-
-    def test_is_record_location_valid_false6(self):
         """Tests is_record_location_valid returns false when prefixes don't
         match"""
 
