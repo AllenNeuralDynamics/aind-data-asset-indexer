@@ -101,5 +101,30 @@
       "EncodingType": "url",
       "KeyCount": 1,
       "ContinuationToken": "1GQ5"
+   },
+    {
+      "ResponseMetadata": {
+         "RequestId": "RequestId",
+         "HostId": "HostId",
+         "HTTPStatusCode": 200,
+         "HTTPHeaders": {
+            "x-amz-id-2": "x-amz-id-2",
+            "x-amz-request-id": "x-amz-request-id",
+            "date": "Mon, 13 May 2024 21:22:24 GMT",
+            "x-amz-bucket-region": "us-west-2",
+            "content-type": "application/xml",
+            "transfer-encoding": "chunked",
+            "server": "AmazonS3"
+         },
+         "RetryAttempts": 0
+      },
+      "IsTruncated": true,
+      "Name": "aind-ephys-data-dev-u5u0i5",
+      "Prefix": "",
+      "Delimiter": "/",
+      "MaxKeys": 3,
+      "EncodingType": "url",
+      "KeyCount": 3,
+      "NextContinuationToken": "1c9Nj"
    }
 ]
