@@ -309,7 +309,7 @@ class TestUtils(unittest.TestCase):
             )
         )
 
-    def test_is_record_location_valid_false6(self):
+    def test_is_record_location_valid_false4(self):
         """Tests is_record_location_valid returns false when prefixes don't
         match"""
 
