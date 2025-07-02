@@ -589,7 +589,6 @@ class TestUtils(unittest.TestCase):
                 "ecephys_655019_2000-01-01_01-01-02/",
             ],
             ["ecephys_684156_2000-01-01_00-00-01/"],
-            [],
         ]
 
         self.assertEqual(expected_output, list(output))
