@@ -994,6 +994,7 @@ class TestUtils(unittest.TestCase):
                 bucket=bucket,
                 prefix=pfx,
                 s3_client=mock_s3_client,
+                copy_original_md_subdir="original_metadata"
             )
         expected_output_messages = [
             f"WARNING:root:Copy of original metadata already exists at "
@@ -1112,6 +1113,7 @@ class TestUtils(unittest.TestCase):
                 bucket=bucket,
                 prefix=pfx,
                 s3_client=mock_s3_client,
+                copy_original_md_subdir="original_metadata",
             )
         expected_log_messages = [
             f"INFO:root:Source file "
