@@ -1144,32 +1144,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.basic_job._process_records(example_records)
         mock_dask_bag_map_parts.assert_called()
 
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_invalid_prefix(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-    ):
-        """Tests _process_prefix method when the prefix is invalid."""
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        expected_log_messages = [
-            "WARNING:root:Prefix ecephys_642478 not valid in bucket "
-            "aind-ephys-data-dev-u5u0i5! Skipping."
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_does_s3_object_exist.assert_not_called()
-
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"

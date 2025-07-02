@@ -59,7 +59,7 @@ exclude = '''
     | _build
     | build
     | dist
-    |.conda
+    | .conda
   )/
   | .gitignore
 )
