@@ -452,7 +452,7 @@ def iterate_through_top_level(
     for page in pages:
         yield [
             p.get("Prefix")
-            for p in page["CommonPrefixes"]
+            for p in page.get("CommonPrefixes", [])
             if p.get("Prefix") is not None
         ]
 
