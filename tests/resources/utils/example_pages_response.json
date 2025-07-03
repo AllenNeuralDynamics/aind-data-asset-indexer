@@ -118,13 +118,12 @@
          },
          "RetryAttempts": 0
       },
-      "IsTruncated": true,
+      "IsTruncated": false,
       "Name": "aind-ephys-data-dev-u5u0i5",
       "Prefix": "",
       "Delimiter": "/",
       "MaxKeys": 3,
       "EncodingType": "url",
-      "KeyCount": 3,
-      "NextContinuationToken": "1c9Nj"
+      "KeyCount": 3
    }
 ]
