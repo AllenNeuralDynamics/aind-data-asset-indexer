@@ -62,8 +62,10 @@ The workflow is generally as follows:
    
    -  If the metadata record exists in S3 but not in DocDB, copy it
       to DocDB.
-   -  If the metadata record does not exist in S3, create it and save
-      it to S3. Assume a Lambda function will move it over to DocDB.
+   -  If the metadata record for a derived asset does not exist in S3,
+      create it and save it to S3. Assume a Lambda function will move it
+      over to DocDB. Metadata records for raw assets are created during
+      the upload process, **not** by this job.
    -  In both cases above, ensure the original metadata folder and core
       files are in sync with the metadata.nd.json file.
 
