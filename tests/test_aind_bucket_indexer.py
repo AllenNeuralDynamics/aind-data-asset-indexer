@@ -1146,6 +1146,89 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
+        "download_json_file_from_s3"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    def test_get_data_level_for_prefix(
+        self,
+        mock_does_s3_object_exist: MagicMock,
+        mock_download_json_file_from_s3: MagicMock,
+    ):
+        """Tests _get_data_level_for_prefix method."""
+        mock_s3_client = MagicMock()
+        mock_does_s3_object_exist.return_value = True
+        mock_download_json_file_from_s3.return_value = self.example_md_record1[
+            "data_description"
+        ]
+
+        prefix = "ecephys_642478_2023-01-17_13-56-29"
+        data_level = self.basic_job._get_data_level_for_prefix(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            prefix=prefix,
+        )
+        self.assertEqual("raw", data_level)
+        mock_does_s3_object_exist.assert_called_once_with(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            key=f"{prefix}/data_description.json",
+        )
+        mock_download_json_file_from_s3.assert_called_once_with(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            object_key=f"{prefix}/data_description.json",
+        )
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "download_json_file_from_s3"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    def test_get_data_level_for_prefix_no_file(
+        self,
+        mock_does_s3_object_exist: MagicMock,
+        mock_download_json_file_from_s3: MagicMock,
+    ):
+        """Tests _get_data_level_for_prefix method when there is no
+        data_description file."""
+        mock_s3_client = MagicMock()
+        mock_does_s3_object_exist.return_value = False
+
+        prefix = "ecephys_642478_2023-01-17_13-56-29"
+        data_level = self.basic_job._get_data_level_for_prefix(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            prefix=prefix,
+        )
+        self.assertEqual(None, data_level)
+        mock_download_json_file_from_s3.assert_not_called()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "download_json_file_from_s3"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    def test_get_data_level_for_prefix_invalid_file(
+        self,
+        mock_does_s3_object_exist: MagicMock,
+        mock_download_json_file_from_s3: MagicMock,
+    ):
+        """Tests _get_data_level_for_prefix method when the data_description
+        file is not valid json."""
+        mock_s3_client = MagicMock()
+        mock_does_s3_object_exist.return_value = True
+        mock_download_json_file_from_s3.return_value = None
+
+        prefix = "ecephys_642478_2023-01-17_13-56-29"
+        data_level = self.basic_job._get_data_level_for_prefix(
+            s3_client=mock_s3_client,
+            bucket=self.basic_job.job_settings.s3_bucket,
+            prefix=prefix,
+        )
+        self.assertEqual(None, data_level)
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
         "upload_metadata_json_str_to_s3"
     )
     @patch(
@@ -1156,6 +1239,65 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer."
         "build_metadata_record_from_prefix"
     )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob"
+        "._get_data_level_for_prefix"
+    )
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("boto3.client")
+    def test_process_prefix_no_record_no_file_derived_no(
+        self,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_does_s3_object_exist: MagicMock,
+        mock_get_data_level_for_prefix: MagicMock,
+        mock_build_metadata_record_from_prefix: MagicMock,
+        mock_cond_copy_then_sync_core_json_files: MagicMock,
+        mock_upload_metadata_json_str_to_s3: MagicMock,
+    ):
+        """Tests _process_prefix method when there is no record in DocDb,
+        there is no metadata.nd.json file in S3, and the
+        asset data level is not derived."""
+
+        mock_does_s3_object_exist.return_value = False
+        mock_get_data_level_for_prefix.return_value = "raw"
+        mock_build_metadata_record_from_prefix.return_value = None
+
+        location_to_id_map = dict()
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+            )
+        expected_log_messages = [
+            "INFO:root:Metadata record for "
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29 not found in S3 and data "
+            "level is not derived. Skipping."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+        mock_cond_copy_then_sync_core_json_files.assert_not_called()
+        mock_upload_metadata_json_str_to_s3.assert_not_called()
+
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "upload_metadata_json_str_to_s3"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "cond_copy_then_sync_core_json_files"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "build_metadata_record_from_prefix"
+    )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_get_data_level_for_prefix"
+    )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -1164,6 +1306,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
+        mock_get_data_level_for_prefix: MagicMock,
         mock_build_metadata_record_from_prefix: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
@@ -1173,6 +1316,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         build_metadata_record_from_prefix returns a None."""
 
         mock_does_s3_object_exist.return_value = False
+        mock_get_data_level_for_prefix.return_value = "derived"
         mock_build_metadata_record_from_prefix.return_value = None
 
         location_to_id_map = dict()
@@ -1204,6 +1348,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer."
         "build_metadata_record_from_prefix"
     )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
+        "_get_data_level_for_prefix"
+    )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -1212,6 +1360,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_object_exist: MagicMock,
+        mock_get_data_level_for_prefix: MagicMock,
         mock_build_metadata_record_from_prefix: MagicMock,
         mock_cond_copy_then_sync_core_json_files: MagicMock,
         mock_upload_metadata_json_str_to_s3: MagicMock,
@@ -1222,6 +1371,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         mock_does_s3_object_exist.return_value = False
+        mock_get_data_level_for_prefix.return_value = "derived"
         mock_build_metadata_record_from_prefix.return_value = json.dumps(
             self.example_md_record
         )

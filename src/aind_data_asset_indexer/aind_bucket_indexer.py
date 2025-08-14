@@ -19,6 +19,7 @@ from aind_data_access_api.utils import (
     get_s3_location,
     paginate_docdb,
 )
+from aind_data_schema_models.data_name_patterns import DataLevel
 from mypy_boto3_s3 import S3Client
 from mypy_boto3_s3.type_defs import CopySourceTypeDef
 from requests.adapters import HTTPAdapter
@@ -67,8 +68,8 @@ class AindIndexBucketJob:
     4.0) If a metadata record exists, check if it is in DocDB.
     4.1) If already in DocDb, then don't do anything.
     Otherwise, copy record to DocDB.
-    4.2) If a metadata record does not exist, then build one and save it to S3.
-    Assume a lambda function will move it over to DocDb.
+    4.2) If a metadata record does not exist and the asset is derived, then
+    build and save it to S3. Assume a lambda function will move it to DocDB.
     4.3) In both cases above, ensure the original metadata folder and core
     files are in sync with the metadata.nd.json file.
     """
@@ -535,6 +536,38 @@ class AindIndexBucketJob:
         )
         mapped_partitions.compute()
 
+    def _get_data_level_for_prefix(
+        self, s3_client: S3Client, bucket: str, prefix: str
+    ) -> Optional[str]:
+        """
+        Get an asset's data level from the data_description.json file.
+
+        Parameters
+        ----------
+        s3_client : S3Client
+        bucket : str
+        prefix : str
+
+        Returns
+        -------
+        Optional[str]
+          The data level of the asset. Returns None if data_description.json
+          file is not found.
+        """
+        data_desc_key = create_object_key(
+            prefix=prefix, filename="data_description.json"
+        )
+        if does_s3_object_exist(
+            s3_client=s3_client, bucket=bucket, key=data_desc_key
+        ):
+            json_contents = download_json_file_from_s3(
+                s3_client=s3_client,
+                bucket=bucket,
+                object_key=data_desc_key,
+            )
+            return json_contents.get("data_level") if json_contents else None
+        return None
+
     def _process_prefix(
         self,
         s3_prefix: str,
@@ -548,8 +581,9 @@ class AindIndexBucketJob:
         2) If record is in S3 but not DocDb, then copy it to DocDb if the
         location in the metadata record matches the actual location and
         the record has an _id field. Otherwise, log a warning.
-        3) If record does not exist in both DocDB and S3, build a new metadata
-        file and save it to S3 (assume Lambda function will save to DocDB).
+        3) If record does not exist in both DocDB and S3, check the data level.
+        For derived assets, build a new metadata file and save it to S3 (assume
+        Lambda function will save to DocDB).
         4) In both cases above, we also copy the original core json files to a
         subfolder and ensure the top level core jsons are in sync with the
         metadata.nd.json in S3.
@@ -640,7 +674,12 @@ class AindIndexBucketJob:
                     f"Metadata record for {s3_full_location} "
                     f"already exists in DocDb. Skipping."
                 )
-        else:  # metadata.nd.json file does not exist in S3. Create a new one.
+        elif (
+            self._get_data_level_for_prefix(
+                s3_client=s3_client, bucket=bucket, prefix=s3_prefix
+            )
+            == DataLevel.DERIVED.value
+        ):
             # Build a new metadata file, save it to S3 and save it to DocDb.
             # Also copy the original core json files to a subfolder and then
             # overwrite them with the new fields from metadata.nd.json.
@@ -675,6 +714,11 @@ class AindIndexBucketJob:
                 logging.warning(
                     f"Unable to build metadata record for: {location}!"
                 )
+        else:
+            logging.info(
+                f"Metadata record for {location} not found in S3 and data "
+                "level is not derived. Skipping."
+            )
 
     def _dask_task_to_process_prefix_list(self, prefix_list: List[str]):
         """
