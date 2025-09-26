@@ -385,7 +385,7 @@ class AindIndexBucketJob:
           not require deletion.
 
         """
-        docdb_id_to_delete = None
+        location_to_delete = None
         if not is_record_location_valid(
             docdb_record, self.job_settings.s3_bucket
         ):
@@ -405,9 +405,9 @@ class AindIndexBucketJob:
             if not does_prefix_exist:
                 logging.warning(
                     f"Asset not found in S3 at {docdb_record['location']}! "
-                    f"Will delete metadata record from DocDb."
+                    f"Will delete metadata record from DocDb and Code Ocean."
                 )
-                docdb_id_to_delete = docdb_record["_id"]
+                location_to_delete = docdb_record["location"]
             else:  # There is a prefix in S3 that matches the record location.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -463,7 +463,7 @@ class AindIndexBucketJob:
                     prefix=prefix,
                     docdb_record_contents=docdb_record,
                 )
-        return docdb_id_to_delete
+        return location_to_delete
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
@@ -484,16 +484,16 @@ class AindIndexBucketJob:
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
         with self._create_docdb_client() as doc_db_client:
-            records_to_delete = []
+            locations_to_delete = []
             for record in record_list:
                 try:
-                    docdb_id_to_delete = self._process_docdb_record(
+                    location_to_delete = self._process_docdb_record(
                         docdb_record=record,
                         docdb_client=doc_db_client,
                         s3_client=s3_client,
                     )
-                    if docdb_id_to_delete is not None:
-                        records_to_delete.append(docdb_id_to_delete)
+                    if location_to_delete is not None:
+                        locations_to_delete.append(location_to_delete)
                 except requests.HTTPError as e:
                     logging.error(
                         f"Error processing docdb {record.get('_id')}, "
@@ -505,15 +505,17 @@ class AindIndexBucketJob:
                         f'Error processing docdb {record.get("_id")}, '
                         f'{record.get("location")}: {repr(e)}'
                     )
-            if len(records_to_delete) > 0:
+            if len(locations_to_delete) > 0:
                 try:
                     logging.info(
-                        f"Deleting {len(records_to_delete)} records in DocDb."
+                        f"Deleting {len(locations_to_delete)} records in DocDb and Code Ocean."
                     )
-                    response = doc_db_client.delete_many_records(
-                        data_asset_record_ids=records_to_delete
-                    )
-                    logging.info(response.json())
+                    for location in locations_to_delete:
+                        logging.info(f"Deregistering record at location: {location}")
+                        response = doc_db_client.deregister_asset(
+                            s3_location=location,
+                        )
+                        logging.info(response)
                 except Exception as e:
                     logging.error(f"Error deleting records: {repr(e)}")
         s3_client.close()
