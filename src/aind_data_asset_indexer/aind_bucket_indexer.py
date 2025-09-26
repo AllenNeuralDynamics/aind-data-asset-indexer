@@ -34,6 +34,7 @@ from aind_data_asset_indexer.utils import (
     core_schema_file_names,
     create_metadata_object_key,
     create_object_key,
+    does_s3_prefix_exist,
     does_s3_object_exist,
     download_json_file_from_s3,
     get_dict_of_core_schema_file_info,
@@ -396,20 +397,18 @@ class AindIndexBucketJob:
             s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
             s3_bucket = s3_parts["bucket"]
             prefix = s3_parts["prefix"]
-            metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
-            does_file_exist_in_s3 = does_s3_object_exist(
+            does_prefix_exist = does_s3_prefix_exist(
                 s3_client=s3_client,
                 bucket=s3_bucket,
-                key=metadata_nd_object_key,
+                prefix=prefix,
             )
-            if not does_file_exist_in_s3:
+            if not does_prefix_exist:
                 logging.warning(
-                    f"File not found in S3 at "
-                    f"{get_s3_location(s3_bucket, metadata_nd_object_key)}! "
+                    f"Asset not found in S3 at {docdb_record['location']}! "
                     f"Will delete metadata record from DocDb."
                 )
                 docdb_id_to_delete = docdb_record["_id"]
-            else:  # There is a metadata.nd.json file in S3.
+            else:  # There is a prefix in S3 that matches the record location.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
                     s3_client=s3_client,
@@ -451,6 +450,7 @@ class AindIndexBucketJob:
                     )
                     docdb_record = docdb_response[0]
                 # Sync docdb record to metadata.nd.json in root folder
+                metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
                 metadata_nd_json_info = get_dict_of_file_info(
                     s3_client=s3_client,
                     bucket=s3_bucket,
