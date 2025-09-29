@@ -362,12 +362,12 @@ class AindIndexBucketJob:
         docdb_record: dict,
         docdb_client: MetadataDbClient,
         s3_client: S3Client,
-    ) -> Optional[str]:
+    ) -> None:
         """
         For a given record,
         1. Check if its location field is valid. If not, log a warning.
-        2. Check if it needs to be deleted (no s3 object found). If so, the
-        record id is returned for batch deletion.
+        2. Check if it needs to be deleted (no s3 prefix found). If so, the
+        record is de-registered from DocDB and Code Ocean.
         3. If there is an s3 object, then overwrite the s3 object if the docdb
         is different. Also resolves the core schema json files in the root
         folder and the original_metadata folder to ensure they are in sync.
@@ -377,15 +377,7 @@ class AindIndexBucketJob:
         docdb_record : dict
         docdb_client : MetadataDbClient
         s3_client : S3Client
-
-        Returns
-        -------
-        Optional[str]
-          The record id to delete from DocDb. If None, then the record does
-          not require deletion.
-
         """
-        location_to_delete = None
         if not is_record_location_valid(
             docdb_record, self.job_settings.s3_bucket
         ):
@@ -405,9 +397,12 @@ class AindIndexBucketJob:
             if not does_prefix_exist:
                 logging.warning(
                     f"Asset not found in S3 at {docdb_record['location']}! "
-                    f"Will delete metadata record from DocDb and Code Ocean."
+                    f"Deleting metadata record from DocDb and Code Ocean."
                 )
-                location_to_delete = docdb_record["location"]
+                response = docdb_client.deregister_asset(
+                    s3_location=docdb_record["location"],
+                )
+                logging.info(response)
             else:  # There is a prefix in S3 that matches the record location.
                 # Schema info in root level directory
                 s3_core_schema_info = get_dict_of_core_schema_file_info(
@@ -463,7 +458,6 @@ class AindIndexBucketJob:
                     prefix=prefix,
                     docdb_record_contents=docdb_record,
                 )
-        return location_to_delete
 
     def _dask_task_to_process_record_list(
         self, record_list: List[dict]
@@ -484,16 +478,13 @@ class AindIndexBucketJob:
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
         with self._create_docdb_client() as doc_db_client:
-            locations_to_delete = []
             for record in record_list:
                 try:
-                    location_to_delete = self._process_docdb_record(
+                    self._process_docdb_record(
                         docdb_record=record,
                         docdb_client=doc_db_client,
                         s3_client=s3_client,
                     )
-                    if location_to_delete is not None:
-                        locations_to_delete.append(location_to_delete)
                 except requests.HTTPError as e:
                     logging.error(
                         f"Error processing docdb {record.get('_id')}, "
@@ -505,19 +496,6 @@ class AindIndexBucketJob:
                         f'Error processing docdb {record.get("_id")}, '
                         f'{record.get("location")}: {repr(e)}'
                     )
-            if len(locations_to_delete) > 0:
-                try:
-                    logging.info(
-                        f"Deleting {len(locations_to_delete)} records in DocDb and Code Ocean."
-                    )
-                    for location in locations_to_delete:
-                        logging.info(f"Deregistering record at location: {location}")
-                        response = doc_db_client.deregister_asset(
-                            s3_location=location,
-                        )
-                        logging.info(response)
-                except Exception as e:
-                    logging.error(f"Error deleting records: {repr(e)}")
         s3_client.close()
 
     def _process_records(self, records: List[dict]):
