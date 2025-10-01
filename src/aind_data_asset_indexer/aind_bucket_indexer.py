@@ -54,21 +54,16 @@ class AindIndexBucketJob:
     not have valid location, it will log a warning and not process it further.
     2.0) For each record, check if the S3 location exists. If the S3 location
     does not exist, then remove the record from DocDB.
-    2.1) If the S3 location exists, check if there is a metadata.nd.json file.
-    2.1.0) If there is no file, log a warning and remove the record from DocDb.
-    2.1.1) If there is a file, resolve the core schema json files in the root
-    folder and the original_metadata folder to ensure they are in sync.
-    2.1.2) Then compare the md5 hashes. If they are different, overwrite the
+    2.1) If the S3 location exists, resolve the core schema json files in the
+    root folder and the original_metadata folder to ensure they are in sync.
+    2.1.1) Then compare the md5 hashes. If they are different, overwrite the
     record in S3 with the record from DocDb. Otherwise, do nothing.
     3) Scan through each prefix in S3.
-    4) For each prefix, check if a metadata record exists in S3.
-    4.0) If a metadata record exists, check if it is in DocDB.
+    4) For each prefix, check if it is in DocDB.
     4.1) If already in DocDb, then don't do anything.
-    Otherwise, copy record to DocDB.
     4.2) If a metadata record does not exist and the asset is derived, then
-    build and save it to S3. Assume a lambda function will move it to DocDB.
-    4.3) In both cases above, ensure the original metadata folder and core
-    files are in sync with the metadata.nd.json file.
+    register it to DocDB. Assume a subsequent docdb sync job will resolve the
+    original metadata folder and core files as in step 2.1.
     """
 
     def __init__(self, job_settings: AindIndexBucketJobSettings):
