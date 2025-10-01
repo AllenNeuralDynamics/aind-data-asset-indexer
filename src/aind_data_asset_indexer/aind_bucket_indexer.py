@@ -8,7 +8,6 @@ import sys
 import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from uuid import uuid4
 
 import boto3
 import dask.bag as dask_bag
@@ -28,14 +27,12 @@ from urllib3.util import Retry
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
     build_docdb_location_to_id_map,
-    build_metadata_record_from_prefix,
     compute_md5_hash,
-    cond_copy_then_sync_core_json_files,
     core_schema_file_names,
     create_metadata_object_key,
     create_object_key,
-    does_s3_prefix_exist,
     does_s3_object_exist,
+    does_s3_prefix_exist,
     download_json_file_from_s3,
     get_dict_of_core_schema_file_info,
     get_dict_of_file_info,
@@ -44,7 +41,6 @@ from aind_data_asset_indexer.utils import (
     list_metadata_copies,
     metadata_filename,
     upload_json_str_to_s3,
-    upload_metadata_json_str_to_s3,
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -114,8 +110,7 @@ class AindIndexBucketJob:
         ----------
         s3_client : S3Client
         core_schema_file_name : str
-          For example: 'subject.json', 'procedures.json', etc. Use None to
-          write to metadata_nd_json file.
+          For example: 'subject.json', 'procedures.json', etc.
         core_schema_info_in_root : dict | None
           For example: {'e_tag': ...}. None if no file in root folder.
         prefix : str
@@ -368,7 +363,7 @@ class AindIndexBucketJob:
         1. Check if its location field is valid. If not, log a warning.
         2. Check if it needs to be deleted (no s3 prefix found). If so, the
         record is de-registered from DocDB and Code Ocean.
-        3. If there is an s3 object, then overwrite the s3 object if the docdb
+        3. If there is an s3 prefix, overwrite the .nd.json object if the docdb
         is different. Also resolves the core schema json files in the root
         folder and the original_metadata folder to ensure they are in sync.
 
@@ -445,7 +440,9 @@ class AindIndexBucketJob:
                     )
                     docdb_record = docdb_response[0]
                 # Sync docdb record to metadata.nd.json in root folder
-                metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
+                metadata_nd_object_key = create_metadata_object_key(
+                    prefix=prefix
+                )
                 metadata_nd_json_info = get_dict_of_file_info(
                     s3_client=s3_client,
                     bucket=s3_bucket,
@@ -557,16 +554,12 @@ class AindIndexBucketJob:
     ):
         """
         Processes a prefix in S3
-        1) If metadata record exists in S3 and DocDB, do nothing.
-        2) If record is in S3 but not DocDb, then copy it to DocDb if the
-        location in the metadata record matches the actual location and
-        the record has an _id field. Otherwise, log a warning.
-        3) If record does not exist in both DocDB and S3, check the data level.
-        For derived assets, build a new metadata file and save it to S3 (assume
-        Lambda function will save to DocDB).
-        4) In both cases above, we also copy the original core json files to a
-        subfolder and ensure the top level core jsons are in sync with the
-        metadata.nd.json in S3.
+        1) If metadata record exists in DocDB for this prefix, do nothing.
+        2) If record does not exist in DocDB, check the data level.
+        For derived assets, build a new metadata record and save it to DocDB
+        using the asset registration api (assume next docdb_sync index job
+        will create the .nd.json file and resolve the core files).
+        For non-derived assets, log a warning and do nothing.
 
         Parameters
         ----------
@@ -586,117 +579,31 @@ class AindIndexBucketJob:
             record_id = location_to_id_map.get(location)
         else:
             record_id = None
-        object_key = create_metadata_object_key(prefix=s3_prefix)
-        does_metadata_file_exist = does_s3_object_exist(
-            s3_client=s3_client,
-            bucket=bucket,
-            key=object_key,
-        )
-        if does_metadata_file_exist:
-            # If record not in DocDb, then copy it to DocDb.
-            # If location in the record does not match the actual s3 location,
-            # first log a warning and correct the record.
-            s3_full_location = get_s3_location(bucket, object_key)
-            if record_id is None:
-                json_contents = download_json_file_from_s3(
-                    s3_client=s3_client,
-                    bucket=bucket,
-                    object_key=object_key,
-                )
-                if json_contents:
-                    # noinspection PyTypeChecker
-                    if not is_record_location_valid(
-                        json_contents,
-                        expected_bucket=bucket,
-                        expected_prefix=s3_prefix,
-                    ):
-                        logging.warning(
-                            f"Location field {json_contents.get('location')} "
-                            "does not match actual location of record "
-                            f"{location}! Updating record with correct "
-                            "location and new id."
-                        )
-                        json_contents.update(
-                            {
-                                "_id": str(uuid4()),
-                                "location": location,
-                            }
-                        )
-                    if "_id" in json_contents:
-                        logging.info(f"Adding record to docdb for: {location}")
-                        response = docdb_client.insert_one_docdb_record(
-                            record=json_contents
-                        )
-                        logging.debug(response.json())
-                        cond_copy_then_sync_core_json_files(
-                            metadata_json=json.dumps(
-                                json_contents, default=str
-                            ),
-                            bucket=bucket,
-                            prefix=s3_prefix,
-                            s3_client=s3_client,
-                            copy_original_md_subdir=(
-                                self.job_settings.copy_original_md_subdir
-                            ),
-                        )
-                    else:
-                        logging.warning(
-                            f"Metadata record for {location} "
-                            f"does not have an _id field!"
-                        )
-                else:
-                    logging.warning(
-                        f"Unable to download file from S3 for: "
-                        f"{s3_full_location}!"
-                    )
-            else:
-                logging.info(
-                    f"Metadata record for {s3_full_location} "
-                    f"already exists in DocDb. Skipping."
-                )
+        if record_id is not None:
+            logging.info(
+                f"Metadata record for {location} "
+                f"already exists in DocDb. Skipping."
+            )
         elif (
-            self._get_data_level_for_prefix(
+            record_id is None
+            and self._get_data_level_for_prefix(
                 s3_client=s3_client, bucket=bucket, prefix=s3_prefix
             )
             == DataLevel.DERIVED.value
         ):
-            # Build a new metadata file, save it to S3 and save it to DocDb.
-            # Also copy the original core json files to a subfolder and then
-            # overwrite them with the new fields from metadata.nd.json.
-            new_metadata_contents = build_metadata_record_from_prefix(
-                bucket=bucket,
-                prefix=s3_prefix,
-                s3_client=s3_client,
+            # Register derived asset with no docdb record:
+            # - Creates a record in DocDB based on core files in S3 prefix
+            # - Registers asset to Code Ocean if not already registered
+            # Assume next docdb_sync index job will create the .nd.json file
+            # and copy root files to /original_metadata.
+            logging.info(f"Registering derived asset for: {location}")
+            register_response = docdb_client.register_asset(
+                s3_location=location,
             )
-            if new_metadata_contents is not None:
-                # noinspection PyTypeChecker
-                cond_copy_then_sync_core_json_files(
-                    metadata_json=new_metadata_contents,
-                    bucket=bucket,
-                    prefix=s3_prefix,
-                    s3_client=s3_client,
-                    copy_original_md_subdir=(
-                        self.job_settings.copy_original_md_subdir
-                    ),
-                )
-                logging.info(f"Uploading metadata record for: {location}")
-                # noinspection PyTypeChecker
-                s3_response = upload_metadata_json_str_to_s3(
-                    metadata_json=new_metadata_contents,
-                    bucket=bucket,
-                    prefix=s3_prefix,
-                    s3_client=s3_client,
-                )
-                logging.debug(s3_response)
-                # Assume Lambda function will move it to DocDb. If it doesn't,
-                # then next index job will pick it up.
-            else:
-                logging.warning(
-                    f"Unable to build metadata record for: {location}!"
-                )
+            logging.info(register_response)
         else:
-            logging.info(
-                f"Metadata record for {location} not found in S3 and data "
+            logging.warning(
+                f"Metadata record for {location} not found in DocDB but data "
                 "level is not derived. Skipping."
             )
 

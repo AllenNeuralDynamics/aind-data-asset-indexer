@@ -269,7 +269,10 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
         else:
             raise e
 
-def does_s3_prefix_exist(s3_client: S3Client, bucket: str, prefix: str) -> bool:
+
+def does_s3_prefix_exist(
+    s3_client: S3Client, bucket: str, prefix: str
+) -> bool:
     """
     Check that a prefix exists inside a bucket.
 
