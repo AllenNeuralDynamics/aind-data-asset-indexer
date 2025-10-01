@@ -1337,7 +1337,7 @@ class TestUtils(unittest.TestCase):
     def test_does_s3_prefix_exist_false(self, mock_s3_client: MagicMock):
         """Tests does_s3_prefix_exist when false"""
         mock_s3_client.list_objects_v2.return_value = (
-            self.example_list_objects_response_false
+            self.example_list_objects_response_none
         )
         result = does_s3_prefix_exist(
             bucket="bucket",
