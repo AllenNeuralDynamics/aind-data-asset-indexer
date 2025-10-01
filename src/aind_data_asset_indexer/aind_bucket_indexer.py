@@ -387,7 +387,7 @@ class AindIndexBucketJob:
             if not does_prefix_exist:
                 logging.warning(
                     f"Asset not found in S3 at {docdb_record['location']}! "
-                    f"Deleting metadata record from DocDb and Code Ocean."
+                    "Deleting metadata record from DocDb and Code Ocean."
                 )
                 response = docdb_client.deregister_asset(
                     s3_location=docdb_record["location"],
@@ -598,7 +598,7 @@ class AindIndexBucketJob:
             logging.info(register_response)
         else:
             logging.warning(
-                f"Metadata record for {location} not found in DocDB but data "
+                f"Metadata record for {location} not found in DocDB and data "
                 "level is not derived. Skipping."
             )
 
