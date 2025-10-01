@@ -16,17 +16,17 @@ kept in sync:
 
    -  ``{core_schema}.json``: core schema files, e.g.,
       ``acquisition.json``, ``subject.json``.
-   -  ``metadata.nd.json``: top-level metadata file, containing
-      all core schema fields.
+   -  ``metadata.nd.json``: top-level metadata file, containing all core schema
+      schema fields. This file is for reference only and may be removed soon.
    -  ``original_metadata/{core_schema}.json``: a copy of each
       core schema file as it was originally uploaded to S3.
 2. A **document database (DocDB)** contains unstructured JSON
-   documents describing the ``metadata.nd.json`` for a data asset.
+   documents describing the top-level metadata (containing all core schema fields) for a data asset.
 3. **Code Ocean**: data assets are mounted as Code Ocean data assets.
    Processed results are also stored in an internal Code Ocean bucket.
 
-Once the data is initially uploaded, the DocDB is assumed to be the
-source of truth for metadata. All updates to existing metadata should
+Once the data is initially uploaded and "registered" (added to DocDB and Code Ocean), 
+the DocDB is assumed to be the source of truth for metadata. All updates to existing metadata should
 be made in the DocDB.
 
 We have automated jobs to keep changes in DocDB, S3, and Code Ocean in sync.
@@ -57,17 +57,12 @@ The workflow is generally as follows:
       sync, update them.
    -  If the metadata.nd.json file is outdated, update it.
 3. Paginate S3 to get all prefixes for a particular bucket.
-4. For each prefix, process by checking if it is a new data asset
+4. For each prefix, process by checking if it is a new derived data asset
    and adding it to DocDB if necessary.
    
-   -  If the metadata record exists in S3 but not in DocDB, copy it
-      to DocDB.
-   -  If the metadata record for a derived asset does not exist in S3,
-      create it and save it to S3. Assume a Lambda function will move it
-      over to DocDB. Metadata records for raw assets are created during
+   -  If the metadata record for a derived asset does not exist in DocDB,
+      register the asset. Raw assets are registered during
       the upload process, **not** by this job.
-   -  In both cases above, ensure the original metadata folder and core
-      files are in sync with the metadata.nd.json file.
 
 Please refer to the job's docstrings for more details on the implementation.
 
