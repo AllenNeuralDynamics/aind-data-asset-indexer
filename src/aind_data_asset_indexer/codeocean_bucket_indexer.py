@@ -66,6 +66,7 @@ class CodeOceanIndexBucketJob:
             host=self.job_settings.doc_db_host,
             database=self.job_settings.doc_db_db_name,
             collection=self.job_settings.doc_db_collection_name,
+            version="v1",
             session=session,
         )
 

@@ -14,6 +14,7 @@ import dask.bag as dask_bag
 import requests
 from aind_data_access_api.document_db import MetadataDbClient
 from aind_data_access_api.utils import (
+    build_docdb_location_to_id_map,
     get_s3_bucket_and_prefix,
     get_s3_location,
     paginate_docdb,
@@ -26,7 +27,6 @@ from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import AindIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
-    build_docdb_location_to_id_map,
     compute_md5_hash,
     core_schema_file_names,
     create_metadata_object_key,
@@ -85,6 +85,7 @@ class AindIndexBucketJob:
             host=self.job_settings.doc_db_host,
             database=self.job_settings.doc_db_db_name,
             collection=self.job_settings.doc_db_collection_name,
+            version="v1",
             session=session,
         )
 
@@ -431,7 +432,6 @@ class AindIndexBucketJob:
                     # Pull record from docdb to get new last_modified as well
                     docdb_response = docdb_client.retrieve_docdb_records(
                         filter_query={"_id": docdb_record["_id"]},
-                        paginate=False,
                     )
                     docdb_record = docdb_response[0]
                 # Sync docdb record to metadata.nd.json in root folder
