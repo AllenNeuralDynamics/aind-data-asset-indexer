@@ -21,6 +21,7 @@ from aind_data_asset_indexer.utils import (
     create_object_key,
     does_s3_metadata_copy_exist,
     does_s3_object_exist,
+    does_s3_prefix_exist,
     download_json_file_from_s3,
     get_all_processed_codeocean_asset_records,
     get_dict_of_core_schema_file_info,
@@ -995,7 +996,7 @@ class TestUtils(unittest.TestCase):
                 bucket=bucket,
                 prefix=pfx,
                 s3_client=mock_s3_client,
-                copy_original_md_subdir="original_metadata"
+                copy_original_md_subdir="original_metadata",
             )
         expected_output_messages = [
             f"WARNING:root:Copy of original metadata already exists at "
@@ -1313,6 +1314,40 @@ class TestUtils(unittest.TestCase):
         }
 
         self.assertEqual(expected_records, records)
+
+    @patch("boto3.client")
+    def test_does_s3_prefix_exist_true(self, mock_s3_client: MagicMock):
+        """Tests does_s3_prefix_exist when true"""
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response
+        )
+        result = does_s3_prefix_exist(
+            bucket="bucket",
+            prefix="prefix",
+            s3_client=mock_s3_client,
+        )
+        self.assertTrue(result)
+        mock_s3_client.list_objects_v2.assert_called_once_with(
+            Bucket="bucket",
+            Prefix="prefix/",
+            Delimiter="/",
+        )
+
+    @patch("boto3.client")
+    def test_does_s3_prefix_exist_false(self, mock_s3_client: MagicMock):
+        """Tests does_s3_prefix_exist when false"""
+        mock_s3_client.list_objects_v2.return_value = (
+            self.example_list_objects_response_none
+        )
+        result = does_s3_prefix_exist(
+            bucket="bucket",
+            prefix="prefix",
+            s3_client=mock_s3_client,
+        )
+        mock_s3_client.list_objects_v2.assert_called_once_with(
+            Bucket="bucket", Prefix="prefix/", Delimiter="/"
+        )
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":

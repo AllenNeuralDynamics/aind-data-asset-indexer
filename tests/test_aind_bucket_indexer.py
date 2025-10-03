@@ -748,7 +748,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         is not a valid s3 url"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            docdb_id_to_delete = self.basic_job._process_docdb_record(
+            self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -763,7 +763,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        self.assertIsNone(docdb_id_to_delete)
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -776,7 +775,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         has invalid prefix"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            docdb_id_to_delete = self.basic_job._process_docdb_record(
+            self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -790,34 +789,40 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "not valid for bucket aind-ephys-data-dev-u5u0i5! Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        self.assertIsNone(docdb_id_to_delete)
 
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_docdb_record_s3_file_missing(
+    def test_process_docdb_record_s3_prefix_dne(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
     ):
-        """Tests _process_docdb_record when the s3 metadata.nd.json file is
-        missing."""
-        mock_does_s3_object_exist.return_value = False
+        """Tests _process_docdb_record when the s3 prefix does not exist."""
+        location = (
+            "s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29"
+        )
+        mock_does_s3_prefix_exist.return_value = False
+        mock_docdb_client.deregister_asset.return_value = {
+            "message": "Deregistered",
+        }
         with self.assertLogs(level="DEBUG") as captured:
-            docdb_id_to_delete = self.basic_job._process_docdb_record(
+            self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=self.example_md_record,
             )
         expected_log_messages = [
-            "WARNING:root:File not found in S3 at "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json! "
-            "Will delete metadata record from DocDb.",
+            f"WARNING:root:Asset not found in S3 at {location}! "
+            "Deleting metadata record from DocDb and Code Ocean.",
+            "INFO:root:{'message': 'Deregistered'}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        self.assertEqual(self.example_md_record["_id"], docdb_id_to_delete)
+        mock_docdb_client.deregister_asset.assert_called_once_with(
+            s3_location=location
+        )
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -833,14 +838,14 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "get_dict_of_core_schema_file_info"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_docdb_record_valid_metadata_nd_json_file(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_get_dict_of_core_schema_file_info: MagicMock,
         mock_list_metadata_copies: MagicMock,
@@ -860,7 +865,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_response.status_code = 200
         mock_response.json = MagicMock(return_value=upsert_response)
         mock_docdb_client.upsert_one_docdb_record.return_value = mock_response
-        mock_does_s3_object_exist.return_value = True
+        mock_does_s3_prefix_exist.return_value = True
         core_info = {
             "last_modified": datetime(
                 2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
@@ -895,7 +900,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
 
         with self.assertLogs(level="DEBUG") as captured:
-            docdb_id_to_delete = self.basic_job._process_docdb_record(
+            self.basic_job._process_docdb_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=mock_docdb_record,
@@ -925,7 +930,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             prefix="ecephys_642478_2023-01-17_13-56-29",
             docdb_record_contents=expected_docdb_record_to_write,
         )
-        self.assertIsNone(docdb_id_to_delete)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
@@ -942,15 +946,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_delete_response = Response()
-        mock_delete_response.status_code = 200
-        mock_delete_response.json = MagicMock(
-            return_value={"acknowledged": True, "deletedCount": 2}
-        )
         mock_docdb_api_client = MagicMock()
-        mock_docdb_api_client.delete_many_records.return_value = (
-            mock_delete_response
-        )
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
@@ -959,21 +955,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             self.example_md_record1,
             self.example_md_record2,
         ]
-        # Assume 2 records need to be deleted
-        mock_process_docdb_record.side_effect = [
-            None,
-            self.example_md_record1.get("_id"),
-            self.example_md_record2.get("_id"),
-        ]
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._dask_task_to_process_record_list(
-                record_list=records
-            )
-        expected_log_messages = [
-            "INFO:root:Deleting 2 records in DocDb.",
-            "INFO:root:{'acknowledged': True, 'deletedCount': 2}",
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
+        self.basic_job._dask_task_to_process_record_list(record_list=records)
         mock_process_docdb_record.assert_has_calls(
             [
                 call(
@@ -991,12 +973,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     docdb_client=mock_docdb_api_client,
                     s3_client=mock_s3_client,
                 ),
-            ]
-        )
-        mock_docdb_api_client.delete_many_records.assert_called_once_with(
-            data_asset_record_ids=[
-                self.example_md_record1.get("_id"),
-                self.example_md_record2.get("_id"),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
@@ -1017,15 +993,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list when there are errors."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
-        mock_delete_response = Response()
-        mock_delete_response.status_code = 200
-        mock_delete_response.json = MagicMock(
-            return_value={"acknowledged": True, "deletedCount": 1}
-        )
         mock_docdb_api_client = MagicMock()
-        mock_docdb_api_client.delete_many_records.return_value = (
-            mock_delete_response
-        )
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
@@ -1040,7 +1008,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_process_docdb_record.side_effect = [
             HTTPError(response=http_error_response),
             Exception("Error processing record"),
-            self.example_md_record2.get("_id"),
+            None,
         ]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_process_record_list(
@@ -1057,8 +1025,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_567890_2000-01-01_04-00-00: "
             "Exception('Error processing record')",
-            "INFO:root:Deleting 1 records in DocDb.",
-            "INFO:root:{'acknowledged': True, 'deletedCount': 1}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
         mock_process_docdb_record.assert_has_calls(
@@ -1079,56 +1045,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_client=mock_s3_client,
                 ),
             ]
-        )
-        mock_docdb_api_client.delete_many_records.assert_called_once_with(
-            data_asset_record_ids=[self.example_md_record2.get("_id")]
-        )
-        mock_s3_client.close.assert_called_once_with()
-        mock_docdb_client.return_value.__exit__.assert_called_once()
-
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_process_docdb_record"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_dask_task_to_process_record_list_error_delete(
-        self,
-        mock_boto3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_process_docdb_record: MagicMock,
-    ):
-        """Tests _dask_task_to_process_record_list when there is an error
-        deleting records."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
-        mock_docdb_api_client = MagicMock()
-        mock_docdb_api_client.delete_many_records.side_effect = Exception(
-            "Error"
-        )
-        mock_docdb_client.return_value.__enter__.return_value = (
-            mock_docdb_api_client
-        )
-        records = [self.example_md_record]
-        mock_process_docdb_record.return_value = self.example_md_record.get(
-            "_id"
-        )
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._dask_task_to_process_record_list(
-                record_list=records
-            )
-        expected_log_messages = [
-            "INFO:root:Deleting 1 records in DocDb.",
-            "ERROR:root:Error deleting records: Exception('Error')",
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_process_docdb_record.assert_called_once_with(
-            docdb_record=self.example_md_record,
-            docdb_client=mock_docdb_api_client,
-            s3_client=mock_s3_client,
-        )
-        mock_docdb_api_client.delete_many_records.assert_called_once_with(
-            data_asset_record_ids=[self.example_md_record.get("_id")]
         )
         mock_s3_client.close.assert_called_once_with()
         mock_docdb_client.return_value.__exit__.assert_called_once()
@@ -1228,41 +1144,21 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.assertEqual(None, data_level)
 
     @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "build_metadata_record_from_prefix"
-    )
-    @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob"
         "._get_data_level_for_prefix"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_prefix_no_record_no_file_derived_no(
+    def test_process_prefix_no_record_no_derived(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
         mock_get_data_level_for_prefix: MagicMock,
-        mock_build_metadata_record_from_prefix: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb,
-        there is no metadata.nd.json file in S3, and the
-        asset data level is not derived."""
+        and the asset data level is not derived."""
 
-        mock_does_s3_object_exist.return_value = False
         mock_get_data_level_for_prefix.return_value = "raw"
-        mock_build_metadata_record_from_prefix.return_value = None
 
         location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
@@ -1273,111 +1169,34 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 location_to_id_map=location_to_id_map,
             )
         expected_log_messages = [
-            "INFO:root:Metadata record for "
+            "WARNING:root:Metadata record for "
             "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29 not found in S3 and data "
+            "ecephys_642478_2023-01-17_13-56-29 not found in DocDB and data "
             "level is not derived. Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        mock_cond_copy_then_sync_core_json_files.assert_not_called()
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
+        mock_docdb_client.register_asset.assert_not_called()
 
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "build_metadata_record_from_prefix"
-    )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_get_data_level_for_prefix"
     )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_prefix_no_record_no_file_build_no(
+    def test_process_prefix_no_record_yes_derived(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
         mock_get_data_level_for_prefix: MagicMock,
-        mock_build_metadata_record_from_prefix: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
     ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is no metadata.nd.json file in S3, and the
-        build_metadata_record_from_prefix returns a None."""
-
-        mock_does_s3_object_exist.return_value = False
-        mock_get_data_level_for_prefix.return_value = "derived"
-        mock_build_metadata_record_from_prefix.return_value = None
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        expected_log_messages = [
-            "WARNING:root:Unable to build metadata record for: "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29!"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_cond_copy_then_sync_core_json_files.assert_not_called()
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
-
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "build_metadata_record_from_prefix"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_get_data_level_for_prefix"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_no_record_no_file_build_yes(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-        mock_get_data_level_for_prefix: MagicMock,
-        mock_build_metadata_record_from_prefix: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
-    ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is no metadata.nd.json file in S3, and the
-        build_metadata_record_from_prefix returns a json object."""
+        """Tests _process_prefix method when there is no record in DocDb
+        and the asset is derived."""
 
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
-        mock_does_s3_object_exist.return_value = False
         mock_get_data_level_for_prefix.return_value = "derived"
-        mock_build_metadata_record_from_prefix.return_value = json.dumps(
-            self.example_md_record
-        )
-        mock_upload_metadata_json_str_to_s3.return_value = (
-            self.example_put_object_response1
-        )
+        mock_docdb_client.register_asset.return_value = {
+            "message": "Registered",
+        }
 
         location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
@@ -1388,279 +1207,24 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 location_to_id_map=location_to_id_map,
             )
         expected_log_messages = [
-            f"INFO:root:Uploading metadata record for: "
+            "INFO:root:Registering derived asset for: "
             f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}",
-            f"DEBUG:root:{self.example_put_object_response1}",
+            "INFO:root:{'message': 'Registered'}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
-            metadata_json=json.dumps(self.example_md_record),
-            bucket=self.basic_job.job_settings.s3_bucket,
-            prefix=expected_prefix,
-            s3_client=mock_s3_client,
-            copy_original_md_subdir="original_metadata",
-        )
-        mock_upload_metadata_json_str_to_s3.assert_called_once_with(
-            metadata_json=json.dumps(self.example_md_record),
-            bucket=self.basic_job.job_settings.s3_bucket,
-            prefix=expected_prefix,
-            s3_client=mock_s3_client,
+        mock_docdb_client.register_asset.assert_called_once_with(
+            s3_location=f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}"
         )
 
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "download_json_file_from_s3"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_no_record_yes_file_bad_file(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-        mock_download_json_file_from_s3: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
-    ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is metadata.nd.json file in S3, but the file can't
-        be serialized to json."""
-
-        mock_does_s3_object_exist.return_value = True
-        mock_download_json_file_from_s3.return_value = None
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        expected_log_messages = [
-            "WARNING:root:Unable to download file from S3 for: "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json!"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_cond_copy_then_sync_core_json_files.assert_not_called()
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
-
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "download_json_file_from_s3"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_no_record_yes_file_good_file(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-        mock_download_json_file_from_s3: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
-    ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is and there is metadata.nd.json file in S3, and the file can
-        be serialized to json."""
-        insert_response = {
-            "acknowledged": True,
-            "insertedId": "488bbe42-832b-4c37-8572-25eb87cc50e2",
-        }
-        mock_response = Response()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value=insert_response)
-        mock_docdb_client.insert_one_docdb_record.return_value = mock_response
-
-        mock_does_s3_object_exist.return_value = True
-        mock_download_json_file_from_s3.return_value = self.example_md_record
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        expected_log_messages = [
-            "INFO:root:Adding record to docdb for: "
-            "s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29",
-            f"DEBUG:root:{insert_response}",
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
-            metadata_json=json.dumps(self.example_md_record),
-            bucket=self.basic_job.job_settings.s3_bucket,
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            copy_original_md_subdir="original_metadata",
-        )
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
-
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "download_json_file_from_s3"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_no_record_yes_file_good_file_no__id(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-        mock_download_json_file_from_s3: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
-    ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is and there is metadata.nd.json file in S3, and the file can
-        be serialized to json, but there is no _id in the file."""
-        mock_does_s3_object_exist.return_value = True
-        mocked_downloaded_record = deepcopy(self.example_md_record)
-        del mocked_downloaded_record["_id"]
-        mock_download_json_file_from_s3.return_value = mocked_downloaded_record
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        expected_log_messages = [
-            "WARNING:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29 does not have an _id field!"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_docdb_client.insert_one_docdb_record.assert_not_called()
-        mock_cond_copy_then_sync_core_json_files.assert_not_called()
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
-
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.uuid4")
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "upload_metadata_json_str_to_s3"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "cond_copy_then_sync_core_json_files"
-    )
-    @patch(
-        "aind_data_asset_indexer.aind_bucket_indexer."
-        "download_json_file_from_s3"
-    )
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    def test_process_prefix_no_record_yes_file_good_file_bad_location(
-        self,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
-        mock_download_json_file_from_s3: MagicMock,
-        mock_cond_copy_then_sync_core_json_files: MagicMock,
-        mock_upload_metadata_json_str_to_s3: MagicMock,
-        mock_uuid: MagicMock,
-    ):
-        """Tests _process_prefix method when there is no record in DocDb,
-        there is and there is metadata.nd.json file in S3, and the file can
-        be serialized to json, but the location inside the metadata record
-        does not match actual location of the record."""
-        mock_does_s3_object_exist.return_value = True
-        # Test what happens when the location in the record does not match the
-        # expected location
-        mock_download_json_file_from_s3.return_value = {
-            "_id": "5ca4a951-d374-4f4b-8279-d570a35b2286",
-            "name": "ecephys_642478_2023-01-17_13-56-29",
-            "location": "s3://bucket/ecephys_642478_2020-01-10_10-10-10",
-        }
-        mock_uuid.return_value = "a62344ff-1cec-48f4-914e-7482797e6332"
-        mock_docdb_client.insert_one_docdb_record.return_value = MagicMock(
-            status_code=200, json=MagicMock(return_value="inserted")
-        )
-
-        location_to_id_map = dict()
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_prefix(
-                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                location_to_id_map=location_to_id_map,
-            )
-        actual_location = (
-            f"s3://{self.basic_job.job_settings.s3_bucket}/"
-            "ecephys_642478_2023-01-17_13-56-29"
-        )
-        expected_log_messages = [
-            "WARNING:root:Location field s3://bucket/"
-            "ecephys_642478_2020-01-10_10-10-10 does not match actual "
-            f"location of record {actual_location}! Updating "
-            "record with correct location and new id.",
-            f"INFO:root:Adding record to docdb for: {actual_location}",
-            "DEBUG:root:inserted",
-        ]
-        expected_record = {
-            "_id": mock_uuid.return_value,
-            "name": "ecephys_642478_2023-01-17_13-56-29",
-            "location": actual_location,
-        }
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_docdb_client.insert_one_docdb_record.assert_called_once_with(
-            record=expected_record
-        )
-        mock_cond_copy_then_sync_core_json_files.assert_called_once_with(
-            metadata_json=json.dumps(expected_record),
-            bucket=self.basic_job.job_settings.s3_bucket,
-            prefix="ecephys_642478_2023-01-17_13-56-29",
-            s3_client=mock_s3_client,
-            copy_original_md_subdir="original_metadata",
-        )
-        mock_upload_metadata_json_str_to_s3.assert_not_called()
-
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_object_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_yes_record_yes_file(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_object_exist: MagicMock,
     ):
-        """Tests _process_prefix method when there is a record in DocDb and
-        there is a metadata.nd.json file in S3."""
+        """Tests _process_prefix method when there is a record in DocDb."""
 
-        mock_does_s3_object_exist.return_value = True
         expected_bucket = self.basic_job.job_settings.s3_bucket
         location_key = (
             f"s3://{expected_bucket}/" f"ecephys_642478_2023-01-17_13-56-29"
@@ -1677,7 +1241,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             )
         expected_log_messages = [
             "INFO:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
-            "ecephys_642478_2023-01-17_13-56-29/metadata.nd.json already "
+            "ecephys_642478_2023-01-17_13-56-29 already "
             "exists in DocDb. Skipping."
         ]
         self.assertEqual(expected_log_messages, captured.output)

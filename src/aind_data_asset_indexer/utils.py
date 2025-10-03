@@ -270,6 +270,34 @@ def does_s3_object_exist(s3_client: S3Client, bucket: str, key: str) -> bool:
             raise e
 
 
+def does_s3_prefix_exist(
+    s3_client: S3Client, bucket: str, prefix: str
+) -> bool:
+    """
+    Check that a prefix exists inside a bucket.
+
+    Parameters
+    ----------
+    s3_client : S3Client
+    bucket : str
+    prefix : str
+      For example, behavior_655019_2020-10-10_01-00-23
+
+    Returns
+    -------
+    bool
+      True if the prefix exists, otherwise False.
+    """
+    # Use trailing slash and delimiter to get top-level keys in prefix
+    # KeyCount contains count of Contents and CommonPrefixes
+    response = s3_client.list_objects_v2(
+        Bucket=bucket, Prefix=prefix.strip("/") + "/", Delimiter="/"
+    )
+    if response.get("KeyCount") and response["KeyCount"] > 0:
+        return True
+    return False
+
+
 def does_s3_metadata_copy_exist(
     s3_client: S3Client, bucket: str, prefix: str, copy_subdir: str
 ):
