@@ -51,8 +51,8 @@ class AindIndexBucketJobSettings(IndexJobSettings):
     """Aind Index Bucket Job Settings"""
 
     doc_db_host: str
-    doc_db_db_name: str
-    doc_db_collection_name: str
+    doc_db_db_name: Optional[str]
+    doc_db_collection_name: Optional[str]
     run_docdb_sync: bool = Field(
         default=True,
         description="If true, then process DocDB records to sync to S3.",
@@ -84,8 +84,8 @@ class CodeOceanIndexBucketJobSettings(IndexJobSettings):
     """Code Ocean Index Bucket Job Settings"""
 
     doc_db_host: str
-    doc_db_db_name: str
-    doc_db_collection_name: str
+    doc_db_db_name: Optional[str]
+    doc_db_collection_name: Optional[str]
     codeocean_domain: str
     codeocean_token: SecretStr
     run_co_sync: bool = Field(

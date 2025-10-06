@@ -921,7 +921,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         mock_docdb_client.retrieve_docdb_records.assert_called_once_with(
             filter_query={"_id": self.example_md_record.get("_id")},
-            paginate=False,
         )
         mock_write_root_file_with_record_info.assert_called_once_with(
             s3_client=mock_s3_client,
