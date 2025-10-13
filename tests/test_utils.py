@@ -141,7 +141,7 @@ class TestUtils(unittest.TestCase):
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
         md5_hash = compute_md5_hash(json.dumps(self.example_metadata_nd))
-        self.assertEqual("a0f1022e3b4a8bc60e63e3677171f784", md5_hash)
+        self.assertEqual("de9660c272eacf52ed43080f2ec7dba2", md5_hash)
 
     def test_create_object_key(self):
         """Tests create_object_key"""
@@ -683,16 +683,14 @@ class TestUtils(unittest.TestCase):
             self.example_subject,
             self.example_processing,
         ]
-        # there are some userwarnings when creating Subject from json
-        with self.assertWarns(UserWarning):
-            # noinspection PyTypeChecker
-            md = json.loads(
-                build_metadata_record_from_prefix(
-                    bucket="aind-ephys-data-dev-u5u0i5",
-                    prefix="ecephys_642478_2023-01-17_13-56-29",
-                    s3_client=mock_s3_client,
-                )
+        # noinspection PyTypeChecker
+        md = json.loads(
+            build_metadata_record_from_prefix(
+                bucket="aind-ephys-data-dev-u5u0i5",
+                prefix="ecephys_642478_2023-01-17_13-56-29",
+                s3_client=mock_s3_client,
             )
+        )
         mock_get_dict_of_file_info.assert_called_once()
         mock_download_json_file.assert_has_calls(
             [
@@ -747,7 +745,9 @@ class TestUtils(unittest.TestCase):
                 prefix="abc-123",
                 s3_client=mock_s3_client,
                 optional_name="ecephys_642478_2023-01-17_13-56-29",
-                optional_created=datetime(2020, 1, 2, 3, 4, 5),
+                optional_created=datetime(
+                    2020, 1, 2, 3, 4, 5, tzinfo=timezone.utc
+                ),
                 optional_external_links={"Code Ocean": ["123-456"]},
             )
         )
@@ -755,7 +755,7 @@ class TestUtils(unittest.TestCase):
         mock_download_json_file.assert_not_called()
         self.assertEqual("s3://code-ocean-bucket/abc-123", md["location"])
         self.assertEqual("ecephys_642478_2023-01-17_13-56-29", md["name"])
-        self.assertEqual("2020-01-02T03:04:05", md["created"])
+        self.assertEqual("2020-01-02T03:04:05Z", md["created"])
         self.assertEqual({"Code Ocean": ["123-456"]}, md["external_links"])
 
     @patch("aind_data_asset_indexer.utils.create_metadata_json")
