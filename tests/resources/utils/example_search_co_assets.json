@@ -16,6 +16,7 @@
          "provenance": {
             "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
             "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "computation": "77a777aa-a77a-7a77-a7aa-77777a777aaa",
             "data_assets": [
                "aaa3a3aa-a33a-3aa3-a33a-aa3aaa333a3a"
             ],
@@ -47,6 +48,7 @@
          "provenance": {
             "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
             "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "computation": "2ff2222f-ff22-2f22-2222-ff22fff22f22",
             "data_assets": [
                "d11dd111-111d-1d11-d111-d1d11111dd11"
             ],

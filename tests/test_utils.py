@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, call, patch
 
 from botocore.exceptions import ClientError
 from codeocean import CodeOcean
-from codeocean.data_asset import DataAsset
+from codeocean.data_asset import DataAsset, Provenance
 
 from aind_data_asset_indexer.utils import (
     build_metadata_record_from_prefix,
@@ -134,9 +134,11 @@ class TestUtils(unittest.TestCase):
         cls.example_put_object_response1 = load_json_file(
             "example_put_object_response1.json"
         )
-        cls.example_co_search_data_assets = [
-            DataAsset(**r) for r in example_co_search_data_assets["results"]
-        ]
+        cls.example_co_search_data_assets = []
+        for r in example_co_search_data_assets["results"]:
+            if r.get("provenance") is not None:
+                r["provenance"] = Provenance(**r["provenance"])
+            cls.example_co_search_data_assets.append(DataAsset(**r))
 
     def test_compute_md5_hash(self):
         """Tests compute_md5_hash method"""
@@ -1248,12 +1250,8 @@ class TestUtils(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11"
                 ),
-                "created": datetime(
-                    2024, 6, 12, 21, 21, 28, tzinfo=timezone.utc
-                ),
-                "external_links": {
-                    "Code Ocean": ["11ee1e1e-11e1-1111-1111-e11eeeee1e11"]
-                },
+                "co_asset_id": "11ee1e1e-11e1-1111-1111-e11eeeee1e11",
+                "co_computation_id": "77a777aa-a77a-7a77-a7aa-77777a777aaa",
             },
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666": {
                 "name": (
@@ -1263,12 +1261,8 @@ class TestUtils(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
                 ),
-                "created": datetime(
-                    2024, 6, 12, 19, 45, 59, tzinfo=timezone.utc
-                ),
-                "external_links": {
-                    "Code Ocean": ["666666cc-66cc-6c66-666c-6c66c6666666"]
-                },
+                "co_asset_id": "666666cc-66cc-6c66-666c-6c66c6666666",
+                "co_computation_id": "2ff2222f-ff22-2f22-2222-ff22fff22f22",
             },
         }
 

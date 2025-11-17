@@ -798,12 +798,13 @@ def get_all_processed_codeocean_asset_records(
     Returns
     -------
     Dict[str, dict]
-      {data_asset_location:
-      {"name": data_asset_name,
-      "location": data_asset_location,
-      "created": data_asset_created,
-      "external_links": {"Code Ocean": [data_asset_id]}
-      }
+      {
+        data_asset_location: {
+            "name": data_asset_name,
+            "location": data_asset_location,
+            "co_asset_id": data_asset_id,
+            "co_computation_id": data_asset_computation_id,
+        }
       }
 
     """
@@ -826,24 +827,32 @@ def get_all_processed_codeocean_asset_records(
         for data_asset_info in iter_response:
             data_asset_id = data_asset_info.id
             data_asset_name = data_asset_info.name
-            created_timestamp = data_asset_info.created
-            created_datetime = datetime.fromtimestamp(
-                created_timestamp, tz=timezone.utc
-            )
+            # Get source computation id from provenance
+            if (
+                data_asset_info.provenance is not None
+                and data_asset_info.provenance.computation is not None
+            ):
+                data_asset_computation_id = (
+                    data_asset_info.provenance.computation
+                )
+            else:
+                data_asset_computation_id = None
+                logging.warning(
+                    f"Data asset {data_asset_id}, {data_asset_name} has no computation provenance!"
+                )
             # Results hosted externally have a source_bucket field
             is_external = data_asset_info.source_bucket is not None
             if (
                 not is_external
                 and data_asset_info.state == DataAssetState.Ready
+                and data_asset_computation_id is not None
             ):
                 location = f"s3://{co_data_asset_bucket}/{data_asset_id}"
                 extracted_info[location] = {
                     "name": data_asset_name,
                     "location": location,
-                    "created": created_datetime,
-                    "external_links": {
-                        ExternalPlatforms.CODEOCEAN.value: [data_asset_id]
-                    },
+                    "co_asset_id": data_asset_id,
+                    "co_computation_id": data_asset_computation_id,
                 }
         # Occasionally, there are duplicate items returned. This is one
         # way to remove the duplicates.

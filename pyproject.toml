@@ -23,7 +23,7 @@ dependencies = [
     "pydantic>=2.10",
     "dask==2023.5.0",
     "aind-data-schema==1.4.0",
-    "codeocean==0.3.0",
+    "codeocean>=0.10.0",
     "aind-data-access-api>=1.6.0",
 ]
 
