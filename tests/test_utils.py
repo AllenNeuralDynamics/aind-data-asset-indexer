@@ -1233,14 +1233,16 @@ class TestUtils(unittest.TestCase):
     ):
         """Tests get_all_processed_codeocean_asset_records method"""
 
-        mock_search_all_data_assets.return_value = (
-            self.example_co_search_data_assets
-        )
+        mock_search_all_data_assets.side_effect = [
+            self.example_co_search_data_assets,
+            [],
+        ]
         co_client = CodeOcean(domain="some_domain", token="some_token")
-        records = get_all_processed_codeocean_asset_records(
-            co_client=co_client,
-            co_data_asset_bucket="some_co_bucket",
-        )
+        with self.assertLogs(level="WARNING") as captured:
+            records = get_all_processed_codeocean_asset_records(
+                co_client=co_client,
+                co_data_asset_bucket="some_co_bucket",
+            )
         expected_records = {
             "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11": {
                 "name": (
@@ -1267,6 +1269,7 @@ class TestUtils(unittest.TestCase):
         }
 
         self.assertEqual(expected_records, records)
+        self.assertEqual(2, len(captured.output))
 
     @patch("boto3.client")
     def test_does_s3_prefix_exist_true(self, mock_s3_client: MagicMock):

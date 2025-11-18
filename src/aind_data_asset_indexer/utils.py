@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
@@ -13,7 +13,6 @@ from aind_data_access_api.utils import get_s3_location
 from aind_data_schema.core.data_description import DataLevel, DataRegex
 from aind_data_schema.core.metadata import CORE_FILES as CORE_SCHEMAS
 from aind_data_schema.core.metadata import (
-    ExternalPlatforms,
     Metadata,
     create_metadata_json,
 )
@@ -838,7 +837,8 @@ def get_all_processed_codeocean_asset_records(
             else:
                 data_asset_computation_id = None
                 logging.warning(
-                    f"Data asset {data_asset_id}, {data_asset_name} has no computation provenance!"
+                    f"Data asset {data_asset_id}, {data_asset_name} does not"
+                    "have computation provenance!"
                 )
             # Results hosted externally have a source_bucket field
             is_external = data_asset_info.source_bucket is not None
