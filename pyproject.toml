@@ -24,7 +24,7 @@ dependencies = [
     "dask==2023.5.0",
     "aind-data-schema==1.4.0",
     "codeocean>=0.10.0",
-    "aind-data-access-api>=1.6.0",
+    "aind-data-access-api>=1.9.0",
 ]
 
 [project.optional-dependencies]
