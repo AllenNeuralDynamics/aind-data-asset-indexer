@@ -2,7 +2,6 @@
 
 import os
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -51,12 +50,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/11ee1e1e-11e1-1111-1111-e11eeeee1e11"
                 ),
-                "created": datetime(
-                    2024, 6, 12, 21, 21, 28, tzinfo=timezone.utc
-                ),
-                "external_links": {
-                    "Code Ocean": ["11ee1e1e-11e1-1111-1111-e11eeeee1e11"]
-                },
+                "co_asset_id": "11ee1e1e-11e1-1111-1111-e11eeeee1e11",
+                "co_computation_id": "77a777aa-a77a-7a77-a7aa-77777a777aaa",
             },
             {
                 "name": (
@@ -66,12 +61,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 "location": (
                     "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
                 ),
-                "created": datetime(
-                    2024, 6, 12, 19, 45, 59, tzinfo=timezone.utc
-                ),
-                "external_links": {
-                    "Code Ocean": ["666666cc-66cc-6c66-666c-6c66c6666666"]
-                },
+                "co_asset_id": "666666cc-66cc-6c66-666c-6c66c6666666",
+                "co_computation_id": "2ff2222f-ff22-2f22-2222-ff22fff22f22",
             },
         ]
         # corresponds to cls.example_codeocean_records[1]
@@ -334,107 +325,52 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_paginate.assert_not_called()
 
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
     def test_process_codeocean_record(
         self,
-        mock_download_json_file: MagicMock,
-        mock_get_dict_of_file_info: MagicMock,
-        mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
     ):
         """Tests _process_codeocean_record method"""
-        # Assume user didn't attach any metadata files
-        mock_get_dict_of_file_info.return_value = (
-            self.example_dict_of_file_info
-        )
-        mock_response = Response()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(
-            return_value={"acknowledged": True, "insertedId": "mock_id"}
-        )
-        mock_docdb_client.insert_one_docdb_record.return_value = mock_response
+        mock_docdb_client.register_co_result.return_value = {
+            "message": (
+                "Inserted new DocDB record for "
+                "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666."
+            )
+        }
 
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_codeocean_record(
                 codeocean_record=self.example_codeocean_records[1],
                 docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
             )
         expected_messages = [
             "INFO:root:Uploading metadata record for: "
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
-            "DEBUG:root:{'acknowledged': True, 'insertedId': 'mock_id'}",
+            "INFO:root:{'message': 'Inserted new DocDB record for "
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666.'}",
         ]
         self.assertEqual(expected_messages, captured.output)
-        mock_download_json_file.assert_not_called()
-        self.assertEqual(
-            "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59",
-            mock_docdb_client.insert_one_docdb_record.mock_calls[0].kwargs[
-                "record"
-            ]["name"],
+        mock_docdb_client.register_co_result.assert_called_once_with(
+            name=(
+                "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59"
+            ),
+            s3_location=(
+                "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
+            ),
+            co_asset_id="666666cc-66cc-6c66-666c-6c66c6666666",
+            co_computation_id="2ff2222f-ff22-2f22-2222-ff22fff22f22",
         )
-        self.assertEqual(
-            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
-            mock_docdb_client.insert_one_docdb_record.mock_calls[0].kwargs[
-                "record"
-            ]["location"],
-        )
-
-    @patch("aind_data_asset_indexer.utils.create_metadata_json")
-    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
-    @patch("aind_data_asset_indexer.utils.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.utils.download_json_file_from_s3")
-    def test_process_codeocean_record_warning(
-        self,
-        mock_download_json_file: MagicMock,
-        mock_get_dict_of_file_info: MagicMock,
-        mock_s3_client: MagicMock,
-        mock_docdb_client: MagicMock,
-        mock_create_metadata_json: MagicMock,
-    ):
-        """Tests _process_codeocean_record when there is an issue building the
-        record"""
-        # Assume user didn't attach any metadata files
-        mock_get_dict_of_file_info.return_value = (
-            self.example_dict_of_file_info
-        )
-
-        # Suppose there is an error creating metadata file
-        mock_create_metadata_json.side_effect = Exception(
-            "Something went wrong"
-        )
-
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_codeocean_record(
-                codeocean_record=self.example_codeocean_records[1],
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-            )
-        expected_log_messages = [
-            "WARNING:root:Unable to build metadata record for: "
-            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666!"
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_download_json_file.assert_not_called()
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
         "CodeOceanIndexBucketJob._process_codeocean_record"
     )
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
     def test_dask_task_to_process_record_list(
         self,
-        mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_process_codeocean_record: MagicMock,
     ):
         """Tests _dask_task_to_process_record_list"""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
@@ -446,16 +382,13 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 call(
                     codeocean_record=records[0],
                     docdb_client=mock_docdb_api_client,
-                    s3_client=mock_s3_client,
                 ),
                 call(
                     codeocean_record=records[1],
                     docdb_client=mock_docdb_api_client,
-                    s3_client=mock_s3_client,
                 ),
             ]
         )
-        mock_s3_client.close.assert_called_once_with()
         mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
@@ -463,16 +396,12 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         "CodeOceanIndexBucketJob._process_codeocean_record"
     )
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
-    @patch("boto3.client")
     def test_dask_task_to_process_record_list_error(
         self,
-        mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_process_codeocean_record: MagicMock,
     ):
         """Tests _dask_task_to_process_record_list when there are errors."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
         mock_docdb_api_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
@@ -503,16 +432,13 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 call(
                     codeocean_record=records[0],
                     docdb_client=mock_docdb_api_client,
-                    s3_client=mock_s3_client,
                 ),
                 call(
                     codeocean_record=records[1],
                     docdb_client=mock_docdb_api_client,
-                    s3_client=mock_s3_client,
                 ),
             ]
         )
-        mock_s3_client.close.assert_called_once_with()
         mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
