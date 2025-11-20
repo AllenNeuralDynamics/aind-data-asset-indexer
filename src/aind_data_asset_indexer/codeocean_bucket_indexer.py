@@ -2,28 +2,24 @@
 DocDB."""
 
 import argparse
-import json
 import logging
 import os
 import sys
 import warnings
 from typing import List, Optional
 
-import boto3
 import dask.bag as dask_bag
 import requests
 from aind_data_access_api.document_db import MetadataDbClient
-from aind_data_access_api.utils import get_s3_bucket_and_prefix, paginate_docdb
+from aind_data_access_api.utils import paginate_docdb
 from aind_data_schema.core.metadata import ExternalPlatforms
 from codeocean import CodeOcean
 from codeocean.data_asset import DataAssetSearchOrigin, DataAssetSearchParams
-from mypy_boto3_s3 import S3Client
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
-    build_metadata_record_from_prefix,
     get_all_processed_codeocean_asset_records,
 )
 
@@ -264,48 +260,31 @@ class CodeOceanIndexBucketJob:
         self,
         codeocean_record: dict,
         docdb_client: MetadataDbClient,
-        s3_client: S3Client,
     ):
         """
         Processes a code ocean record. It's assumed that the check to verify
         the record is not in DocDB is done upstream.
-        1) Using the s3 location in the codeocean record, build metadata file.
-        2) Save metadata record to DocDB if no issue
+        1) Uses the codeocean record info to register the asset to DocDB.
 
         Parameters
         ----------
         codeocean_record : dict
         docdb_client : MetadataDbClient
-        s3_client : S3Client
 
         """
-        location = codeocean_record["location"]
-        created = codeocean_record["created"]
-        external_links = codeocean_record["external_links"]
         name = codeocean_record["name"]
-        url_parts = get_s3_bucket_and_prefix(location)
-        bucket = url_parts["bucket"]
-        s3_prefix = url_parts["prefix"]
-        new_metadata_contents = build_metadata_record_from_prefix(
-            bucket=bucket,
-            prefix=s3_prefix,
-            s3_client=s3_client,
-            optional_name=name,
-            optional_created=created,
-            optional_external_links=external_links,
+        location = codeocean_record["location"]
+        co_asset_id = codeocean_record["co_asset_id"]
+        co_computation_id = codeocean_record["co_computation_id"]
+
+        logging.info(f"Uploading metadata record for: {location}")
+        register_response = docdb_client.register_co_result(
+            s3_location=location,
+            name=name,
+            co_asset_id=co_asset_id,
+            co_computation_id=co_computation_id,
         )
-        if new_metadata_contents is not None:
-            logging.info(f"Uploading metadata record for: {location}")
-            # noinspection PyTypeChecker
-            json_contents = json.loads(new_metadata_contents)
-            response = docdb_client.insert_one_docdb_record(
-                record=json_contents
-            )
-            logging.debug(response.json())
-        else:
-            logging.warning(
-                f"Unable to build metadata record for: {location}!"
-            )
+        logging.info(register_response)
 
     def _dask_task_to_process_record_list(self, record_list: List[dict]):
         """
@@ -318,15 +297,13 @@ class CodeOceanIndexBucketJob:
         record_list : List[dict]
 
         """
-        # create clients here since dask doesn't serialize them
-        s3_client = boto3.client("s3")
+        # create client here since dask doesn't serialize them
         with self._create_docdb_client() as doc_db_client:
             for record in record_list:
                 try:
                     self._process_codeocean_record(
                         codeocean_record=record,
                         docdb_client=doc_db_client,
-                        s3_client=s3_client,
                     )
                 except requests.HTTPError as e:
                     logging.error(
@@ -337,7 +314,6 @@ class CodeOceanIndexBucketJob:
                     logging.error(
                         f'Error processing {record.get("location")}: {repr(e)}'
                     )
-        s3_client.close()
 
     def _process_codeocean_records(self, records: List[dict]):
         """

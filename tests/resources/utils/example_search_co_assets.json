@@ -16,6 +16,7 @@
          "provenance": {
             "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
             "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "computation": "77a777aa-a77a-7a77-a7aa-77777a777aaa",
             "data_assets": [
                "aaa3a3aa-a33a-3aa3-a33a-aa3aaa333a3a"
             ],
@@ -47,6 +48,7 @@
          "provenance": {
             "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
             "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "computation": "2ff2222f-ff22-2f22-2222-ff22fff22f22",
             "data_assets": [
                "d11dd111-111d-1d11-d111-d1d11111dd11"
             ],
@@ -58,6 +60,61 @@
          "tags": [
             "derived",
             "712815",
+            "ecephys"
+         ],
+         "type": "result"
+      },
+      {
+         "created": 1720045200,
+         "custom_metadata": {
+            "data level": "derived",
+            "experiment type": "ecephys",
+            "subject id": "734567"
+         },
+         "description": "",
+         "files": 8921,
+         "id": "888888ee-88ee-8e88-888e-8e88e8888888",
+         "last_used": 1720045470,
+         "mount": "ecephys_734567_2024-07-03_09-15-30_sorted_2024-07-04_08-00-00",
+         "name": "ecephys_734567_2024-07-03_09-15-30_sorted_2024-07-04_08-00-00",
+         "provenance": null,
+         "size": 17234567890,
+         "state": "ready",
+         "tags": [
+            "derived",
+            "734567",
+            "ecephys"
+         ],
+         "type": "result"
+      },
+      {
+         "created": 1719435600,
+         "custom_metadata": {
+            "data level": "derived",
+            "experiment type": "ecephys",
+            "subject id": "723456"
+         },
+         "description": "",
+         "files": 7543,
+         "id": "999999dd-99dd-9d99-999d-9d99d9999999",
+         "last_used": 1719435870,
+         "mount": "ecephys_723456_2024-06-26_14-30-15_sorted_2024-06-27_10-00-00",
+         "name": "ecephys_723456_2024-06-26_14-30-15_sorted_2024-06-27_10-00-00",
+         "provenance": {
+            "capsule": "8f8f888f-8888-88f8-fff8-888888ff8f8f",
+            "commit": "3333333333333f33be33ae33fb33333333e33333",
+            "data_assets": [
+               "e22ee222-222e-2e22-e222-e2e22222ee22"
+            ],
+            "computation": null,
+            "docker_image": "",
+            "run_script": "code/run"
+         },
+         "size": 15847923456,
+         "state": "ready",
+         "tags": [
+            "derived",
+            "723456",
             "ecephys"
          ],
          "type": "result"
