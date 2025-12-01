@@ -208,11 +208,24 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.assertEqual(["abc-123", "def-456"], output)
 
     def test_get_co_links_from_record_invalid_list(self):
-        """Tests _get_co_links_from_record with invalid external_links"""
+        """Tests _get_co_links_from_record with invalid external_links list"""
         docdb_record = {
             "_id": "12345",
             "location": "s3://bucket/prefix",
             "external_links": ["abc-123", "def-456"],
+        }
+        with self.assertRaises(ValueError) as e:
+            self.basic_job._get_co_links_from_record(docdb_record=docdb_record)
+        self.assertEqual(
+            f"Invalid external_links for: {docdb_record}", str(e.exception)
+        )
+
+    def test_get_co_links_from_record_invalid_other(self):
+        """Tests _get_co_links_from_record with invalid external_links type"""
+        docdb_record = {
+            "_id": "12345",
+            "location": "s3://bucket/prefix",
+            "external_links": "abc-123",
         }
         with self.assertRaises(ValueError) as e:
             self.basic_job._get_co_links_from_record(docdb_record=docdb_record)

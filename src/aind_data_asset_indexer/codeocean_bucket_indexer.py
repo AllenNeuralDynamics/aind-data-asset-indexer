@@ -172,6 +172,8 @@ class CodeOceanIndexBucketJob:
                 for r in external_links
                 if r.get(ExternalPlatforms.CODEOCEAN.value) is not None
             ]
+        else:
+            raise ValueError(f"Invalid external_links for: {docdb_record}")
         return external_links
 
     def _update_external_links_in_docdb(
