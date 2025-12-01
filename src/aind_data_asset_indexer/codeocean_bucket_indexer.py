@@ -164,10 +164,13 @@ class CodeOceanIndexBucketJob:
             external_links = external_links.get(
                 ExternalPlatforms.CODEOCEAN.value, []
             )
-        else:
+        elif isinstance(external_links, list):
+            if not all(isinstance(r, dict) for r in external_links):
+                raise ValueError(f"Invalid external_links for: {docdb_record}")
             external_links = [
                 r.get(ExternalPlatforms.CODEOCEAN.value)
                 for r in external_links
+                if r.get(ExternalPlatforms.CODEOCEAN.value) is not None
             ]
         return external_links
 
