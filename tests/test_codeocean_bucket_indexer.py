@@ -288,6 +288,11 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                     "location": "s3://bucket2/prefix4",
                     "external_links": [],
                 },
+                {
+                    "_id": "0004",
+                    "location": "s3://bucket3/prefix5",
+                    "external_links": ["def-456"],
+                },
             ]
         ]
 
@@ -299,6 +304,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         expected_log_messages = [
             "INFO:root:No code ocean data asset ids found for "
             "s3://bucket2/prefix3. Removing external links from record.",
+            "ERROR:root:Error processing s3://bucket3/prefix5: "
+            "ValueError(\"Invalid external_links for: {'_id': '0004', "
+            "'location': 's3://bucket3/prefix5', 'external_links': "
+            "['def-456']}\")",
             "INFO:root:Updating 2 records",
             f"DEBUG:root:[{bulk_write_response}]",
         ]
