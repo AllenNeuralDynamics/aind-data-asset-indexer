@@ -164,11 +164,16 @@ class CodeOceanIndexBucketJob:
             external_links = external_links.get(
                 ExternalPlatforms.CODEOCEAN.value, []
             )
-        else:
+        elif isinstance(external_links, list):
+            if not all(isinstance(r, dict) for r in external_links):
+                raise ValueError(f"Invalid external_links for: {docdb_record}")
             external_links = [
                 r.get(ExternalPlatforms.CODEOCEAN.value)
                 for r in external_links
+                if r.get(ExternalPlatforms.CODEOCEAN.value) is not None
             ]
+        else:
+            raise ValueError(f"Invalid external_links for: {docdb_record}")
         return external_links
 
     def _update_external_links_in_docdb(
@@ -213,37 +218,45 @@ class CodeOceanIndexBucketJob:
             for page in pages:
                 records_to_update = []
                 for record in page:
-                    location = record.get("location")
-                    external_links = self._get_co_links_from_record(record)
-                    code_ocean_ids = (
-                        None
-                        if location is None
-                        else co_loc_to_id_map.get(location)
-                    )
-                    docdb_rec_id = record["_id"]
-                    if code_ocean_ids is not None and code_ocean_ids != set(
-                        external_links
-                    ):
-                        new_external_links = code_ocean_ids
-                    elif external_links and not code_ocean_ids:
-                        logging.info(
-                            f"No code ocean data asset ids found for "
-                            f"{location}. Removing external links from record."
+                    try:
+                        location = record.get("location")
+                        external_links = self._get_co_links_from_record(record)
+                        code_ocean_ids = (
+                            None
+                            if location is None
+                            else co_loc_to_id_map.get(location)
                         )
-                        new_external_links = set()
-                    else:
-                        new_external_links = None
-                    if new_external_links is not None:
-                        record_links = {
-                            ExternalPlatforms.CODEOCEAN.value: sorted(
-                                list(new_external_links)
+                        docdb_rec_id = record["_id"]
+                        if (
+                            code_ocean_ids is not None
+                            and code_ocean_ids != set(external_links)
+                        ):
+                            new_external_links = code_ocean_ids
+                        elif external_links and not code_ocean_ids:
+                            logging.info(
+                                f"No code ocean data asset ids found for "
+                                f"{location}. Removing external links from "
+                                "record."
                             )
-                        }
-                        records_to_update.append(
-                            {
-                                "_id": docdb_rec_id,
-                                "external_links": record_links,
+                            new_external_links = set()
+                        else:
+                            new_external_links = None
+                        if new_external_links is not None:
+                            record_links = {
+                                ExternalPlatforms.CODEOCEAN.value: sorted(
+                                    list(new_external_links)
+                                )
                             }
+                            records_to_update.append(
+                                {
+                                    "_id": docdb_rec_id,
+                                    "external_links": record_links,
+                                }
+                            )
+                    except Exception as e:
+                        logging.error(
+                            f'Error processing {record.get("location")}: '
+                            f"{repr(e)}"
                         )
                 if len(records_to_update) > 0:
                     logging.info(f"Updating {len(records_to_update)} records")
