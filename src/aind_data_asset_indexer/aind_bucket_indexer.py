@@ -544,6 +544,7 @@ class AindIndexBucketJob:
         docdb_client: MetadataDbClient,
         s3_client: S3Client,
         location_to_id_map: Dict[str, str],
+        v2_location_to_id_map: Dict[str, str],
     ):
         """
         Processes a prefix in S3
@@ -563,6 +564,9 @@ class AindIndexBucketJob:
           A map created by looping through DocDb records and creating a dict
           of {record['location']: record['_id']}. Can be used to check if a
           record already exists in DocDb for a given s3 bucket, prefix
+        v2_location_to_id_map : Dict[str, str]
+          A map in the same format as location_to_id_map but for records in the
+          v2 metadata collection.
 
         """
         bucket = self.job_settings.s3_bucket
@@ -570,6 +574,8 @@ class AindIndexBucketJob:
         location = get_s3_location(bucket=bucket, prefix=s3_prefix)
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
+        elif v2_location_to_id_map.get(location) is not None:
+            record_id = v2_location_to_id_map.get(location)
         else:
             record_id = None
         if record_id is not None:
@@ -633,6 +639,7 @@ class AindIndexBucketJob:
                         s3_prefix=prefix,
                         s3_client=s3_client,
                         location_to_id_map=location_to_id_map,
+                        v2_location_to_id_map=v2_location_to_id_map,
                         docdb_client=doc_db_client,
                     )
                 except requests.HTTPError as e:
