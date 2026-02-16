@@ -70,7 +70,7 @@ class AindIndexBucketJob:
         """Class constructor."""
         self.job_settings = job_settings
 
-    def _create_docdb_client(self) -> MetadataDbClient:
+    def _create_docdb_client(self, version: str = "v1") -> MetadataDbClient:
         """Create a MetadataDbClient with custom retries."""
         retry = Retry(
             total=3,
@@ -83,7 +83,7 @@ class AindIndexBucketJob:
         session.mount("https://", adapter)
         return MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            version="v1",
+            version=version,
             session=session,
         )
 
@@ -613,9 +613,15 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
+        # For the given prefix list, get record ids from docdb
+        # with those locations.
+        with self._create_docdb_client(version="v2") as v2_doc_db_client:
+            v2_location_to_id_map = build_docdb_location_to_id_map(
+                bucket=self.job_settings.s3_bucket,
+                prefixes=prefix_list,
+                docdb_api_client=v2_doc_db_client,
+            )
         with self._create_docdb_client() as doc_db_client:
-            # For the given prefix list, get record ids from docdb
-            # with those locations.
             location_to_id_map = build_docdb_location_to_id_map(
                 bucket=self.job_settings.s3_bucket,
                 prefixes=prefix_list,

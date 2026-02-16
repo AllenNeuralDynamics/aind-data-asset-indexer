@@ -1282,7 +1282,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "5ca4a951-d374-4f4b-8279-d570a35b2286"
             ),
         }
-        mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        mock_v2_location_to_id_map = dict()
+        mock_build_location_to_id_map.side_effect = [
+            mock_v2_location_to_id_map,
+            mock_location_to_id_map,
+        ]
         self.basic_job._dask_task_to_process_prefix_list(prefix_list=prefixes)
         mock_process_prefix.assert_has_calls(
             [
@@ -1307,7 +1311,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        self.assertEqual(2, mock_docdb_client.return_value.__exit__.call_count)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1346,7 +1350,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "5ca4a951-d374-4f4b-8279-d570a35b2286"
             ),
         }
-        mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        mock_v2_location_to_id_map = dict()
+        mock_build_location_to_id_map.side_effect = [
+            mock_v2_location_to_id_map,
+            mock_location_to_id_map,
+        ]
         http_error_response = MagicMock(spec=Response)
         http_error_response.status_code = 400
         http_error_response.text = "MongoServerError"
@@ -1391,7 +1399,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        self.assertEqual(2, mock_docdb_client.return_value.__exit__.call_count)
 
     @patch("dask.bag.map_partitions")
     def test_process_prefixes(self, mock_dask_bag_map_parts: MagicMock):
