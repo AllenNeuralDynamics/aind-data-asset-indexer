@@ -1160,12 +1160,14 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_get_data_level_for_prefix.return_value = "raw"
 
         location_to_id_map = dict()
+        v2_location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_prefix(
                 s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
+                v2_location_to_id_map=v2_location_to_id_map,
             )
         expected_log_messages = [
             "WARNING:root:Metadata record for "
@@ -1198,12 +1200,14 @@ class TestAindIndexBucketJob(unittest.TestCase):
         }
 
         location_to_id_map = dict()
+        v2_location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_prefix(
                 s3_prefix=expected_prefix,
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
+                v2_location_to_id_map=v2_location_to_id_map,
             )
         expected_log_messages = [
             "INFO:root:Registering derived asset for: "
@@ -1231,12 +1235,47 @@ class TestAindIndexBucketJob(unittest.TestCase):
         location_to_id_map = {
             location_key: "488bbe42-832b-4c37-8572-25eb87cc50e2"
         }
+        v2_location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_prefix(
                 s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
+                v2_location_to_id_map=v2_location_to_id_map,
+            )
+        expected_log_messages = [
+            "INFO:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
+            "ecephys_642478_2023-01-17_13-56-29 already "
+            "exists in DocDb. Skipping."
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
+    @patch("boto3.client")
+    def test_process_prefix_yes_v2_record(
+        self,
+        mock_s3_client: MagicMock,
+        mock_docdb_client: MagicMock,
+    ):
+        """Tests _process_prefix method when there is a record in the v2
+        DocDb collection."""
+
+        expected_bucket = self.basic_job.job_settings.s3_bucket
+        location_key = (
+            f"s3://{expected_bucket}/" f"ecephys_642478_2023-01-17_13-56-29"
+        )
+        location_to_id_map = dict()
+        v2_location_to_id_map = {
+            location_key: "488bbe42-832b-4c37-8572-25eb87cc50e2"
+        }
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job._process_prefix(
+                s3_prefix="ecephys_642478_2023-01-17_13-56-29",
+                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
+                location_to_id_map=location_to_id_map,
+                v2_location_to_id_map=v2_location_to_id_map,
             )
         expected_log_messages = [
             "INFO:root:Metadata record for s3://aind-ephys-data-dev-u5u0i5/"
@@ -1282,7 +1321,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "5ca4a951-d374-4f4b-8279-d570a35b2286"
             ),
         }
-        mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        mock_v2_location_to_id_map = dict()
+        mock_build_location_to_id_map.side_effect = [
+            mock_v2_location_to_id_map,
+            mock_location_to_id_map,
+        ]
         self.basic_job._dask_task_to_process_prefix_list(prefix_list=prefixes)
         mock_process_prefix.assert_has_calls(
             [
@@ -1290,24 +1333,27 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_567890_2000-01-01_04-00-00",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_655019_2000-01-01_01-01-02",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        self.assertEqual(2, mock_docdb_client.return_value.__exit__.call_count)
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer."
@@ -1346,7 +1392,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 "5ca4a951-d374-4f4b-8279-d570a35b2286"
             ),
         }
-        mock_build_location_to_id_map.return_value = mock_location_to_id_map
+        mock_v2_location_to_id_map = dict()
+        mock_build_location_to_id_map.side_effect = [
+            mock_v2_location_to_id_map,
+            mock_location_to_id_map,
+        ]
         http_error_response = MagicMock(spec=Response)
         http_error_response.status_code = 400
         http_error_response.text = "MongoServerError"
@@ -1374,24 +1424,27 @@ class TestAindIndexBucketJob(unittest.TestCase):
                     s3_prefix="ecephys_642478_2023-01-17_13-56-29",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_567890_2000-01-01_04-00-00",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
                 call(
                     s3_prefix="ecephys_655019_2000-01-01_01-01-02",
                     s3_client=mock_s3_client,
                     location_to_id_map=mock_location_to_id_map,
+                    v2_location_to_id_map=mock_v2_location_to_id_map,
                     docdb_client=mock_docdb_api_client,
                 ),
             ]
         )
         mock_s3_client.close.assert_called_once_with()
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        self.assertEqual(2, mock_docdb_client.return_value.__exit__.call_count)
 
     @patch("dask.bag.map_partitions")
     def test_process_prefixes(self, mock_dask_bag_map_parts: MagicMock):

@@ -70,7 +70,7 @@ class AindIndexBucketJob:
         """Class constructor."""
         self.job_settings = job_settings
 
-    def _create_docdb_client(self) -> MetadataDbClient:
+    def _create_docdb_client(self, version: str = "v1") -> MetadataDbClient:
         """Create a MetadataDbClient with custom retries."""
         retry = Retry(
             total=3,
@@ -83,7 +83,7 @@ class AindIndexBucketJob:
         session.mount("https://", adapter)
         return MetadataDbClient(
             host=self.job_settings.doc_db_host,
-            version="v1",
+            version=version,
             session=session,
         )
 
@@ -544,6 +544,7 @@ class AindIndexBucketJob:
         docdb_client: MetadataDbClient,
         s3_client: S3Client,
         location_to_id_map: Dict[str, str],
+        v2_location_to_id_map: Dict[str, str],
     ):
         """
         Processes a prefix in S3
@@ -563,6 +564,9 @@ class AindIndexBucketJob:
           A map created by looping through DocDb records and creating a dict
           of {record['location']: record['_id']}. Can be used to check if a
           record already exists in DocDb for a given s3 bucket, prefix
+        v2_location_to_id_map : Dict[str, str]
+          A map in the same format as location_to_id_map but for records in the
+          v2 metadata collection.
 
         """
         bucket = self.job_settings.s3_bucket
@@ -570,6 +574,8 @@ class AindIndexBucketJob:
         location = get_s3_location(bucket=bucket, prefix=s3_prefix)
         if location_to_id_map.get(location) is not None:
             record_id = location_to_id_map.get(location)
+        elif v2_location_to_id_map.get(location) is not None:
+            record_id = v2_location_to_id_map.get(location)
         else:
             record_id = None
         if record_id is not None:
@@ -613,9 +619,15 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
+        # For the given prefix list, get record ids from docdb
+        # with those locations.
+        with self._create_docdb_client(version="v2") as v2_doc_db_client:
+            v2_location_to_id_map = build_docdb_location_to_id_map(
+                bucket=self.job_settings.s3_bucket,
+                prefixes=prefix_list,
+                docdb_api_client=v2_doc_db_client,
+            )
         with self._create_docdb_client() as doc_db_client:
-            # For the given prefix list, get record ids from docdb
-            # with those locations.
             location_to_id_map = build_docdb_location_to_id_map(
                 bucket=self.job_settings.s3_bucket,
                 prefixes=prefix_list,
@@ -627,6 +639,7 @@ class AindIndexBucketJob:
                         s3_prefix=prefix,
                         s3_client=s3_client,
                         location_to_id_map=location_to_id_map,
+                        v2_location_to_id_map=v2_location_to_id_map,
                         docdb_client=doc_db_client,
                     )
                 except requests.HTTPError as e:
