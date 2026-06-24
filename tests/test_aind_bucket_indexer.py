@@ -739,16 +739,16 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_docdb_record_invalid_location(
+    def test_sync_metadata_for_record_invalid_location(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
     ):
-        """Tests _process_docdb_record method when the location in the record
+        """Tests _sync_metadata_for_record method when the location in the record
         is not a valid s3 url"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            self.basic_job._sync_metadata_for_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -766,16 +766,16 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_docdb_record_invalid_prefix(
+    def test_sync_metadata_for_record_invalid_prefix(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
     ):
-        """Tests _process_docdb_record method when the location in the record
+        """Tests _sync_metadata_for_record method when the location in the record
         has invalid prefix"""
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            self.basic_job._sync_metadata_for_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record={
@@ -793,34 +793,58 @@ class TestAindIndexBucketJob(unittest.TestCase):
     @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_docdb_record_s3_prefix_dne(
+    def test_run_docdb_sync_s3_prefix_dne(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
         mock_does_s3_prefix_exist: MagicMock,
     ):
-        """Tests _process_docdb_record when the s3 prefix does not exist."""
+        """Tests _run_docdb_sync when the s3 prefix does not exist.
+        Should deregister from both V1 and V2."""
         location = (
             "s3://aind-ephys-data-dev-u5u0i5/"
             "ecephys_642478_2023-01-17_13-56-29"
         )
         mock_does_s3_prefix_exist.return_value = False
-        mock_docdb_client.deregister_asset.return_value = {
-            "message": "Deregistered",
+
+        # Mock V1 DocDB client
+        mock_v1_client = MagicMock()
+        mock_v1_client.deregister_asset.return_value = {
+            "message": "V1 Deregistered"
         }
-        with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
-                docdb_client=mock_docdb_client,
-                s3_client=mock_s3_client,
-                docdb_record=self.example_md_record,
-            )
-        expected_log_messages = [
-            f"WARNING:root:Asset not found in S3 at {location}! "
-            "Deleting metadata record from DocDb and Code Ocean.",
-            "INFO:root:{'message': 'Deregistered'}",
-        ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_docdb_client.deregister_asset.assert_called_once_with(
+        mock_v1_client.__enter__.return_value = mock_v1_client
+        mock_v1_client.__exit__.return_value = None
+
+        # Mock V2 DocDB client
+        mock_v2_client = MagicMock()
+        mock_v2_client.deregister_asset.return_value = {
+            "message": "V2 Deregistered"
+        }
+        mock_v2_client.__exit__.return_value = None
+        mock_v2_client.__enter__.return_value = mock_v2_client
+
+        # Configure mock_docdb_client to return different clients based on version
+        def create_client_side_effect(**kwargs):
+            version = kwargs.get("version", "v1")
+            if version == "v2":
+                return mock_v2_client
+            return mock_v1_client
+
+        # Mock paginate_docdb to return records
+        with patch(
+            "aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb"
+        ) as mock_paginate:
+            mock_paginate.return_value = [[self.example_md_record]]
+            mock_docdb_client.side_effect = create_client_side_effect
+
+            with self.assertLogs(level="DEBUG") as captured:
+                self.basic_job._run_docdb_sync()
+
+        # Check both V1 and V2 deregister_asset were called
+        mock_v1_client.deregister_asset.assert_called_once_with(
+            s3_location=location
+        )
+        mock_v2_client.deregister_asset.assert_called_once_with(
             s3_location=location
         )
 
@@ -838,21 +862,19 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "get_dict_of_core_schema_file_info"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.get_dict_of_file_info")
-    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
-    def test_process_docdb_record_valid_metadata_nd_json_file(
+    def test_sync_metadata_for_record_valid_metadata_nd_json_file(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_does_s3_prefix_exist: MagicMock,
         mock_get_dict_of_file_info: MagicMock,
         mock_get_dict_of_core_schema_file_info: MagicMock,
         mock_list_metadata_copies: MagicMock,
         mock_write_root_file_with_record_info: MagicMock,
         mock_resolve_schema_information: MagicMock,
     ):
-        """Tests _process_docdb_record method when there is a metadata.nd.json
+        """Tests _sync_metadata_for_record method when there is a metadata.nd.json
         file."""
         upsert_response = {
             "acknowledged": True,
@@ -865,7 +887,6 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_response.status_code = 200
         mock_response.json = MagicMock(return_value=upsert_response)
         mock_docdb_client.upsert_one_docdb_record.return_value = mock_response
-        mock_does_s3_prefix_exist.return_value = True
         core_info = {
             "last_modified": datetime(
                 2024, 5, 15, 17, 41, 28, tzinfo=timezone.utc
@@ -900,7 +921,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         ]
 
         with self.assertLogs(level="DEBUG") as captured:
-            self.basic_job._process_docdb_record(
+            self.basic_job._sync_metadata_for_record(
                 docdb_client=mock_docdb_client,
                 s3_client=mock_s3_client,
                 docdb_record=mock_docdb_record,
@@ -932,7 +953,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_process_docdb_record"
+        "_sync_metadata_for_record"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -940,7 +961,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self,
         mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_process_docdb_record: MagicMock,
+        mock_sync_metadata: MagicMock,
     ):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
@@ -955,7 +976,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             self.example_md_record2,
         ]
         self.basic_job._dask_task_to_process_record_list(record_list=records)
-        mock_process_docdb_record.assert_has_calls(
+        mock_sync_metadata.assert_has_calls(
             [
                 call(
                     docdb_record=self.example_md_record,
@@ -979,7 +1000,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_process_docdb_record"
+        "_sync_metadata_for_record"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
@@ -987,7 +1008,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self,
         mock_boto3_client: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_process_docdb_record: MagicMock,
+        mock_sync_metadata: MagicMock,
     ):
         """Tests _dask_task_to_process_record_list when there are errors."""
         mock_s3_client = MagicMock()
@@ -1004,7 +1025,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         http_error_response = MagicMock(spec=Response)
         http_error_response.status_code = 400
         http_error_response.text = "MongoServerError"
-        mock_process_docdb_record.side_effect = [
+        mock_sync_metadata.side_effect = [
             HTTPError(response=http_error_response),
             Exception("Error processing record"),
             None,
@@ -1026,7 +1047,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "Exception('Error processing record')",
         ]
         self.assertEqual(expected_log_messages, captured.output)
-        mock_process_docdb_record.assert_has_calls(
+        mock_sync_metadata.assert_has_calls(
             [
                 call(
                     docdb_record=self.example_md_record,
@@ -1457,6 +1478,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.basic_job._process_prefixes(prefixes=prefixes)
         mock_dask_bag_map_parts.assert_called()
 
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_prefixes"
@@ -1467,7 +1489,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_process_records"
+        "_sync_records_by_version"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
@@ -1477,9 +1499,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_boto3_client: MagicMock,
         mock_paginate: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_process_records: MagicMock,
+        mock_sync_records: MagicMock,
         mock_iterate_prefixes: MagicMock,
         mock_process_prefixes: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
     ):
         """Tests main run_job method."""
 
@@ -1489,15 +1512,20 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
-        mock_paginate.return_value = iter(
-            [
+        mock_does_s3_prefix_exist.return_value = True
+        # paginate_docdb is called twice: once for V1, once for V2
+        mock_paginate.side_effect = [
+            iter(
                 [
-                    self.example_md_record,
-                    self.example_md_record1,
-                    self.example_md_record2,
+                    [
+                        self.example_md_record,
+                        self.example_md_record1,
+                        self.example_md_record2,
+                    ]
                 ]
-            ]
-        )
+            ),  # V1 records
+            iter([]),  # V2 records (empty)
+        ]
         mock_iterate_prefixes.return_value = iter(
             [
                 [
@@ -1514,21 +1542,56 @@ class TestAindIndexBucketJob(unittest.TestCase):
         }
         expected_log_messages = [
             f"INFO:root:Starting to scan through DocDb: {expected_filter}",
+            "INFO:root:Collecting V1 records...",
+            "INFO:root:Collecting V2 records...",
+            "INFO:root:Found 3 unique locations to process",
             "INFO:root:Finished scanning through DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-        mock_docdb_client.return_value.__exit__.assert_called_once()
-        mock_s3_client.close.assert_called_once()
-        mock_process_records.assert_called_once_with(
-            records=[
-                self.example_md_record,
-                self.example_md_record1,
-                self.example_md_record2,
-            ]
-        )
+        # __exit__ is called twice: once for V1 client, once for V2 client
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 2)
+        # S3 client close is called twice: once in _run_docdb_sync, once in _run_s3_sync
+        self.assertEqual(mock_s3_client.close.call_count, 2)
+        # _sync_records_by_version is called twice: once for V1, once for V2 (but V2 has no records)
+        self.assertEqual(mock_sync_records.call_count, 2)
+        # Check that V1 records were synced - verify by extracting calls
+        calls = mock_sync_records.call_args_list
+        v1_call = None
+        v2_call = None
+        for call in calls:
+            # Extract version from call - could be positional or keyword arg
+            args = call[0]
+            kwargs = call[1]
+            version = None
+            records = None
+            
+            # Try positional args: could be (self, records, version) or (records, version)
+            if 'version' in kwargs:
+                version = kwargs['version']
+            elif len(args) >= 3:
+                version = args[2]  # (self, records, version)
+            elif len(args) >= 2:
+                version = args[1]  # (records, version)
+            
+            # Extract records similarly
+            if 'records' in kwargs:
+                records = kwargs['records']
+            elif len(args) >= 2:
+                records = args[1] if len(args) >= 3 else args[0]
+            
+            if version == 'v1':
+                v1_call = (records, version)
+            elif version == 'v2':
+                v2_call = (records, version)
+        
+        self.assertIsNotNone(v1_call, "V1 call not found")
+        self.assertIsNotNone(v2_call, "V2 call not found")
+        # Verify V1 has 3 records and V2 has 0
+        self.assertEqual(len(v1_call[0]), 3)  # records list
+        self.assertEqual(len(v2_call[0]), 0)
         mock_process_prefixes.assert_called_once_with(
             prefixes=[
                 "ecephys_642478_2023-01-17_13-56-29/",
@@ -1537,6 +1600,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
             ]
         )
 
+    @patch("aind_data_asset_indexer.aind_bucket_indexer.does_s3_prefix_exist")
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_process_prefixes"
@@ -1547,7 +1611,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
     )
     @patch(
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
-        "_process_records"
+        "_sync_records_by_version"
     )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("aind_data_asset_indexer.aind_bucket_indexer.paginate_docdb")
@@ -1559,9 +1623,10 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_boto3_client: MagicMock,
         mock_paginate: MagicMock,
         mock_docdb_client: MagicMock,
-        mock_process_records: MagicMock,
+        mock_sync_records: MagicMock,
         mock_iterate_prefixes: MagicMock,
         mock_process_prefixes: MagicMock,
+        mock_does_s3_prefix_exist: MagicMock,
     ):
         """Tests main run_job method when lookback_days is set."""
 
@@ -1575,11 +1640,16 @@ class TestAindIndexBucketJob(unittest.TestCase):
         )
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
+        mock_does_s3_prefix_exist.return_value = True
         mock_docdb_api_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
-        mock_paginate.return_value = iter([[self.example_md_record]])
+        # paginate_docdb is called twice: once for V1, once for V2
+        mock_paginate.side_effect = [
+            iter([[self.example_md_record]]),  # V1 records
+            iter([]),  # V2 records (empty)
+        ]
         mock_iterate_prefixes.return_value = iter(
             [
                 [
@@ -1598,6 +1668,9 @@ class TestAindIndexBucketJob(unittest.TestCase):
         }
         expected_log_messages = [
             f"INFO:root:Starting to scan through DocDb: {expected_filter}",
+            "INFO:root:Collecting V1 records...",
+            "INFO:root:Collecting V2 records...",
+            "INFO:root:Found 1 unique locations to process",
             "INFO:root:Finished scanning through DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
@@ -1605,11 +1678,47 @@ class TestAindIndexBucketJob(unittest.TestCase):
         self.assertEqual(expected_log_messages, captured.output)
 
         mock_datetime.now.assert_called_once_with(timezone.utc)
-        mock_docdb_client.return_value.__exit__.assert_called_once()
-        mock_s3_client.close.assert_called_once()
-        mock_process_records.assert_called_once_with(
-            records=[self.example_md_record]
-        )
+        # __exit__ is called twice: once for V1 client, once for V2 client
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 2)
+        # S3 client close is called twice: once in _run_docdb_sync, once in _run_s3_sync
+        self.assertEqual(mock_s3_client.close.call_count, 2)
+        # _sync_records_by_version is called twice: once for V1, once for V2 (but V2 has no records)
+        self.assertEqual(mock_sync_records.call_count, 2)
+        # Check that V1 records were synced - verify by extracting calls
+        calls = mock_sync_records.call_args_list
+        v1_call = None
+        v2_call = None
+        for call in calls:
+            # Extract version from call - could be positional or keyword arg
+            args = call[0]
+            kwargs = call[1]
+            version = None
+            records = None
+            
+            # Try positional args: could be (self, records, version) or (records, version)
+            if 'version' in kwargs:
+                version = kwargs['version']
+            elif len(args) >= 3:
+                version = args[2]  # (self, records, version)
+            elif len(args) >= 2:
+                version = args[1]  # (records, version)
+            
+            # Extract records similarly
+            if 'records' in kwargs:
+                records = kwargs['records']
+            elif len(args) >= 2:
+                records = args[1] if len(args) >= 3 else args[0]
+            
+            if version == 'v1':
+                v1_call = (records, version)
+            elif version == 'v2':
+                v2_call = (records, version)
+        
+        self.assertIsNotNone(v1_call, "V1 call not found")
+        self.assertIsNotNone(v2_call, "V2 call not found")
+        # Verify V1 has 1 record and V2 has 0
+        self.assertEqual(len(v1_call[0]), 1)  # records list
+        self.assertEqual(len(v2_call[0]), 0)
         mock_process_prefixes.assert_called_once_with(
             prefixes=[
                 "ecephys_642478_2023-01-17_13-56-29/",
