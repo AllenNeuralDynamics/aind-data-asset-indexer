@@ -71,17 +71,7 @@ class AindIndexBucketJob:
         self.job_settings = job_settings
 
     def _create_docdb_client(self, version: str = "v1") -> MetadataDbClient:
-        """Create a MetadataDbClient with custom retries.
-
-        Parameters
-        ----------
-        version : str
-            Version of the DocDB API to use ("v1" or "v2")
-
-        Returns
-        -------
-        MetadataDbClient
-        """
+        """Create a MetadataDbClient with custom retries."""
         retry = Retry(
             total=3,
             backoff_factor=10,
@@ -363,7 +353,7 @@ class AindIndexBucketJob:
         s3_client: S3Client,
     ) -> None:
         """
-        For a given record:
+        For a given record,
         1. Check if its location field is valid. If not, log a warning.
         2. Check if it needs to be deleted (no s3 prefix found). If so, the
         record is de-registered from DocDB and Code Ocean.
@@ -402,102 +392,65 @@ class AindIndexBucketJob:
                     s3_location=docdb_record["location"],
                 )
                 logging.info(response)
-            else:
-                # S3 prefix exists - sync metadata
-                self._sync_metadata_for_record(
-                    docdb_record=docdb_record,
-                    docdb_client=docdb_client,
+            else:  # There is a prefix in S3 that matches the record location.
+                # Schema info in root level directory
+                s3_core_schema_info = get_dict_of_core_schema_file_info(
                     s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    prefix=prefix,
+                )
+                # List of files in original_metadata folder
+                files_in_og_folder = list_metadata_copies(
+                    s3_client=s3_client,
+                    bucket=self.job_settings.s3_bucket,
+                    prefix=prefix,
+                    copy_subdir=self.job_settings.copy_original_md_subdir,
+                )
+                fields_to_update = self._resolve_schema_information(
+                    s3_client=s3_client,
+                    prefix=prefix,
+                    core_schema_info_in_root=s3_core_schema_info,
+                    list_of_schemas_in_copy_subdir=files_in_og_folder,
+                    docdb_record=docdb_record,
+                )
+                if fields_to_update:
+                    logging.info(
+                        f"New files found in "
+                        f"s3://{self.job_settings.s3_bucket}/{prefix} but not "
+                        f"in {self.job_settings.copy_original_md_subdir}. "
+                        f"Updating DocDb record with new info."
+                    )
+                    response = docdb_client.upsert_one_docdb_record(
+                        record={
+                            "_id": docdb_record["_id"],
+                            **fields_to_update,
+                        }
+                    )
+                    logging.debug(response.json())
+                    # Pull record from docdb to get new last_modified as well
+                    docdb_response = docdb_client.retrieve_docdb_records(
+                        filter_query={"_id": docdb_record["_id"]},
+                    )
+                    docdb_record = docdb_response[0]
+                # Sync docdb record to metadata.nd.json in root folder
+                metadata_nd_object_key = create_metadata_object_key(
+                    prefix=prefix
+                )
+                metadata_nd_json_info = get_dict_of_file_info(
+                    s3_client=s3_client,
+                    bucket=s3_bucket,
+                    keys=[metadata_nd_object_key],
+                ).get(metadata_nd_object_key)
+                self._write_root_file_with_record_info(
+                    s3_client=s3_client,
+                    core_schema_file_name=metadata_filename,
+                    core_schema_info_in_root=metadata_nd_json_info,
+                    prefix=prefix,
+                    docdb_record_contents=docdb_record,
                 )
 
-    def _sync_metadata_for_record(
-        self,
-        docdb_record: dict,
-        docdb_client: MetadataDbClient,
-        s3_client: S3Client,
-    ) -> None:
-        """
-        Syncs metadata for a record. Validates the location and syncs
-        metadata files in S3 with DocDB record. Overwrites the .nd.json
-        object if the docdb is different. Also resolves the core schema json
-        files in the root folder and the original_metadata folder to ensure
-        they are in sync.
-
-        Parameters
-        ----------
-        docdb_record : dict
-        docdb_client : MetadataDbClient
-        s3_client : S3Client
-        """
-        # Validate location before processing
-        if not is_record_location_valid(
-            docdb_record, self.job_settings.s3_bucket
-        ):
-            logging.warning(
-                f"Record location {docdb_record.get('location')} not valid "
-                f"for bucket {self.job_settings.s3_bucket}! Skipping."
-            )
-            return
-
-        s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
-        s3_bucket = s3_parts["bucket"]
-        prefix = s3_parts["prefix"]
-        # Schema info in root level directory
-        s3_core_schema_info = get_dict_of_core_schema_file_info(
-            s3_client=s3_client,
-            bucket=self.job_settings.s3_bucket,
-            prefix=prefix,
-        )
-        # List of files in original_metadata folder
-        files_in_og_folder = list_metadata_copies(
-            s3_client=s3_client,
-            bucket=self.job_settings.s3_bucket,
-            prefix=prefix,
-            copy_subdir=self.job_settings.copy_original_md_subdir,
-        )
-        fields_to_update = self._resolve_schema_information(
-            s3_client=s3_client,
-            prefix=prefix,
-            core_schema_info_in_root=s3_core_schema_info,
-            list_of_schemas_in_copy_subdir=files_in_og_folder,
-            docdb_record=docdb_record,
-        )
-        if fields_to_update:
-            logging.info(
-                f"New files found in "
-                f"s3://{self.job_settings.s3_bucket}/{prefix} but not "
-                f"in {self.job_settings.copy_original_md_subdir}. "
-                f"Updating DocDb record with new info."
-            )
-            response = docdb_client.upsert_one_docdb_record(
-                record={
-                    "_id": docdb_record["_id"],
-                    **fields_to_update,
-                }
-            )
-            logging.debug(response.json())
-            # Pull record from docdb to get new last_modified as well
-            docdb_response = docdb_client.retrieve_docdb_records(
-                filter_query={"_id": docdb_record["_id"]},
-            )
-            docdb_record = docdb_response[0]
-        # Sync docdb record to metadata.nd.json in root folder
-        metadata_nd_object_key = create_metadata_object_key(prefix=prefix)
-        metadata_nd_json_info = get_dict_of_file_info(
-            s3_client=s3_client,
-            bucket=s3_bucket,
-            keys=[metadata_nd_object_key],
-        ).get(metadata_nd_object_key)
-        self._write_root_file_with_record_info(
-            s3_client=s3_client,
-            core_schema_file_name=metadata_filename,
-            core_schema_info_in_root=metadata_nd_json_info,
-            prefix=prefix,
-            docdb_record_contents=docdb_record,
-        )
-
     def _dask_task_to_process_record_list(
-        self, record_list: List[dict], version: str = "v1"
+        self, record_list: List[dict]
     ) -> None:
         """
         The task to perform within a partition. If n_partitions is set to 20
@@ -507,8 +460,6 @@ class AindIndexBucketJob:
         Parameters
         ----------
         record_list : List[dict]
-        version : str
-            Version of the DocDB API to use ("v1" or "v2")
 
         Returns
         -------
@@ -516,7 +467,7 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        with self._create_docdb_client(version=version) as doc_db_client:
+        with self._create_docdb_client() as doc_db_client:
             for record in record_list:
                 try:
                     self._process_docdb_record(
@@ -526,16 +477,14 @@ class AindIndexBucketJob:
                     )
                 except requests.HTTPError as e:
                     logging.error(
-                        f"Error processing {version} docdb "
-                        f"{record.get('_id')}, "
+                        f"Error processing docdb {record.get('_id')}, "
                         f"{record.get('location')}: {repr(e)}. "
                         f"Response Body: {e.response.text}"
                     )
                 except Exception as e:
                     logging.error(
-                        f"Error processing {version} docdb "
-                        f"{record.get('_id')}, "
-                        f"{record.get('location')}: {repr(e)}"
+                        f'Error processing docdb {record.get("_id")}, '
+                        f'{record.get("location")}: {repr(e)}'
                     )
         s3_client.close()
 
@@ -727,52 +676,29 @@ class AindIndexBucketJob:
         mapped_partitions.compute()
 
     def _run_docdb_sync(self):
-        """Sync changes in DocDB to S3. Processes both V1 and V2 records."""
-        # Build filter query
-        filter_query = {
-            "location": {"$regex": f"^s3://{self.job_settings.s3_bucket}.*"}
-        }
-        if self.job_settings.lookback_days is not None:
-            lookback_utc = datetime.now(timezone.utc) - timedelta(
-                days=self.job_settings.lookback_days
-            )
-            filter_query["last_modified"] = {
-                "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
+        """Sync changes in DocDB to S3"""
+        with self._create_docdb_client() as iterator_docdb_client:
+            filter = {
+                "location": {
+                    "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                }
             }
-
-        logging.info(f"Starting to scan through DocDb: {filter_query}")
-
-        # Process V1 records
-        with self._create_docdb_client(version="v1") as v1_client:
-            v1_pages = paginate_docdb(
-                docdb_api_client=v1_client,
+            if self.job_settings.lookback_days is not None:
+                lookback_utc = datetime.now(timezone.utc) - timedelta(
+                    days=self.job_settings.lookback_days
+                )
+                filter["last_modified"] = {
+                    "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
+                }
+            logging.info(f"Starting to scan through DocDb: {filter}")
+            docdb_pages = paginate_docdb(
+                docdb_api_client=iterator_docdb_client,
                 page_size=200,
-                filter_query=filter_query,
+                filter_query=filter,
             )
-            for page in v1_pages:
+            for page in docdb_pages:
                 if len(page) > 0:
                     self._process_records(records=page)
-
-        # Process V2 records
-        with self._create_docdb_client(version="v2") as v2_client:
-            v2_pages = paginate_docdb(
-                docdb_api_client=v2_client,
-                page_size=200,
-                filter_query=filter_query,
-            )
-            for page in v2_pages:
-                if len(page) > 0:
-                    # Process V2 records with version parameter
-                    record_bag = dask_bag.from_sequence(
-                        page, npartitions=self.job_settings.n_partitions
-                    )
-                    mapped_partitions = dask_bag.map_partitions(
-                        self._dask_task_to_process_record_list,
-                        record_bag,
-                        version="v2",
-                    )
-                    mapped_partitions.compute()
-
         logging.info("Finished scanning through DocDb.")
 
     def _run_s3_sync(self):
