@@ -443,7 +443,7 @@ class AindIndexBucketJob:
         )
 
     def _dask_task_to_process_record_list(
-        self, record_list: List[dict]
+        self, record_list: List[dict], version: str = "v1"
     ) -> None:
         """
         The task to perform within a partition. If n_partitions is set to 20
@@ -453,6 +453,8 @@ class AindIndexBucketJob:
         Parameters
         ----------
         record_list : List[dict]
+        version : str
+            Version of the DocDB API to use ("v1" or "v2")
 
         Returns
         -------
@@ -460,59 +462,26 @@ class AindIndexBucketJob:
         """
         # create clients here since dask doesn't serialize them
         s3_client = boto3.client("s3")
-        with self._create_docdb_client() as doc_db_client:
+        with self._create_docdb_client(version=version) as doc_db_client:
             for record in record_list:
                 try:
-                    # Only sync metadata, S3 check already done upstream
-                    self._sync_metadata_for_record(
+                    self._process_docdb_record(
                         docdb_record=record,
                         docdb_client=doc_db_client,
                         s3_client=s3_client,
                     )
                 except requests.HTTPError as e:
                     logging.error(
-                        f"Error processing docdb {record.get('_id')}, "
+                        f"Error processing {version} docdb "
+                        f"{record.get('_id')}, "
                         f"{record.get('location')}: {repr(e)}. "
                         f"Response Body: {e.response.text}"
                     )
                 except Exception as e:
                     logging.error(
-                        f'Error processing docdb {record.get("_id")}, '
-                        f'{record.get("location")}: {repr(e)}'
-                    )
-        s3_client.close()
-
-    def _dask_task_to_process_v2_record_list(
-        self, record_list: List[dict]
-    ) -> None:
-        """
-        Process V2 records. Similar to _dask_task_to_process_record_list
-        but uses V2 client.
-
-        Parameters
-        ----------
-        record_list : List[dict]
-        """
-        s3_client = boto3.client("s3")
-        with self._create_docdb_client(version="v2") as doc_db_client:
-            for record in record_list:
-                try:
-                    # Only sync metadata, S3 check already done upstream
-                    self._sync_metadata_for_record(
-                        docdb_record=record,
-                        docdb_client=doc_db_client,
-                        s3_client=s3_client,
-                    )
-                except requests.HTTPError as e:
-                    logging.error(
-                        f"Error processing V2 docdb {record.get('_id')}, "
-                        f"{record.get('location')}: {repr(e)}. "
-                        f"Response Body: {e.response.text}"
-                    )
-                except Exception as e:
-                    logging.error(
-                        f'Error processing V2 docdb {record.get("_id")}, '
-                        f'{record.get("location")}: {repr(e)}'
+                        f"Error processing {version} docdb "
+                        f"{record.get('_id')}, "
+                        f"{record.get('location')}: {repr(e)}"
                     )
         s3_client.close()
 
@@ -703,99 +672,62 @@ class AindIndexBucketJob:
         )
         mapped_partitions.compute()
 
-    def _collect_records_by_version(
-        self, version: str, filter_query: dict
-    ) -> Dict[str, List[dict]]:
+    def _process_docdb_record(
+        self,
+        docdb_record: dict,
+        docdb_client: MetadataDbClient,
+        s3_client: S3Client,
+    ) -> None:
         """
-        Collect records from DocDB for a specific version and group by location.
+        For a given record:
+        1. Check if its location field is valid. If not, log a warning.
+        2. Check if it needs to be deleted (no s3 prefix found). If so, the
+        record is de-registered from DocDB and Code Ocean.
+        3. If there is an s3 prefix, overwrite the .nd.json object if the docdb
+        is different. Also resolves the core schema json files in the root
+        folder and the original_metadata folder to ensure they are in sync.
 
         Parameters
         ----------
-        version : str
-            DocDB version ("v1" or "v2")
-        filter_query : dict
-            Query to filter records
-
-        Returns
-        -------
-        Dict[str, List[dict]]
-            Records grouped by location
+        docdb_record : dict
+        docdb_client : MetadataDbClient
+        s3_client : S3Client
         """
-        logging.info(f"Collecting {version.upper()} records...")
-        records_by_location = dict()
-        with self._create_docdb_client(version=version) as client:
-            pages = paginate_docdb(
-                docdb_api_client=client,
-                page_size=200,
-                filter_query=filter_query,
+        if not is_record_location_valid(
+            docdb_record, self.job_settings.s3_bucket
+        ):
+            logging.warning(
+                f"Record location {docdb_record.get('location')} not valid "
+                f"for bucket {self.job_settings.s3_bucket}! Skipping."
             )
-            for page in pages:
-                for record in page:
-                    location = record.get("location")
-                    if location:
-                        if location not in records_by_location:
-                            records_by_location[location] = []
-                        records_by_location[location].append(record)
-        return records_by_location
-
-    def _deregister_locations(
-        self, locations: List[str], version: str
-    ) -> None:
-        """
-        Deregister a list of locations from DocDB for a specific version.
-
-        Parameters
-        ----------
-        locations : List[str]
-            S3 locations to deregister
-        version : str
-            DocDB version ("v1" or "v2")
-        """
-        with self._create_docdb_client(version=version) as client:
-            for location in locations:
-                try:
-                    response = client.deregister_asset(s3_location=location)
-                    logging.info(
-                        f"{version.upper()} deregister response: {response}"
-                    )
-                except Exception as e:
-                    logging.error(
-                        f"Error deregistering {location} from "
-                        f"{version.upper()}: {repr(e)}"
-                    )
-
-    def _sync_records_by_version(
-        self, records: List[dict], version: str
-    ) -> None:
-        """
-        Sync records for a specific DocDB version.
-
-        Parameters
-        ----------
-        records : List[dict]
-            Records to sync
-        version : str
-            DocDB version ("v1" or "v2")
-        """
-        if not records:
-            return
-        logging.info(f"Syncing {len(records)} {version.upper()} records")
-        record_bag = dask_bag.from_sequence(
-            records, npartitions=self.job_settings.n_partitions
-        )
-        task_method = (
-            self._dask_task_to_process_record_list
-            if version == "v1"
-            else self._dask_task_to_process_v2_record_list
-        )
-        mapped_partitions = dask_bag.map_partitions(task_method, record_bag)
-        mapped_partitions.compute()
+        else:
+            s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
+            s3_bucket = s3_parts["bucket"]
+            prefix = s3_parts["prefix"]
+            does_prefix_exist = does_s3_prefix_exist(
+                s3_client=s3_client,
+                bucket=s3_bucket,
+                prefix=prefix,
+            )
+            if not does_prefix_exist:
+                logging.warning(
+                    f"Asset not found in S3 at {docdb_record['location']}! "
+                    "Deleting metadata record from DocDb and Code Ocean."
+                )
+                response = docdb_client.deregister_asset(
+                    s3_location=docdb_record["location"],
+                )
+                logging.info(response)
+            else:
+                # S3 prefix exists - sync metadata
+                self._sync_metadata_for_record(
+                    docdb_record=docdb_record,
+                    docdb_client=docdb_client,
+                    s3_client=s3_client,
+                )
 
     def _run_docdb_sync(self):
-        """Sync changes in DocDB to S3. Checks S3 once per location and
-        deregisters from both V1 and V2 if missing."""
-        s3_client = boto3.client("s3")
-
+        """Sync changes in DocDB to S3. Processes both V1 and V2 records."""
         # Build filter query
         filter_query = {
             "location": {"$regex": f"^s3://{self.job_settings.s3_bucket}.*"}
@@ -810,73 +742,36 @@ class AindIndexBucketJob:
 
         logging.info(f"Starting to scan through DocDb: {filter_query}")
 
-        # Collect records from both versions and merge by location
-        all_records_by_location = {"v1": dict(), "v2": dict()}
-        for version in ["v1", "v2"]:
-            all_records_by_location[version] = (
-                self._collect_records_by_version(version, filter_query)
+        # Process V1 records
+        with self._create_docdb_client(version="v1") as v1_client:
+            v1_pages = paginate_docdb(
+                docdb_api_client=v1_client,
+                page_size=200,
+                filter_query=filter_query,
             )
+            for page in v1_pages:
+                if len(page) > 0:
+                    self._process_records(records=page)
 
-        # Get all unique locations across both versions
-        all_locations = set(all_records_by_location["v1"].keys()) | set(
-            all_records_by_location["v2"].keys()
-        )
-        logging.info(f"Found {len(all_locations)} unique locations to process")
-
-        # Process each location - check S3 once per location
-        locations_to_deregister = []
-        records_to_sync = {"v1": [], "v2": []}
-
-        for location in all_locations:
-            # Get sample record for validation (prefer v1, fallback to v2)
-            v1_records = all_records_by_location["v1"].get(location, [])
-            v2_records = all_records_by_location["v2"].get(location, [])
-            sample_record = v1_records[0] if v1_records else v2_records[0]
-
-            if not is_record_location_valid(
-                sample_record, self.job_settings.s3_bucket
-            ):
-                logging.warning(
-                    f"Record location {location} not valid "
-                    f"for bucket {self.job_settings.s3_bucket}! Skipping."
-                )
-                continue
-
-            s3_parts = get_s3_bucket_and_prefix(location)
-            s3_bucket = s3_parts["bucket"]
-            prefix = s3_parts["prefix"]
-            does_prefix_exist = does_s3_prefix_exist(
-                s3_client=s3_client,
-                bucket=s3_bucket,
-                prefix=prefix,
+        # Process V2 records
+        with self._create_docdb_client(version="v2") as v2_client:
+            v2_pages = paginate_docdb(
+                docdb_api_client=v2_client,
+                page_size=200,
+                filter_query=filter_query,
             )
-
-            if not does_prefix_exist:
-                # S3 location missing - mark for deregistration
-                logging.warning(
-                    f"Asset not found in S3 at {location}! "
-                    "Will deregister from both V1 and V2 DocDb."
-                )
-                locations_to_deregister.append(location)
-            else:
-                # S3 exists - add records to sync list
-                records_to_sync["v1"].extend(v1_records)
-                records_to_sync["v2"].extend(v2_records)
-
-        s3_client.close()
-
-        # Deregister missing locations from both versions
-        if locations_to_deregister:
-            logging.info(
-                f"Deregistering {len(locations_to_deregister)} locations "
-                "from both V1 and V2 DocDB"
-            )
-            for version in ["v1", "v2"]:
-                self._deregister_locations(locations_to_deregister, version)
-
-        # Sync metadata for records where S3 exists
-        for version in ["v1", "v2"]:
-            self._sync_records_by_version(records_to_sync[version], version)
+            for page in v2_pages:
+                if len(page) > 0:
+                    # Process V2 records with version parameter
+                    record_bag = dask_bag.from_sequence(
+                        page, npartitions=self.job_settings.n_partitions
+                    )
+                    mapped_partitions = dask_bag.map_partitions(
+                        self._dask_task_to_process_record_list,
+                        record_bag,
+                        version="v2",
+                    )
+                    mapped_partitions.compute()
 
         logging.info("Finished scanning through DocDb.")
 

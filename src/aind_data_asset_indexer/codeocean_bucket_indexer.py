@@ -6,7 +6,7 @@ import logging
 import os
 import sys
 import warnings
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import dask.bag as dask_bag
 import requests
@@ -33,14 +33,15 @@ class CodeOceanIndexBucketJob:
     1) For records in AIND buckets, update the external links with Code
     Ocean data asset ids if needed.
     2) Download all processed results records from the Code Ocean index
-    3) Download all the records in DocDB (both V1 and V2) for the Code Ocean
-    bucket. The response is projected to just the {_id, location} fields.
-    4) Creates a list of locations found in Code Ocean and a list of
-    locations found in DocDB.
+    3) Download all the records in V1 DocDB for the Code Ocean bucket, then
+    download all the records in V2 DocDB. The response is projected to just
+    the {_id, location} fields.
+    4) Creates a list of locations found in Code Ocean and lists of
+    locations found in V1 and V2 DocDB.
     5) For locations found in Code Ocean not in DocDB, a new record will be
     created from the aind-data-schema json files in S3.
-    6) For locations in DocDB not found in Code Ocean, the records will be
-    removed from both V1 and V2 DocDB collections.
+    6) For locations in V1 DocDB not found in Code Ocean, the records will be
+    removed from V1 DocDB. Similarly for V2 DocDB.
     """
 
     def __init__(self, job_settings: CodeOceanIndexBucketJobSettings):
@@ -412,40 +413,6 @@ class CodeOceanIndexBucketJob:
         )
         mapped_partitions.compute()
 
-    def _scan_docdb_by_version(self, version: str) -> Dict[str, List[str]]:
-        """
-        Scan DocDB for a specific version and return records grouped by location.
-
-        Parameters
-        ----------
-        version : str
-            DocDB version ("v1" or "v2")
-
-        Returns
-        -------
-        Dict[str, List[str]]
-            Dictionary mapping location to list of record IDs
-        """
-        records_by_location = dict()
-        with self._create_docdb_client(version=version) as client:
-            pages = paginate_docdb(
-                docdb_api_client=client,
-                page_size=500,
-                filter_query={
-                    "location": {
-                        "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
-                    }
-                },
-                projection={"location": 1, "_id": 1},
-            )
-            for page in pages:
-                for record in page:
-                    location = record["location"]
-                    if location not in records_by_location:
-                        records_by_location[location] = []
-                    records_by_location[location].append(record["_id"])
-        return records_by_location
-
     def run_job(self):
         """Main method to run."""
         if self.job_settings.run_co_sync is not True:
@@ -469,10 +436,6 @@ class CodeOceanIndexBucketJob:
         logging.info("Finished scanning through CodeOcean.")
         logging.info("Starting to scan through DocDb.")
 
-        # Track record IDs separately for V1 and V2:
-        # {location: [ids]} for each version
-        docdb_records_by_location = {"v1": dict(), "v2": dict()}
-
         # Update external links in V1 DocDB
         with self._create_docdb_client() as v1_client:
             logging.info("Adding links to records.")
@@ -481,43 +444,65 @@ class CodeOceanIndexBucketJob:
             )
             logging.info("Finished adding links to records")
 
-        # Scan both V1 and V2 DocDB records
-        for version in ["v1", "v2"]:
-            docdb_records_by_location[version] = self._scan_docdb_by_version(
-                version
+        codeocean_locations = set(code_ocean_records.keys())
+
+        # Process V1 DocDB
+        v1_records = dict()
+        with self._create_docdb_client(version="v1") as v1_client:
+            v1_pages = paginate_docdb(
+                docdb_api_client=v1_client,
+                page_size=500,
+                filter_query={
+                    "location": {
+                        "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                    }
+                },
+                projection={"location": 1, "_id": 1},
             )
+            for page in v1_pages:
+                for record in page:
+                    v1_records[record["location"]] = record["_id"]
+
+        # Process V2 DocDB
+        v2_records = dict()
+        with self._create_docdb_client(version="v2") as v2_client:
+            v2_pages = paginate_docdb(
+                docdb_api_client=v2_client,
+                page_size=500,
+                filter_query={
+                    "location": {
+                        "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
+                    }
+                },
+                projection={"location": 1, "_id": 1},
+            )
+            for page in v2_pages:
+                for record in page:
+                    v2_records[record["location"]] = record["_id"]
 
         logging.info("Finished scanning through DocDB.")
 
         # Determine what to add and delete
-        codeocean_locations = set(code_ocean_records.keys())
-        all_docdb_locations = set(
-            docdb_records_by_location["v1"].keys()
-        ) | set(docdb_records_by_location["v2"].keys())
-
+        all_docdb_locations = set(v1_records.keys()) | set(v2_records.keys())
         records_to_add = [
             code_ocean_records[loc]
             for loc in codeocean_locations - all_docdb_locations
         ]
+        v1_records_to_delete = [
+            v1_records[loc]
+            for loc in set(v1_records.keys()) - codeocean_locations
+        ]
+        v2_records_to_delete = [
+            v2_records[loc]
+            for loc in set(v2_records.keys()) - codeocean_locations
+        ]
 
-        # For locations in DocDB but not in Code Ocean, collect record IDs to delete
-        records_to_delete = {"v1": [], "v2": []}
-        for location in all_docdb_locations - codeocean_locations:
-            records_to_delete["v1"].extend(
-                docdb_records_by_location["v1"].get(location, [])
-            )
-            records_to_delete["v2"].extend(
-                docdb_records_by_location["v2"].get(location, [])
-            )
-
-        # Log summary
-        total_to_delete = sum(len(ids) for ids in records_to_delete.values())
         logging.info(f"{len(records_to_add)} records to add to DocDB.")
         logging.info(
-            f"{total_to_delete} record IDs to delete from DocDB "
-            f"({len(records_to_delete['v1'])} from V1, "
-            f"{len(records_to_delete['v2'])} from V2) "
-            f"for {len(all_docdb_locations - codeocean_locations)} unique locations."
+            f"{len(v1_records_to_delete)} V1 records to delete from DocDB."
+        )
+        logging.info(
+            f"{len(v2_records_to_delete)} V2 records to delete from DocDB."
         )
 
         # Add new records
@@ -526,19 +511,27 @@ class CodeOceanIndexBucketJob:
             self._process_codeocean_records(records=records_to_add)
             logging.info("Finished adding records to DocDB.")
 
-        # Delete records from both versions
-        for version in ["v1", "v2"]:
-            if len(records_to_delete[version]) > 0:
-                logging.info(
-                    f"Starting to delete {len(records_to_delete[version])} "
-                    f"{version.upper()} records from DocDB."
-                )
-                self._delete_records_from_docdb(
-                    record_list=records_to_delete[version], version=version
-                )
-                logging.info(
-                    f"Finished deleting {version.upper()} records from DocDB."
-                )
+        # Delete V1 records
+        if len(v1_records_to_delete) > 0:
+            logging.info(
+                f"Starting to delete {len(v1_records_to_delete)} V1 records "
+                f"from DocDB."
+            )
+            self._delete_records_from_docdb(
+                record_list=v1_records_to_delete, version="v1"
+            )
+            logging.info("Finished deleting V1 records from DocDB.")
+
+        # Delete V2 records
+        if len(v2_records_to_delete) > 0:
+            logging.info(
+                f"Starting to delete {len(v2_records_to_delete)} V2 records "
+                f"from DocDB."
+            )
+            self._delete_records_from_docdb(
+                record_list=v2_records_to_delete, version="v2"
+            )
+            logging.info("Finished deleting V2 records from DocDB.")
 
 
 if __name__ == "__main__":
