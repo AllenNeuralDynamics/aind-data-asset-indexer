@@ -356,6 +356,60 @@ class AindIndexBucketJob:
                 )
         return docdb_record_fields_to_update
 
+    def _process_docdb_record(
+        self,
+        docdb_record: dict,
+        docdb_client: MetadataDbClient,
+        s3_client: S3Client,
+    ) -> None:
+        """
+        For a given record:
+        1. Check if its location field is valid. If not, log a warning.
+        2. Check if it needs to be deleted (no s3 prefix found). If so, the
+        record is de-registered from DocDB and Code Ocean.
+        3. If there is an s3 prefix, overwrite the .nd.json object if the docdb
+        is different. Also resolves the core schema json files in the root
+        folder and the original_metadata folder to ensure they are in sync.
+
+        Parameters
+        ----------
+        docdb_record : dict
+        docdb_client : MetadataDbClient
+        s3_client : S3Client
+        """
+        if not is_record_location_valid(
+            docdb_record, self.job_settings.s3_bucket
+        ):
+            logging.warning(
+                f"Record location {docdb_record.get('location')} not valid "
+                f"for bucket {self.job_settings.s3_bucket}! Skipping."
+            )
+        else:
+            s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
+            s3_bucket = s3_parts["bucket"]
+            prefix = s3_parts["prefix"]
+            does_prefix_exist = does_s3_prefix_exist(
+                s3_client=s3_client,
+                bucket=s3_bucket,
+                prefix=prefix,
+            )
+            if not does_prefix_exist:
+                logging.warning(
+                    f"Asset not found in S3 at {docdb_record['location']}! "
+                    "Deleting metadata record from DocDb and Code Ocean."
+                )
+                response = docdb_client.deregister_asset(
+                    s3_location=docdb_record["location"],
+                )
+                logging.info(response)
+            else:
+                # S3 prefix exists - sync metadata
+                self._sync_metadata_for_record(
+                    docdb_record=docdb_record,
+                    docdb_client=docdb_client,
+                    s3_client=s3_client,
+                )
+
     def _sync_metadata_for_record(
         self,
         docdb_record: dict,
@@ -671,60 +725,6 @@ class AindIndexBucketJob:
             self._dask_task_to_process_prefix_list, prefix_bag
         )
         mapped_partitions.compute()
-
-    def _process_docdb_record(
-        self,
-        docdb_record: dict,
-        docdb_client: MetadataDbClient,
-        s3_client: S3Client,
-    ) -> None:
-        """
-        For a given record:
-        1. Check if its location field is valid. If not, log a warning.
-        2. Check if it needs to be deleted (no s3 prefix found). If so, the
-        record is de-registered from DocDB and Code Ocean.
-        3. If there is an s3 prefix, overwrite the .nd.json object if the docdb
-        is different. Also resolves the core schema json files in the root
-        folder and the original_metadata folder to ensure they are in sync.
-
-        Parameters
-        ----------
-        docdb_record : dict
-        docdb_client : MetadataDbClient
-        s3_client : S3Client
-        """
-        if not is_record_location_valid(
-            docdb_record, self.job_settings.s3_bucket
-        ):
-            logging.warning(
-                f"Record location {docdb_record.get('location')} not valid "
-                f"for bucket {self.job_settings.s3_bucket}! Skipping."
-            )
-        else:
-            s3_parts = get_s3_bucket_and_prefix(docdb_record["location"])
-            s3_bucket = s3_parts["bucket"]
-            prefix = s3_parts["prefix"]
-            does_prefix_exist = does_s3_prefix_exist(
-                s3_client=s3_client,
-                bucket=s3_bucket,
-                prefix=prefix,
-            )
-            if not does_prefix_exist:
-                logging.warning(
-                    f"Asset not found in S3 at {docdb_record['location']}! "
-                    "Deleting metadata record from DocDb and Code Ocean."
-                )
-                response = docdb_client.deregister_asset(
-                    s3_location=docdb_record["location"],
-                )
-                logging.info(response)
-            else:
-                # S3 prefix exists - sync metadata
-                self._sync_metadata_for_record(
-                    docdb_record=docdb_record,
-                    docdb_client=docdb_client,
-                    s3_client=s3_client,
-                )
 
     def _run_docdb_sync(self):
         """Sync changes in DocDB to S3. Processes both V1 and V2 records."""

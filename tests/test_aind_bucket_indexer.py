@@ -823,9 +823,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_v2_client.__exit__.return_value = None
         mock_v2_client.__enter__.return_value = mock_v2_client
 
-        def create_client_side_effect(
-                version="v1", **kwargs
-        ):
+        def create_client_side_effect(version="v1", **kwargs):
             """Create a client based on the version."""
             if version == "v2":
                 return mock_v2_client
