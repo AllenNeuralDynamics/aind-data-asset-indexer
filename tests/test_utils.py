@@ -138,6 +138,9 @@ class TestUtils(unittest.TestCase):
         for r in example_co_search_data_assets["results"]:
             if r.get("provenance") is not None:
                 r["provenance"] = Provenance(**r["provenance"])
+            # Add owner field since DataAsset now requires it
+            if "owner" not in r:
+                r["owner"] = "test-owner"
             cls.example_co_search_data_assets.append(DataAsset(**r))
 
     def test_compute_md5_hash(self):
