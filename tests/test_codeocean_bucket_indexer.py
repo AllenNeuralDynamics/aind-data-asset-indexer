@@ -103,6 +103,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 state=DataAssetState.Ready,
                 type=DataAssetType.Dataset,
                 last_used=0,
+                owner="test-owner",
                 source_bucket=SourceBucket(
                     bucket="bucket",
                     prefix="prefix1",
@@ -117,6 +118,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 state=DataAssetState.Ready,
                 type=DataAssetType.Dataset,
                 last_used=0,
+                owner="test-owner",
                 source_bucket=SourceBucket(
                     bucket="bucket",
                     prefix="prefix1",
@@ -131,6 +133,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
                 state=DataAssetState.Ready,
                 type=DataAssetType.Dataset,
                 last_used=0,
+                owner="test-owner",
                 source_bucket=SourceBucket(
                     bucket="bucket",
                     prefix="prefix2",
@@ -503,10 +506,10 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_delete_record_list(
-                record_list=records_to_delete
+                record_list=records_to_delete, version="v1"
             )
         expected_log_messages = [
-            "INFO:root:Removing 2 records",
+            "INFO:root:Removing 2 V1 records",
             "DEBUG:root:{'acknowledged': True, 'deletedCount': 2}",
         ]
         self.assertEqual(expected_log_messages, captured.output)
@@ -526,11 +529,11 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._dask_task_to_delete_record_list(
-                record_list=records_to_delete
+                record_list=records_to_delete, version="v2"
             )
         expected_log_messages = [
-            "INFO:root:Removing 2 records",
-            "ERROR:root:Error deleting records: "
+            "INFO:root:Removing 2 V2 records",
+            "ERROR:root:Error deleting V2 records: "
             "Exception('Error deleting records')",
         ]
         self.assertEqual(expected_log_messages, captured.output)
@@ -542,7 +545,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         """Test _delete_records_from_docdb method."""
         records_to_delete = [r["_id"] for r in self.example_docdb_records]
         self.basic_job._delete_records_from_docdb(
-            record_list=records_to_delete
+            record_list=records_to_delete, version="v1"
         )
         mock_dask_bag_map_parts.assert_called()
 
@@ -576,7 +579,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_update_external_links_in_docdb: MagicMock,
     ):
         """Tests run_job method. Given the example responses, should ignore
-        one record, add one record, and delete one record."""
+        one record, add one record, and delete one V1 record."""
         mock_docdb_api_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
@@ -586,9 +589,15 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         mock_get_all_co_records.return_value = dict(
             [(r["location"], r) for r in self.example_codeocean_records]
         )
-        mock_paginate_docdb.return_value = [self.example_docdb_records]
+        # paginate_docdb is called twice: once for V1, once for V2
+        # First call returns V1 records, second call returns empty V2 records
+        mock_paginate_docdb.side_effect = [
+            iter([self.example_docdb_records]),  # V1 records
+            iter([]),  # V2 records (empty)
+        ]
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job.run_job()
+
         expected_log_messages = [
             "INFO:root:Starting to scan through CodeOcean.",
             "INFO:root:Finished scanning through CodeOcean.",
@@ -597,11 +606,12 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "INFO:root:Finished adding links to records",
             "INFO:root:Finished scanning through DocDB.",
             "INFO:root:1 records to add to DocDB.",
-            "INFO:root:1 records to delete from DocDB.",
+            "INFO:root:1 V1 records to delete from DocDB.",
+            "INFO:root:0 V2 records to delete from DocDB.",
             "INFO:root:Starting to add records to DocDB.",
             "INFO:root:Finished adding records to DocDB.",
-            "INFO:root:Starting to delete records from DocDB.",
-            "INFO:root:Finished deleting records from DocDB.",
+            "INFO:root:Starting to delete 1 V1 records from DocDB.",
+            "INFO:root:Finished deleting V1 records from DocDB.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
@@ -612,9 +622,101 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             records=[self.example_codeocean_records[0]]
         )
         mock_delete_records_from_docdb.assert_called_once_with(
-            record_list=["efg-456"]
+            record_list=["efg-456"], version="v1"
         )
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 3)
+
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._update_external_links_in_docdb"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._delete_records_from_docdb"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._process_codeocean_records"
+    )
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.paginate_docdb")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "get_all_processed_codeocean_asset_records"
+    )
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.CodeOcean")
+    def test_run_job_with_v2_records(
+        self,
+        mock_codeocean_client: MagicMock,
+        mock_get_all_co_records: MagicMock,
+        mock_docdb_client: MagicMock,
+        mock_paginate_docdb: MagicMock,
+        mock_process_codeocean_records: MagicMock,
+        mock_delete_records_from_docdb: MagicMock,
+        mock_update_external_links_in_docdb: MagicMock,
+    ):
+        """Tests run_job method with V2 records."""
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        mock_co_client = MagicMock()
+        mock_codeocean_client.return_value = mock_co_client
+        mock_get_all_co_records.return_value = dict(
+            [(r["location"], r) for r in self.example_codeocean_records]
+        )
+
+        # Create V2 records with different IDs
+        v2_docdb_records = [
+            {
+                "location": (
+                    "s3://some_co_bucket/"
+                    "666666cc-66cc-6c66-666c-6c66c6666666"
+                ),
+                "_id": "v2-abc-123",
+            },
+            {
+                "location": (
+                    "s3://some_co_bucket/"
+                    "22ee2e2e-22e2-2222-2222-e22eeeee2e22"
+                ),
+                "_id": "v2-efg-456",
+            },
+        ]
+        mock_paginate_docdb.side_effect = [
+            iter([]),  # V1 records (empty)
+            iter([v2_docdb_records]),  # V2 records
+        ]
+        with self.assertLogs(level="DEBUG") as captured:
+            self.basic_job.run_job()
+
+        expected_log_messages = [
+            "INFO:root:Starting to scan through CodeOcean.",
+            "INFO:root:Finished scanning through CodeOcean.",
+            "INFO:root:Starting to scan through DocDb.",
+            "INFO:root:Adding links to records.",
+            "INFO:root:Finished adding links to records",
+            "INFO:root:Finished scanning through DocDB.",
+            "INFO:root:1 records to add to DocDB.",
+            "INFO:root:0 V1 records to delete from DocDB.",
+            "INFO:root:1 V2 records to delete from DocDB.",
+            "INFO:root:Starting to add records to DocDB.",
+            "INFO:root:Finished adding records to DocDB.",
+            "INFO:root:Starting to delete 1 V2 records from DocDB.",
+            "INFO:root:Finished deleting V2 records from DocDB.",
+        ]
+        self.assertEqual(expected_log_messages, captured.output)
+
+        mock_update_external_links_in_docdb.assert_called_once_with(
+            docdb_client=mock_docdb_api_client, co_client=mock_co_client
+        )
+        mock_process_codeocean_records.assert_called_once_with(
+            records=[self.example_codeocean_records[0]]
+        )
+        mock_delete_records_from_docdb.assert_called_once_with(
+            record_list=["v2-efg-456"], version="v2"
+        )
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 3)
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
