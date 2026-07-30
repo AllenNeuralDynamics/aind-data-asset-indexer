@@ -18,6 +18,7 @@ from aind_data_asset_indexer.utils import (
     cond_copy_then_sync_core_json_files,
     create_metadata_object_key,
     create_object_key,
+    determine_docdb_version_from_s3,
     does_s3_metadata_copy_exist,
     does_s3_object_exist,
     does_s3_prefix_exist,
@@ -1307,6 +1308,91 @@ class TestUtils(unittest.TestCase):
             Bucket="bucket", Prefix="prefix/", Delimiter="/"
         )
         self.assertFalse(result)
+
+    @patch(
+        "aind_data_asset_indexer.utils.download_json_file_from_s3"
+    )
+    def test_determine_docdb_version_v1(self, mock_download: MagicMock):
+        """Tests determine_docdb_version_from_s3 with v1 schema"""
+        mock_s3_client = MagicMock()
+        mock_download.return_value = {"schema_version": "1.2.1"}
+        
+        result = determine_docdb_version_from_s3(
+            s3_client=mock_s3_client,
+            bucket="test-bucket",
+            prefix="test-prefix",
+        )
+        
+        self.assertEqual("v1", result)
+        mock_download.assert_called_once()
+
+    @patch(
+        "aind_data_asset_indexer.utils.download_json_file_from_s3"
+    )
+    def test_determine_docdb_version_v2(self, mock_download: MagicMock):
+        """Tests determine_docdb_version_from_s3 with v2 schema"""
+        mock_s3_client = MagicMock()
+        mock_download.return_value = {"schema_version": "2.0.0"}
+        
+        result = determine_docdb_version_from_s3(
+            s3_client=mock_s3_client,
+            bucket="test-bucket",
+            prefix="test-prefix",
+        )
+        
+        self.assertEqual("v2", result)
+        mock_download.assert_called_once()
+
+    @patch(
+        "aind_data_asset_indexer.utils.download_json_file_from_s3"
+    )
+    def test_determine_docdb_version_no_metadata(self, mock_download: MagicMock):
+        """Tests determine_docdb_version_from_s3 when metadata file is missing"""
+        mock_s3_client = MagicMock()
+        mock_download.return_value = None
+        
+        with self.assertLogs(level="WARNING"):
+            result = determine_docdb_version_from_s3(
+                s3_client=mock_s3_client,
+                bucket="test-bucket",
+                prefix="test-prefix",
+            )
+        
+        self.assertEqual("v1", result)
+
+    @patch(
+        "aind_data_asset_indexer.utils.download_json_file_from_s3"
+    )
+    def test_determine_docdb_version_no_schema_version(self, mock_download: MagicMock):
+        """Tests determine_docdb_version_from_s3 when schema_version field is missing"""
+        mock_s3_client = MagicMock()
+        mock_download.return_value = {"name": "test-asset"}
+        
+        with self.assertLogs(level="WARNING"):
+            result = determine_docdb_version_from_s3(
+                s3_client=mock_s3_client,
+                bucket="test-bucket",
+                prefix="test-prefix",
+            )
+        
+        self.assertEqual("v1", result)
+
+    @patch(
+        "aind_data_asset_indexer.utils.download_json_file_from_s3"
+    )
+    def test_determine_docdb_version_error(self, mock_download: MagicMock):
+        """Tests determine_docdb_version_from_s3 when an error occurs"""
+        mock_s3_client = MagicMock()
+        mock_download.side_effect = Exception("S3 error")
+        
+        with self.assertLogs(level="ERROR"):
+            result = determine_docdb_version_from_s3(
+                s3_client=mock_s3_client,
+                bucket="test-bucket",
+                prefix="test-prefix",
+            )
+        
+        self.assertEqual("v1", result)
 
 
 if __name__ == "__main__":

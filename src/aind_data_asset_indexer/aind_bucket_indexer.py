@@ -31,6 +31,7 @@ from aind_data_asset_indexer.utils import (
     core_schema_file_names,
     create_metadata_object_key,
     create_object_key,
+    determine_docdb_version_from_s3,
     does_s3_object_exist,
     does_s3_prefix_exist,
     download_json_file_from_s3,
@@ -595,11 +596,21 @@ class AindIndexBucketJob:
             # - Registers asset to Code Ocean if not already registered
             # Assume next docdb_sync index job will create the .nd.json file
             # and copy root files to /original_metadata.
-            logging.info(f"Registering derived asset for: {location}")
-            register_response = docdb_client.register_asset(
-                s3_location=location,
+            
+            # Determine the appropriate DocDB version based on metadata schema
+            docdb_version = determine_docdb_version_from_s3(
+                s3_client=s3_client, bucket=bucket, prefix=s3_prefix
             )
-            logging.info(register_response)
+            
+            logging.info(
+                f"Registering derived asset for: {location} to "
+                f"{docdb_version.upper()} DocDB"
+            )
+            with self._create_docdb_client(version=docdb_version) as versioned_client:
+                register_response = versioned_client.register_asset(
+                    s3_location=location,
+                )
+                logging.info(register_response)
         else:
             logging.warning(
                 f"Metadata record for {location} not found in DocDB and data "

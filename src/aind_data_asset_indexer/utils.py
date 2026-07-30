@@ -858,3 +858,68 @@ def get_all_processed_codeocean_asset_records(
         # way to remove the duplicates.
         all_responses.update(extracted_info)
     return all_responses
+
+
+def determine_docdb_version_from_s3(
+    s3_client: S3Client, bucket: str, prefix: str
+) -> str:
+    """
+    Determine the appropriate DocDB version (v1 or v2) to use based on the
+    schema_version field in the metadata.nd.json file.
+
+    Parameters
+    ----------
+    s3_client : S3Client
+    bucket : str
+    prefix : str
+        S3 prefix where the metadata.nd.json file is located
+
+    Returns
+    -------
+    str
+        "v2" if the metadata schema_version starts with "2.", otherwise "v1"
+        (defaults to "v1" if metadata file cannot be read or schema_version
+        is missing)
+
+    """
+    try:
+        metadata_key = create_metadata_object_key(prefix)
+        metadata = download_json_file_from_s3(
+            s3_client=s3_client, bucket=bucket, object_key=metadata_key
+        )
+        
+        if metadata is None:
+            logging.warning(
+                f"Could not read metadata from s3://{bucket}/{metadata_key}. "
+                f"Defaulting to v1 DocDB."
+            )
+            return "v1"
+        
+        schema_version = metadata.get("schema_version")
+        if schema_version is None:
+            logging.warning(
+                f"No schema_version field in s3://{bucket}/{metadata_key}. "
+                f"Defaulting to v1 DocDB."
+            )
+            return "v1"
+        
+        # V2 schemas have version starting with "2."
+        if isinstance(schema_version, str) and schema_version.startswith("2."):
+            logging.info(
+                f"Detected schema version {schema_version} for "
+                f"s3://{bucket}/{prefix}. Using v2 DocDB."
+            )
+            return "v2"
+        else:
+            logging.info(
+                f"Detected schema version {schema_version} for "
+                f"s3://{bucket}/{prefix}. Using v1 DocDB."
+            )
+            return "v1"
+            
+    except Exception as e:
+        logging.error(
+            f"Error determining DocDB version for s3://{bucket}/{prefix}: "
+            f"{repr(e)}. Defaulting to v1."
+        )
+        return "v1"

@@ -362,13 +362,34 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         self.assertEqual(expected_log_message, captured.output[1])
         mock_paginate.assert_not_called()
 
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "determine_docdb_version_from_s3"
+    )
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "get_s3_bucket_and_prefix"
+    )
     @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
     def test_process_codeocean_record(
         self,
         mock_docdb_client: MagicMock,
+        mock_get_s3_bucket_and_prefix: MagicMock,
+        mock_determine_version: MagicMock,
     ):
         """Tests _process_codeocean_record method"""
-        mock_docdb_client.register_co_result.return_value = {
+        mock_s3_client = MagicMock()
+        mock_get_s3_bucket_and_prefix.return_value = (
+            "some_co_bucket",
+            "666666cc-66cc-6c66-666c-6c66c6666666",
+        )
+        mock_determine_version.return_value = "v1"
+        
+        mock_docdb_api_client = MagicMock()
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_docdb_api_client
+        )
+        mock_docdb_api_client.register_co_result.return_value = {
             "message": (
                 "Inserted new DocDB record for "
                 "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666."
@@ -378,16 +399,16 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_codeocean_record(
                 codeocean_record=self.example_codeocean_records[1],
-                docdb_client=mock_docdb_client,
+                s3_client=mock_s3_client,
             )
         expected_messages = [
             "INFO:root:Uploading metadata record for: "
-            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666",
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666 to V1 DocDB",
             "INFO:root:{'message': 'Inserted new DocDB record for "
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666.'}",
         ]
         self.assertEqual(expected_messages, captured.output)
-        mock_docdb_client.register_co_result.assert_called_once_with(
+        mock_docdb_api_client.register_co_result.assert_called_once_with(
             name=(
                 "ecephys_712815_2024-05-22_12-26-32_sorted_2024-06-12_19-45-59"
             ),
@@ -397,53 +418,51 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             co_asset_id="666666cc-66cc-6c66-666c-6c66c6666666",
             co_computation_id="2ff2222f-ff22-2f22-2222-ff22fff22f22",
         )
-
-    @patch(
-        "aind_data_asset_indexer.codeocean_bucket_indexer."
-        "CodeOceanIndexBucketJob._process_codeocean_record"
-    )
-    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
-    def test_dask_task_to_process_record_list(
-        self,
-        mock_docdb_client: MagicMock,
-        mock_process_codeocean_record: MagicMock,
-    ):
-        """Tests _dask_task_to_process_record_list"""
-        mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value.__enter__.return_value = (
-            mock_docdb_api_client
-        )
-        records = self.example_codeocean_records
-        self.basic_job._dask_task_to_process_record_list(record_list=records)
-        mock_process_codeocean_record.assert_has_calls(
-            [
-                call(
-                    codeocean_record=records[0],
-                    docdb_client=mock_docdb_api_client,
-                ),
-                call(
-                    codeocean_record=records[1],
-                    docdb_client=mock_docdb_api_client,
-                ),
-            ]
-        )
         mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch(
         "aind_data_asset_indexer.codeocean_bucket_indexer."
         "CodeOceanIndexBucketJob._process_codeocean_record"
     )
-    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.MetadataDbClient")
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.boto3")
+    def test_dask_task_to_process_record_list(
+        self,
+        mock_boto3: MagicMock,
+        mock_process_codeocean_record: MagicMock,
+    ):
+        """Tests _dask_task_to_process_record_list"""
+        mock_s3_client = MagicMock()
+        mock_boto3.client.return_value = mock_s3_client
+        
+        records = self.example_codeocean_records
+        self.basic_job._dask_task_to_process_record_list(record_list=records)
+        mock_process_codeocean_record.assert_has_calls(
+            [
+                call(
+                    codeocean_record=records[0],
+                    s3_client=mock_s3_client,
+                ),
+                call(
+                    codeocean_record=records[1],
+                    s3_client=mock_s3_client,
+                ),
+            ]
+        )
+
+    @patch(
+        "aind_data_asset_indexer.codeocean_bucket_indexer."
+        "CodeOceanIndexBucketJob._process_codeocean_record"
+    )
+    @patch("aind_data_asset_indexer.codeocean_bucket_indexer.boto3")
     def test_dask_task_to_process_record_list_error(
         self,
-        mock_docdb_client: MagicMock,
+        mock_boto3: MagicMock,
         mock_process_codeocean_record: MagicMock,
     ):
         """Tests _dask_task_to_process_record_list when there are errors."""
-        mock_docdb_api_client = MagicMock()
-        mock_docdb_client.return_value.__enter__.return_value = (
-            mock_docdb_api_client
-        )
+        mock_s3_client = MagicMock()
+        mock_boto3.client.return_value = mock_s3_client
+        
         records = self.example_codeocean_records
         http_error_response = MagicMock(spec=Response)
         http_error_response.status_code = 400
@@ -469,15 +488,14 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             [
                 call(
                     codeocean_record=records[0],
-                    docdb_client=mock_docdb_api_client,
+                    s3_client=mock_s3_client,
                 ),
                 call(
                     codeocean_record=records[1],
-                    docdb_client=mock_docdb_api_client,
+                    s3_client=mock_s3_client,
                 ),
             ]
         )
-        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("dask.bag.map_partitions")
     def test_process_codeocean_records(

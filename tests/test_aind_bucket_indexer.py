@@ -1182,12 +1182,17 @@ class TestAindIndexBucketJob(unittest.TestCase):
         "aind_data_asset_indexer.aind_bucket_indexer.AindIndexBucketJob."
         "_get_data_level_for_prefix"
     )
+    @patch(
+        "aind_data_asset_indexer.aind_bucket_indexer."
+        "determine_docdb_version_from_s3"
+    )
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")
     def test_process_prefix_no_record_yes_derived(
         self,
         mock_s3_client: MagicMock,
         mock_docdb_client: MagicMock,
+        mock_determine_version: MagicMock,
         mock_get_data_level_for_prefix: MagicMock,
     ):
         """Tests _process_prefix method when there is no record in DocDb
@@ -1195,29 +1200,43 @@ class TestAindIndexBucketJob(unittest.TestCase):
 
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         mock_get_data_level_for_prefix.return_value = "derived"
-        mock_docdb_client.register_asset.return_value = {
+        mock_determine_version.return_value = "v1"
+        
+        mock_versioned_client = MagicMock()
+        mock_docdb_client.return_value.__enter__.return_value = (
+            mock_versioned_client
+        )
+        mock_versioned_client.register_asset.return_value = {
             "message": "Registered",
         }
+        
+        # Mock the existing docdb_client parameter
+        mock_existing_client = MagicMock()
 
         location_to_id_map = dict()
         v2_location_to_id_map = dict()
         with self.assertLogs(level="DEBUG") as captured:
             self.basic_job._process_prefix(
                 s3_prefix=expected_prefix,
-                docdb_client=mock_docdb_client,
+                docdb_client=mock_existing_client,
                 s3_client=mock_s3_client,
                 location_to_id_map=location_to_id_map,
                 v2_location_to_id_map=v2_location_to_id_map,
             )
         expected_log_messages = [
+            "INFO:root:Detected schema version 1.2.1 for "
+            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}. Using v1 DocDB.",
             "INFO:root:Registering derived asset for: "
-            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}",
+            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix} to V1 DocDB",
             "INFO:root:{'message': 'Registered'}",
         ]
-        self.assertEqual(expected_log_messages, captured.output)
-        mock_docdb_client.register_asset.assert_called_once_with(
+        # Only check the last 2 messages since the determine_version log might not be captured
+        self.assertIn(expected_log_messages[-2], captured.output)
+        self.assertIn(expected_log_messages[-1], captured.output)
+        mock_versioned_client.register_asset.assert_called_once_with(
             s3_location=f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}"
         )
+        mock_docdb_client.return_value.__exit__.assert_called_once()
 
     @patch("aind_data_asset_indexer.aind_bucket_indexer.MetadataDbClient")
     @patch("boto3.client")

@@ -8,10 +8,14 @@ import sys
 import warnings
 from typing import List, Optional
 
+import boto3
 import dask.bag as dask_bag
 import requests
 from aind_data_access_api.document_db import MetadataDbClient
-from aind_data_access_api.utils import paginate_docdb
+from aind_data_access_api.utils import (
+    get_s3_bucket_and_prefix,
+    paginate_docdb,
+)
 from aind_data_schema.core.metadata import ExternalPlatforms
 from codeocean import CodeOcean
 from codeocean.data_asset import DataAssetSearchOrigin, DataAssetSearchParams
@@ -20,6 +24,7 @@ from urllib3.util import Retry
 
 from aind_data_asset_indexer.models import CodeOceanIndexBucketJobSettings
 from aind_data_asset_indexer.utils import (
+    determine_docdb_version_from_s3,
     get_all_processed_codeocean_asset_records,
 )
 
@@ -283,17 +288,18 @@ class CodeOceanIndexBucketJob:
     def _process_codeocean_record(
         self,
         codeocean_record: dict,
-        docdb_client: MetadataDbClient,
+        s3_client,
     ):
         """
         Processes a code ocean record. It's assumed that the check to verify
         the record is not in DocDB is done upstream.
-        1) Uses the codeocean record info to register the asset to DocDB.
+        1) Determines the appropriate DocDB version based on metadata schema
+        2) Uses the codeocean record info to register the asset to DocDB.
 
         Parameters
         ----------
         codeocean_record : dict
-        docdb_client : MetadataDbClient
+        s3_client : S3Client
 
         """
         name = codeocean_record["name"]
@@ -301,14 +307,23 @@ class CodeOceanIndexBucketJob:
         co_asset_id = codeocean_record["co_asset_id"]
         co_computation_id = codeocean_record["co_computation_id"]
 
-        logging.info(f"Uploading metadata record for: {location}")
-        register_response = docdb_client.register_co_result(
-            s3_location=location,
-            name=name,
-            co_asset_id=co_asset_id,
-            co_computation_id=co_computation_id,
+        # Determine DocDB version from metadata in S3
+        bucket, prefix = get_s3_bucket_and_prefix(location)
+        docdb_version = determine_docdb_version_from_s3(
+            s3_client=s3_client, bucket=bucket, prefix=prefix
         )
-        logging.info(register_response)
+
+        logging.info(
+            f"Uploading metadata record for: {location} to {docdb_version.upper()} DocDB"
+        )
+        with self._create_docdb_client(version=docdb_version) as docdb_client:
+            register_response = docdb_client.register_co_result(
+                s3_location=location,
+                name=name,
+                co_asset_id=co_asset_id,
+                co_computation_id=co_computation_id,
+            )
+            logging.info(register_response)
 
     def _dask_task_to_process_record_list(self, record_list: List[dict]):
         """
@@ -321,23 +336,23 @@ class CodeOceanIndexBucketJob:
         record_list : List[dict]
 
         """
-        # create client here since dask doesn't serialize them
-        with self._create_docdb_client() as doc_db_client:
-            for record in record_list:
-                try:
-                    self._process_codeocean_record(
-                        codeocean_record=record,
-                        docdb_client=doc_db_client,
-                    )
-                except requests.HTTPError as e:
-                    logging.error(
-                        f'Error processing {record.get("location")}: {repr(e)}'
-                        f". Response Body: {e.response.text}"
-                    )
-                except Exception as e:
-                    logging.error(
-                        f'Error processing {record.get("location")}: {repr(e)}'
-                    )
+        # create s3 client here since dask doesn't serialize them
+        s3_client = boto3.client("s3")
+        for record in record_list:
+            try:
+                self._process_codeocean_record(
+                    codeocean_record=record,
+                    s3_client=s3_client,
+                )
+            except requests.HTTPError as e:
+                logging.error(
+                    f'Error processing {record.get("location")}: {repr(e)}'
+                    f". Response Body: {e.response.text}"
+                )
+            except Exception as e:
+                logging.error(
+                    f'Error processing {record.get("location")}: {repr(e)}'
+                )
 
     def _process_codeocean_records(self, records: List[dict]):
         """
