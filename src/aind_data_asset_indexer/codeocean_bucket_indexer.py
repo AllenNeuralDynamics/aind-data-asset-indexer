@@ -314,7 +314,8 @@ class CodeOceanIndexBucketJob:
         )
 
         logging.info(
-            f"Uploading metadata record for: {location} to {docdb_version.upper()} DocDB"
+            f"Uploading metadata record for: {location} to "
+            f"{docdb_version.upper()} DocDB"
         )
         with self._create_docdb_client(version=docdb_version) as docdb_client:
             register_response = docdb_client.register_co_result(

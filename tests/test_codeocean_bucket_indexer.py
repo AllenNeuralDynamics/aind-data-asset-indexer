@@ -384,7 +384,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             "666666cc-66cc-6c66-666c-6c66c6666666",
         )
         mock_determine_version.return_value = "v1"
-        
+
         mock_docdb_api_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
@@ -403,7 +403,8 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
             )
         expected_messages = [
             "INFO:root:Uploading metadata record for: "
-            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666 to V1 DocDB",
+            "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666"
+            " to V1 DocDB",
             "INFO:root:{'message': 'Inserted new DocDB record for "
             "s3://some_co_bucket/666666cc-66cc-6c66-666c-6c66c6666666.'}",
         ]
@@ -433,7 +434,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list"""
         mock_s3_client = MagicMock()
         mock_boto3.client.return_value = mock_s3_client
-        
+
         records = self.example_codeocean_records
         self.basic_job._dask_task_to_process_record_list(record_list=records)
         mock_process_codeocean_record.assert_has_calls(
@@ -462,7 +463,7 @@ class TestCodeOceanIndexBucketJob(unittest.TestCase):
         """Tests _dask_task_to_process_record_list when there are errors."""
         mock_s3_client = MagicMock()
         mock_boto3.client.return_value = mock_s3_client
-        
+
         records = self.example_codeocean_records
         http_error_response = MagicMock(spec=Response)
         http_error_response.status_code = 400

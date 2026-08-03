@@ -1201,7 +1201,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         expected_prefix = "ecephys_642478_2023-01-17_13-56-29"
         mock_get_data_level_for_prefix.return_value = "derived"
         mock_determine_version.return_value = "v1"
-        
+
         mock_versioned_client = MagicMock()
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_versioned_client
@@ -1209,7 +1209,7 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_versioned_client.register_asset.return_value = {
             "message": "Registered",
         }
-        
+
         # Mock the existing docdb_client parameter
         mock_existing_client = MagicMock()
 
@@ -1224,13 +1224,13 @@ class TestAindIndexBucketJob(unittest.TestCase):
                 v2_location_to_id_map=v2_location_to_id_map,
             )
         expected_log_messages = [
-            "INFO:root:Detected schema version 1.2.1 for "
-            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}. Using v1 DocDB.",
+            "DEBUG:root:Detected schema version 1.2.1 for "
+            f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix}. "
+            "Using v1 DocDB.",
             "INFO:root:Registering derived asset for: "
             f"s3://aind-ephys-data-dev-u5u0i5/{expected_prefix} to V1 DocDB",
             "INFO:root:{'message': 'Registered'}",
         ]
-        # Only check the last 2 messages since the determine_version log might not be captured
         self.assertIn(expected_log_messages[-2], captured.output)
         self.assertIn(expected_log_messages[-1], captured.output)
         mock_versioned_client.register_asset.assert_called_once_with(
@@ -1508,15 +1508,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
-        mock_paginate.return_value = iter(
-            [
+        # paginate_docdb is called twice: once for V1, once for V2
+        mock_paginate.side_effect = [
+            iter(
                 [
-                    self.example_md_record,
-                    self.example_md_record1,
-                    self.example_md_record2,
+                    [
+                        self.example_md_record,
+                        self.example_md_record1,
+                    ]
                 ]
-            ]
-        )
+            ),
+            iter([[self.example_md_record2]]),
+        ]
         mock_iterate_prefixes.return_value = iter(
             [
                 [
@@ -1532,22 +1535,27 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "location": {"$regex": "^s3://aind-ephys-data-dev-u5u0i5.*"}
         }
         expected_log_messages = [
-            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
-            "INFO:root:Finished scanning through DocDb.",
+            f"INFO:root:Starting to scan through V1 DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through V1 DocDb.",
+            f"INFO:root:Starting to scan through V2 DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through V2 DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        # DocDB client context manager is called twice (v1 and v2)
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 2)
         mock_s3_client.close.assert_called_once()
-        mock_process_records.assert_called_once_with(
+        # Process records is called twice: once for v1, once for v2
+        self.assertEqual(mock_process_records.call_count, 2)
+        mock_process_records.assert_any_call(
             records=[
                 self.example_md_record,
                 self.example_md_record1,
-                self.example_md_record2,
             ]
         )
+        mock_process_records.assert_any_call(records=[self.example_md_record2])
         mock_process_prefixes.assert_called_once_with(
             prefixes=[
                 "ecephys_642478_2023-01-17_13-56-29/",
@@ -1598,7 +1606,11 @@ class TestAindIndexBucketJob(unittest.TestCase):
         mock_docdb_client.return_value.__enter__.return_value = (
             mock_docdb_api_client
         )
-        mock_paginate.return_value = iter([[self.example_md_record]])
+        # paginate_docdb is called twice: once for V1, once for V2
+        mock_paginate.side_effect = [
+            iter([[self.example_md_record]]),
+            iter([[]]),  # Empty v2 results
+        ]
         mock_iterate_prefixes.return_value = iter(
             [
                 [
@@ -1616,15 +1628,18 @@ class TestAindIndexBucketJob(unittest.TestCase):
             "last_modified": {"$gte": "2025-03-17T00:00:00Z"},
         }
         expected_log_messages = [
-            f"INFO:root:Starting to scan through DocDb: {expected_filter}",
-            "INFO:root:Finished scanning through DocDb.",
+            f"INFO:root:Starting to scan through V1 DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through V1 DocDb.",
+            f"INFO:root:Starting to scan through V2 DocDb: {expected_filter}",
+            "INFO:root:Finished scanning through V2 DocDb.",
             "INFO:root:Starting to scan through S3.",
             "INFO:root:Finished scanning through S3.",
         ]
         self.assertEqual(expected_log_messages, captured.output)
 
         mock_datetime.now.assert_called_once_with(timezone.utc)
-        mock_docdb_client.return_value.__exit__.assert_called_once()
+        # DocDB client context manager is called twice (v1 and v2)
+        self.assertEqual(mock_docdb_client.return_value.__exit__.call_count, 2)
         mock_s3_client.close.assert_called_once()
         mock_process_records.assert_called_once_with(
             records=[self.example_md_record]

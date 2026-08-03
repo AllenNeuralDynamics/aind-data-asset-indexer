@@ -887,14 +887,14 @@ def determine_docdb_version_from_s3(
         metadata = download_json_file_from_s3(
             s3_client=s3_client, bucket=bucket, object_key=metadata_key
         )
-        
+
         if metadata is None:
             logging.warning(
                 f"Could not read metadata from s3://{bucket}/{metadata_key}. "
                 f"Defaulting to v1 DocDB."
             )
             return "v1"
-        
+
         schema_version = metadata.get("schema_version")
         if schema_version is None:
             logging.warning(
@@ -902,21 +902,21 @@ def determine_docdb_version_from_s3(
                 f"Defaulting to v1 DocDB."
             )
             return "v1"
-        
+
         # V2 schemas have version starting with "2."
         if isinstance(schema_version, str) and schema_version.startswith("2."):
-            logging.info(
+            logging.debug(
                 f"Detected schema version {schema_version} for "
                 f"s3://{bucket}/{prefix}. Using v2 DocDB."
             )
             return "v2"
         else:
-            logging.info(
+            logging.debug(
                 f"Detected schema version {schema_version} for "
                 f"s3://{bucket}/{prefix}. Using v1 DocDB."
             )
             return "v1"
-            
+
     except Exception as e:
         logging.error(
             f"Error determining DocDB version for s3://{bucket}/{prefix}: "

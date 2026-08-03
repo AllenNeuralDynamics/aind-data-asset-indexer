@@ -596,17 +596,19 @@ class AindIndexBucketJob:
             # - Registers asset to Code Ocean if not already registered
             # Assume next docdb_sync index job will create the .nd.json file
             # and copy root files to /original_metadata.
-            
+
             # Determine the appropriate DocDB version based on metadata schema
             docdb_version = determine_docdb_version_from_s3(
                 s3_client=s3_client, bucket=bucket, prefix=s3_prefix
             )
-            
+
             logging.info(
                 f"Registering derived asset for: {location} to "
                 f"{docdb_version.upper()} DocDB"
             )
-            with self._create_docdb_client(version=docdb_version) as versioned_client:
+            with self._create_docdb_client(
+                version=docdb_version
+            ) as versioned_client:
                 register_response = versioned_client.register_asset(
                     s3_location=location,
                 )
@@ -687,30 +689,43 @@ class AindIndexBucketJob:
         mapped_partitions.compute()
 
     def _run_docdb_sync(self):
-        """Sync changes in DocDB to S3"""
-        with self._create_docdb_client() as iterator_docdb_client:
-            filter = {
-                "location": {
-                    "$regex": f"^s3://{self.job_settings.s3_bucket}.*"
-                }
+        """Sync changes in DocDB (v1 and v2) to S3."""
+        filter = {
+            "location": {"$regex": f"^s3://{self.job_settings.s3_bucket}.*"}
+        }
+        if self.job_settings.lookback_days is not None:
+            lookback_utc = datetime.now(timezone.utc) - timedelta(
+                days=self.job_settings.lookback_days
+            )
+            filter["last_modified"] = {
+                "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
             }
-            if self.job_settings.lookback_days is not None:
-                lookback_utc = datetime.now(timezone.utc) - timedelta(
-                    days=self.job_settings.lookback_days
-                )
-                filter["last_modified"] = {
-                    "$gte": lookback_utc.isoformat().replace("+00:00", "Z")
-                }
-            logging.info(f"Starting to scan through DocDb: {filter}")
-            docdb_pages = paginate_docdb(
-                docdb_api_client=iterator_docdb_client,
+
+        # Process V1 DocDB records
+        logging.info(f"Starting to scan through V1 DocDb: {filter}")
+        with self._create_docdb_client(version="v1") as v1_client:
+            v1_pages = paginate_docdb(
+                docdb_api_client=v1_client,
                 page_size=200,
                 filter_query=filter,
             )
-            for page in docdb_pages:
+            for page in v1_pages:
                 if len(page) > 0:
                     self._process_records(records=page)
-        logging.info("Finished scanning through DocDb.")
+        logging.info("Finished scanning through V1 DocDb.")
+
+        # Process V2 DocDB records
+        logging.info(f"Starting to scan through V2 DocDb: {filter}")
+        with self._create_docdb_client(version="v2") as v2_client:
+            v2_pages = paginate_docdb(
+                docdb_api_client=v2_client,
+                page_size=200,
+                filter_query=filter,
+            )
+            for page in v2_pages:
+                if len(page) > 0:
+                    self._process_records(records=page)
+        logging.info("Finished scanning through V2 DocDb.")
 
     def _run_s3_sync(self):
         """Sync changes in S3 to DocDB"""
